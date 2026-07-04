@@ -1,0 +1,96 @@
+{
+  "$probe": "GET /api/v1/workflows/{id} — live shape incl. the `shared` array (workflow→project+role)",
+  "capturedAt": "2026-07-04T17:42:41.434Z",
+  "n8nVersion": "2.29.0",
+  "request": {
+    "create": {
+      "method": "POST",
+      "path": "/api/v1/workflows",
+      "body": {
+        "name": "Argus M0 probe workflow",
+        "nodes": [
+          {
+            "parameters": {},
+            "id": "11111111-1111-4111-8111-111111111111",
+            "name": "When clicking Test",
+            "type": "n8n-nodes-base.manualTrigger",
+            "typeVersion": 1,
+            "position": [
+              0,
+              0
+            ]
+          }
+        ],
+        "connections": {},
+        "settings": {}
+      }
+    },
+    "fetch": {
+      "method": "GET",
+      "path": "/api/v1/workflows/gtKcziYsOPbjRiXM"
+    },
+    "headers": {
+      "X-N8N-API-KEY": "«redacted»"
+    }
+  },
+  "response": {
+    "status": 200,
+    "ok": true,
+    "body": {
+      "updatedAt": "2026-07-04T17:42:41.425Z",
+      "createdAt": "2026-07-04T17:42:41.425Z",
+      "id": "gtKcziYsOPbjRiXM",
+      "name": "Argus M0 probe workflow",
+      "description": null,
+      "active": false,
+      "isArchived": false,
+      "nodes": [
+        {
+          "parameters": {},
+          "id": "11111111-1111-4111-8111-111111111111",
+          "name": "When clicking Test",
+          "type": "n8n-nodes-base.manualTrigger",
+          "typeVersion": 1,
+          "position": [
+            0,
+            0
+          ]
+        }
+      ],
+      "connections": {},
+      "settings": {},
+      "staticData": null,
+      "meta": null,
+      "nodeGroups": [],
+      "pinData": null,
+      "versionId": "0f4fc91a-ade5-4140-865b-35902f0855eb",
+      "activeVersionId": null,
+      "versionCounter": 1,
+      "triggerCount": 0,
+      "sourceWorkflowId": null,
+      "shared": [
+        {
+          "updatedAt": "2026-07-04T17:42:41.426Z",
+          "createdAt": "2026-07-04T17:42:41.426Z",
+          "role": "workflow:owner",
+          "workflowId": "gtKcziYsOPbjRiXM",
+          "projectId": "iM6nWLfEEqCuKDki",
+          "project": {
+            "updatedAt": "2026-07-04T17:42:41.333Z",
+            "createdAt": "2026-07-04T17:42:41.333Z",
+            "id": "iM6nWLfEEqCuKDki",
+            "name": "Nathan Owner <nathan@n8n.io>",
+            "type": "personal",
+            "icon": null,
+            "description": null,
+            "customTelemetryTags": [],
+            "creatorId": "c37c17bd-58aa-46ac-91a6-19c1d9dafccc"
+          }
+        }
+      ],
+      "tags": [],
+      "activeVersion": null
+    }
+  },
+  "note": "The `shared` array is the ownership-inference input (PLAN.md Pillar 2). Verify it is present and carries projectId + role."
+}

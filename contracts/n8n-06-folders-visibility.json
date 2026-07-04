@@ -1,0 +1,22 @@
+{
+  "$probe": "M0 discovery: are folders exposed via the public API?",
+  "capturedAt": "2026-07-04T17:42:41.440Z",
+  "n8nVersion": "2.29.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/projects/iM6nWLfEEqCuKDki/folders",
+    "headers": {
+      "X-N8N-API-KEY": "«redacted»"
+    }
+  },
+  "response": {
+    "status": 200,
+    "ok": true,
+    "body": {
+      "count": 0,
+      "data": []
+    }
+  },
+  "finding": "EXPOSED — folders are queryable via GET /api/v1/projects/{projectId}/folders (license: feat:folders).",
+  "sourceCorroboration": "n8n source has a public-api folders handler group (openapi.yml: /projects/{projectId}/folders)."
+}

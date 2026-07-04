@@ -1,0 +1,73 @@
+{
+  "capturedAt": "2026-07-04T17:42:41.444Z",
+  "n8nBaseUrl": "http://localhost:5678",
+  "n8nVersion": "2.29.0",
+  "results": [
+    {
+      "id": "00",
+      "description": "n8n reachable",
+      "pass": true,
+      "detail": "GET /healthz → 200"
+    },
+    {
+      "id": "02",
+      "description": "public API rejects unauth",
+      "pass": true,
+      "detail": "GET /api/v1/workflows (no key) → 401"
+    },
+    {
+      "id": "--",
+      "description": "E2E reset to known owner",
+      "pass": true,
+      "detail": "POST /rest/e2e/reset → 200"
+    },
+    {
+      "id": "01",
+      "description": "e2e feature patch accepted",
+      "pass": true,
+      "detail": "PATCH /rest/e2e/feature {feat:sharing} → 200"
+    },
+    {
+      "id": "--",
+      "description": "owner login",
+      "pass": true,
+      "detail": "POST /rest/login → 200, cookie set"
+    },
+    {
+      "id": "--",
+      "description": "mint API key",
+      "pass": true,
+      "detail": "POST /rest/api-keys → 200, key minted"
+    },
+    {
+      "id": "03",
+      "description": "projects shape captured",
+      "pass": true,
+      "detail": "GET /api/v1/projects → 200, 3 project(s)"
+    },
+    {
+      "id": "04",
+      "description": "users shape captured",
+      "pass": true,
+      "detail": "GET /api/v1/users → 200, 3 user(s)"
+    },
+    {
+      "id": "05",
+      "description": "workflow `shared` shape captured",
+      "pass": true,
+      "detail": "GET workflow → 200, shared array PRESENT"
+    },
+    {
+      "id": "06",
+      "description": "folders public-API visibility",
+      "pass": true,
+      "detail": "EXPOSED (200)"
+    },
+    {
+      "id": "07",
+      "description": "agents-v2 public-API visibility",
+      "pass": true,
+      "detail": "NOT EXPOSED (404)"
+    }
+  ]
+}

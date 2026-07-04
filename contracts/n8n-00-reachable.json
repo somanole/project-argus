@@ -1,0 +1,16 @@
+{
+  "$probe": "n8n instance is reachable and healthy",
+  "capturedAt": "2026-07-04T17:42:41.156Z",
+  "n8nVersion": "2.29.0",
+  "request": {
+    "method": "GET",
+    "path": "/healthz"
+  },
+  "response": {
+    "status": 200,
+    "ok": true,
+    "body": {
+      "status": "ok"
+    }
+  }
+}

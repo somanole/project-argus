@@ -1,0 +1,26 @@
+{
+  "$probe": "M0 discovery: are agents-v2 entities exposed via the public API?",
+  "capturedAt": "2026-07-04T17:42:41.443Z",
+  "n8nVersion": "2.29.0",
+  "requestHeaders": {
+    "X-N8N-API-KEY": "«redacted»"
+  },
+  "probes": [
+    {
+      "path": "/api/v1/agents",
+      "status": 404,
+      "body": {
+        "message": "not found"
+      }
+    },
+    {
+      "path": "/api/v1/agents/v2",
+      "status": 404,
+      "body": {
+        "message": "not found"
+      }
+    }
+  ],
+  "finding": "NOT EXPOSED — no public API route for agents-v2 (all candidate paths 404). Matches PLAN.md boundary: workflow-based agents only; agents-v2 is internal-REST-only.",
+  "sourceCorroboration": "n8n source has NO public-api agents handler group (only internal REST under /rest/projects/:id/agents/v2/*)."
+}
