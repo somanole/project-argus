@@ -86,8 +86,9 @@ Run from the repo root. Package manager is **pnpm** (workspace); Node **>=22.22*
 | `pnpm typecheck` | `tsc --noEmit` across all packages (TypeScript strict). |
 | `pnpm lint` | ESLint (flat config) over TS + Vue. |
 | `pnpm test` | Vitest across all packages. |
-| `pnpm dev:server` | Run the Express API in watch mode (tsx) on `http://127.0.0.1:3000` (`/api/health`). |
-| `pnpm dev:web` | Run the Vite dev server on `http://localhost:5173` (proxies `/api` → server). |
+| `pnpm dev` | Run the server + web together (parallel). Open `http://localhost:5173`. |
+| `pnpm dev:server` | Run just the Express API in watch mode (tsx) on `http://127.0.0.1:3000` (`/api/health`). |
+| `pnpm dev:web` | Run just the Vite dev server on `http://localhost:5173` (proxies `/api` → server). |
 | `pnpm probe:n8n` | Capture n8n contract + discovery probes into `contracts/` (rule 1). Resets the E2E instance. |
 
 **Before saying "done":** `pnpm typecheck && pnpm lint && pnpm test && pnpm verify` — all green.
