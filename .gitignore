@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+*.tsbuildinfo
+
+# local env / secrets (highest-value secrets in the system — never commit)
+.env
+.env.local
+*.local
+
+# Argus runtime data (SQLite cache + sacred native tables live outside git)
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# logs
+*.log
+
+# OS
+.DS_Store
+
+# raw prompt journal is a build artifact captured by the UserPromptSubmit hook;
+# the distilled PROMPTS.md is committed, the raw jsonl is not
+prompts-raw.jsonl
+
+# editor
+.vscode/
+.idea/
