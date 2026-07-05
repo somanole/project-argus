@@ -1,0 +1,137 @@
+{
+  "$probe": "GET /api/v1/workflows?limit=N — live LIST item shape (Argus live inventory source, S1a)",
+  "capturedAt": "2026-07-05T16:26:20.628Z",
+  "n8nVersion": "2.29.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/workflows?limit=3",
+    "headers": {
+      "X-N8N-API-KEY": "«redacted»"
+    }
+  },
+  "response": {
+    "status": 200,
+    "ok": true,
+    "count": 3,
+    "nextCursor": "eyJsaW1pdCI6Mywib2Zmc2V0IjozfQ==",
+    "itemKeys": [
+      "active",
+      "activeVersion",
+      "activeVersionId",
+      "connections",
+      "createdAt",
+      "id",
+      "isArchived",
+      "meta",
+      "name",
+      "nodeGroups",
+      "nodes",
+      "pinData",
+      "settings",
+      "shared",
+      "staticData",
+      "tags",
+      "triggerCount",
+      "updatedAt",
+      "versionId"
+    ],
+    "sampleItem": {
+      "updatedAt": "2026-07-04T19:47:08.870Z",
+      "createdAt": "2026-07-04T19:47:08.870Z",
+      "id": "0x3D6QJDAiQ8hrTi",
+      "name": "Billing Service",
+      "active": true,
+      "isArchived": false,
+      "settings": {
+        "executionOrder": "v1"
+      },
+      "nodeGroups": [],
+      "versionId": "1ce6bfbe-11a2-405f-9524-ea3b4c54515d",
+      "activeVersionId": "1ce6bfbe-11a2-405f-9524-ea3b4c54515d",
+      "triggerCount": 0,
+      "shared": [
+        {
+          "updatedAt": "2026-07-04T19:47:08.870Z",
+          "createdAt": "2026-07-04T19:47:08.870Z",
+          "role": "workflow:owner",
+          "workflowId": "0x3D6QJDAiQ8hrTi",
+          "projectId": "onEVCMFnvvh74uch"
+        }
+      ],
+      "activeVersion": {
+        "updatedAt": "2026-07-04T19:47:08.871Z",
+        "createdAt": "2026-07-04T19:47:08.871Z",
+        "versionId": "1ce6bfbe-11a2-405f-9524-ea3b4c54515d",
+        "workflowId": "0x3D6QJDAiQ8hrTi",
+        "nodes": [
+          {
+            "id": "e7e0faf8-af5a-4697-8896-6eb561692e7c",
+            "name": "When Executed by Another Workflow",
+            "type": "n8n-nodes-base.executeWorkflowTrigger",
+            "typeVersion": 1.1,
+            "position": [
+              0,
+              0
+            ],
+            "parameters": {
+              "inputSource": "passthrough"
+            }
+          },
+          {
+            "id": "e32f500e-5e9e-419f-861c-48bfcd83f1e1",
+            "name": "Compute Charges",
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+              260,
+              0
+            ],
+            "parameters": {
+              "assignments": {
+                "assignments": []
+              }
+            }
+          }
+        ],
+        "connections": {
+          "When Executed by Another Workflow": {
+            "main": [
+              [
+                {
+                  "node": "Compute Charges",
+                  "type": "main",
+                  "index": 0
+                }
+              ]
+            ]
+          }
+        },
+        "nodeGroups": [],
+        "authors": "Nathan Owner",
+        "name": null,
+        "description": null,
+        "autosaved": false
+      },
+      "tags": [
+        {
+          "updatedAt": "2026-07-04T19:47:08.855Z",
+          "createdAt": "2026-07-04T19:47:08.855Z",
+          "id": "9yx5Sr90dEq4wOVt",
+          "name": "finance"
+        },
+        {
+          "updatedAt": "2026-07-04T19:47:08.845Z",
+          "createdAt": "2026-07-04T19:47:08.845Z",
+          "id": "Yk9gcxHlndDfDyRZ",
+          "name": "critical"
+        }
+      ],
+      "nodes": "«2 nodes»",
+      "connections": "«connections object»",
+      "staticData": null,
+      "pinData": null,
+      "meta": null
+    }
+  },
+  "finding": "inventory fields ALL PRESENT on list items. list items carry `shared` (owner link → projectId=onEVCMFnvvh74uch) but NOT the nested `project` object; resolve the owning project name via GET /api/v1/projects."
+}

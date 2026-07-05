@@ -6,6 +6,7 @@
 //
 // M0 probes (00–07): reachability, E2E unlock, public-API auth, and the
 // projects/users/workflow shapes the analyzer reads.
+// S1a probe (15): the workflow LIST item shape the live inventory syncs from.
 // M1 seeder probes (08–14): the *creation* + *execution* surface the seeder needs
 //   08 workflow manual run (/rest/workflows/:id/run) → an execution that FAILS
 //   09 production webhook hit → an execution from an active webhook workflow
@@ -182,6 +183,52 @@ async function main() {
     });
     const hasShared = !!(getResp.json && 'shared' in getResp.json);
     record('05', 'workflow `shared` shape captured', getResp.status === 200, `GET workflow → ${getResp.status}, shared array ${hasShared ? 'PRESENT' : 'ABSENT'}`);
+  }
+
+  // 15 — workflow LIST shape: the fields Argus's live inventory reads (S1a).
+  // The list is the sync source of truth; confirm it carries name/active/
+  // isArchived/updatedAt/versionId and the `shared` owner link. Note: unlike the
+  // single-workflow GET, list items DO NOT embed the nested `project` object — so
+  // the project *name* must be resolved separately via GET /api/v1/projects.
+  {
+    const r = await client.api('GET', '/workflows?limit=3');
+    const items = r.json?.data ?? [];
+    const first = items[0] ?? {};
+    // Heavy graph fields exist on every item but aren't part of the inventory
+    // contract; summarize them so the captured shape stays readable + faithful.
+    const summarize = (w) => {
+      const { nodes, connections: _connections, staticData, pinData, meta, ...rest } = w;
+      return {
+        ...rest,
+        nodes: `«${Array.isArray(nodes) ? nodes.length : 0} nodes»`,
+        connections: '«connections object»',
+        staticData: staticData === null ? null : '«staticData»',
+        pinData: pinData === null ? null : '«pinData»',
+        meta: meta === null ? null : '«meta»',
+      };
+    };
+    const ownerShare = (first.shared ?? []).find((s) => s.role === 'workflow:owner');
+    const inventoryFields = ['id', 'name', 'active', 'isArchived', 'updatedAt', 'versionId'];
+    const missing = inventoryFields.filter((f) => !(f in first));
+    await save('n8n-15-workflow-list-shape.json', {
+      $probe: 'GET /api/v1/workflows?limit=N — live LIST item shape (Argus live inventory source, S1a)',
+      capturedAt: now(), n8nVersion: N8N_VERSION,
+      request: { method: 'GET', path: '/api/v1/workflows?limit=3', headers: { 'X-N8N-API-KEY': '«redacted»' } },
+      response: {
+        status: r.status, ok: r.ok,
+        count: items.length,
+        nextCursor: r.json?.nextCursor ?? null,
+        itemKeys: Object.keys(first).sort(),
+        sampleItem: summarize(first),
+      },
+      finding: [
+        `inventory fields ${missing.length === 0 ? 'ALL PRESENT' : `MISSING: ${missing.join(', ')}`} on list items.`,
+        `list items carry \`shared\` (owner link → projectId=${ownerShare?.projectId ?? '?'}) but NOT the nested \`project\` object;`,
+        'resolve the owning project name via GET /api/v1/projects.',
+      ].join(' '),
+    });
+    record('15', 'workflow list shape captured', r.status === 200 && missing.length === 0,
+      `GET /api/v1/workflows → ${r.status}, ${items.length} item(s), inventory fields ${missing.length === 0 ? 'present' : `MISSING ${missing.join(',')}`}`);
   }
 
   // 06 — folders in the public API (discovery)

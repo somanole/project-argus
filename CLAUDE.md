@@ -96,6 +96,23 @@ Run from the repo root. Package manager is **pnpm** (workspace); Node **>=22.22*
 
 **Before saying "done":** `pnpm typecheck && pnpm lint && pnpm test && pnpm verify` — all green.
 
+### Server environment (S1a+)
+
+The Argus server reads these env vars (safe dev defaults if unset — it warns, and
+`pnpm dev` works out of the box; **set them for any real use**):
+
+| Var | Default | Purpose |
+|---|---|---|
+| `ARGUS_ADMIN_PASSWORD` | `argus` | Login password (the asserted identity — name/email — is entered at login). |
+| `ARGUS_SESSION_SECRET` | dev value | HMAC key for the signed session cookie. |
+| `ARGUS_ENCRYPTION_KEY` | dev value | AES-256-GCM key encrypting each connection's n8n API key at rest. |
+| `ARGUS_DB_PATH` | `data/argus.sqlite` | Argus's own DB (sacred connections + audit; gitignored, never committed). |
+| `ARGUS_POLL_INTERVAL_MS` | `30000` | Per-connection re-list + reconcile cadence (the freshness loop). |
+
+Registering a connection needs a **read-only n8n API key** (n8n → Settings → n8n
+API); scopes `workflow:list` + `project:list` are enough. Argus is read-only
+against every instance.
+
 ### Workspace layout
 
 ```

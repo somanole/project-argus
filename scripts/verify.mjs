@@ -11,14 +11,19 @@
 //   3. n8n is reachable and its E2E endpoints are active
 //   4. Contract-probe files exist
 //   5. The placeholder is wired for BOTH light and dark (never flattened)
+// M1 behaviors: the seeded estate's planted problems are really there.
+// S1a behaviors (connect & live inventory): login required; register both
+//   instances; whole estate in one view; filter by instance; API keys never
+//   exposed; live update within a minute; self-heal after downtime.
 //
-// Usage: pnpm verify   (n8n must be running for check 3 — see CLAUDE.md)
+// Usage: pnpm verify   (n8n must be running + seeded — see CLAUDE.md)
 
 import { execSync, spawn } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { tmpdir } from 'node:os';
 import { createN8nClient } from './lib/n8n-client.mjs';
 import { INSTANCES } from './lib/launch.mjs';
 import {
@@ -76,7 +81,8 @@ try {
   if (built && existsSync(serverEntry)) {
     child = spawn('node', [serverEntry], {
       cwd: ROOT,
-      env: { ...process.env, ARGUS_PORT: String(port), ARGUS_HOST: '127.0.0.1' },
+      // Isolated throwaway DB so the health check never touches real Argus data.
+      env: { ...process.env, ARGUS_PORT: String(port), ARGUS_HOST: '127.0.0.1', ARGUS_DB_PATH: join(tmpdir(), `argus-verify-m0-${Date.now()}.sqlite`) },
       stdio: 'ignore',
     });
     health = await pollHealth(`http://127.0.0.1:${port}/api/health`);
@@ -119,43 +125,66 @@ try {
   const dir = join(ROOT, 'contracts');
   const files = existsSync(dir) ? readdirSync(dir).filter((f) => /^n8n-\d.*\.json$/.test(f)) : [];
   const required = ['n8n-00-reachable', 'n8n-01-e2e-feature-patch', 'n8n-02-public-api-unauth-rejected',
-    'n8n-05-workflow-shared-shape', 'n8n-06-folders-visibility', 'n8n-07-agents-v2-visibility'];
+    'n8n-05-workflow-shared-shape', 'n8n-06-folders-visibility', 'n8n-07-agents-v2-visibility',
+    'n8n-15-workflow-list-shape'];
   const missing = required.filter((r) => !files.some((f) => f.startsWith(r)));
   const ok = missing.length === 0;
   add('Contract-probe files exist', ok, ok ? `${files.length} probe files in contracts/` : `missing: ${missing.join(', ')}`);
 }
 
-// ---- Check 5: placeholder wired for BOTH light and dark ----
+// ---- Check 5: UI wired for BOTH light and dark, tokens only (rule 10) ----
 {
+  // Scan ALL shipped CSS bundles (the app is code-split into per-route chunks;
+  // the token/theme/font rules live in the main entry chunk).
   const assetsDir = join(ROOT, 'apps/web/dist/assets');
-  const cssFile = built && existsSync(assetsDir) ? readdirSync(assetsDir).find((f) => f.endsWith('.css')) : null;
-  const cssText = cssFile ? readFileSync(join(assetsDir, cssFile), 'utf8') : '';
+  const cssFiles = built && existsSync(assetsDir) ? readdirSync(assetsDir).filter((f) => f.endsWith('.css')) : [];
+  const cssText = cssFiles.map((f) => readFileSync(join(assetsDir, f), 'utf8')).join('\n');
   const hasPrimitives = /--color--/.test(cssText);
   const hasDarkAttr = /data-theme=['"]?dark/.test(cssText);
   const hasMediaDark = /prefers-color-scheme:\s*dark/.test(cssText);
   const hasFont = /InterVariable/.test(cssText);
 
-  // App must use tokens, never hard-coded hex colors (standing rule 10).
-  const appVue = readFileSync(join(ROOT, 'apps/web/src/App.vue'), 'utf8');
-  const styleBlock = appVue.slice(appVue.indexOf('<style'));
-  const hexColors = styleBlock.match(/#[0-9a-fA-F]{3,8}\b/g) ?? [];
-  const usesTokens = (styleBlock.match(/var\(--/g) ?? []).length;
+  // EVERY Argus component must use tokens, never hard-coded hex (standing rule
+  // 10) — scan all our .vue style blocks (excluding the vendored token dir).
+  const walkVue = (dir) => {
+    const out = [];
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory()) { if (e.name !== 'n8n-tokens') out.push(...walkVue(join(dir, e.name))); }
+      else if (e.name.endsWith('.vue')) out.push(join(dir, e.name));
+    }
+    return out;
+  };
+  const webSrc = join(ROOT, 'apps/web/src');
+  let hex = [];
+  let usesTokens = 0;
+  for (const f of existsSync(webSrc) ? walkVue(webSrc) : []) {
+    const src = readFileSync(f, 'utf8');
+    const i = src.indexOf('<style');
+    if (i === -1) continue;
+    const styleBlock = src.slice(i);
+    hex.push(...(styleBlock.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []));
+    usesTokens += (styleBlock.match(/var\(--/g) ?? []).length;
+  }
 
-  const ok = hasPrimitives && hasDarkAttr && hasMediaDark && hasFont && hexColors.length === 0 && usesTokens > 10;
+  const ok = hasPrimitives && hasDarkAttr && hasMediaDark && hasFont && hex.length === 0 && usesTokens > 10;
   const parts = [
     hasPrimitives ? 'primitives✓' : 'primitives✗',
     hasDarkAttr ? 'dark-attr✓' : 'dark-attr✗',
     hasMediaDark ? 'media-dark✓' : 'media-dark✗',
     hasFont ? 'font✓' : 'font✗',
     `${usesTokens} var(--) refs`,
-    hexColors.length === 0 ? 'no hard-coded hex' : `${hexColors.length} HEX!`,
+    hex.length === 0 ? 'no hard-coded hex' : `${hex.length} HEX!`,
   ];
-  add('Placeholder renders in BOTH light and dark (tokens only)', ok, parts.join(', '));
+  add('UI renders in BOTH light and dark (tokens only)', ok, parts.join(', '));
 }
 
 // ---- Seeder checks (M1): the planted problems are really there ----
 // Read-only, from n8n's own APIs (no Argus analyzer yet). Needs `pnpm seed` first.
 await seederChecks();
+
+// ---- S1a checks: connect & live inventory (the signed-off behaviors) ----
+// Drives a real Argus server against both live instances end to end.
+await s1aChecks();
 
 async function seederChecks() {
   const both = (p, s) => p && s;
@@ -308,6 +337,135 @@ async function seederChecks() {
   const sMcp = (await mcpWorkflows(S.c)).length;
   add('Two MCP-exposed workflows per instance', both(pMcp === 2, sMcp === 2),
     `prod ${pMcp}, staging ${sMcp}`);
+}
+
+// S1a — spin up a real Argus server against both live instances and verify the
+// owner's signed-off behaviors: register, one estate list, filter, login-gate,
+// live update within a minute, self-heal after downtime.
+async function s1aChecks() {
+  // Need both instances reachable + E2E (the seeder + inventory source).
+  const up = {};
+  for (const inst of Object.values(INSTANCES)) {
+    const c = createN8nClient(inst.baseUrl);
+    up[inst.name] = (await c.healthy()) && (await c.e2eActive());
+  }
+  if (!up.prod || !up.staging) {
+    add('S1a live inventory', false, `instances down (prod=${up.prod ? 'up' : 'down'}, staging=${up.staging ? 'up' : 'down'}) — run \`pnpm seed\``);
+    return;
+  }
+
+  const serverEntry = join(ROOT, 'apps/server/dist/index.js');
+  if (!existsSync(serverEntry)) {
+    add('S1a live inventory', false, 'server build missing');
+    return;
+  }
+
+  const port = 3211;
+  const base = `http://127.0.0.1:${port}`;
+  const dbPath = join(tmpdir(), `argus-verify-s1a-${Date.now()}.sqlite`);
+  const env = {
+    ...process.env,
+    ARGUS_PORT: String(port), ARGUS_HOST: '127.0.0.1', ARGUS_DB_PATH: dbPath,
+    ARGUS_ADMIN_PASSWORD: 'verify-admin', ARGUS_SESSION_SECRET: 'verify-secret',
+    ARGUS_ENCRYPTION_KEY: 'verify-enc', ARGUS_POLL_INTERVAL_MS: '3000',
+  };
+  const boot = () => spawn('node', [serverEntry], { cwd: ROOT, env, stdio: 'ignore' });
+
+  let cookie = '';
+  async function argus(path, opts = {}) {
+    const headers = { accept: 'application/json' };
+    if (opts.body !== undefined) headers['content-type'] = 'application/json';
+    if (cookie) headers.cookie = cookie;
+    const res = await fetch(base + path, { method: opts.method ?? 'GET', headers, body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined });
+    let json;
+    try { json = await res.json(); } catch { /* 204/none */ }
+    return { status: res.status, json, setCookies: res.headers.getSetCookie?.() ?? [] };
+  }
+  const rename = (c, wf, full, name) => c.api('PUT', `/workflows/${wf.id}`, { name, nodes: full.nodes, connections: full.connections, settings: full.settings });
+  const listNames = async () => ((await argus('/api/workflows')).json?.workflows ?? []).map((w) => w.name);
+
+  let child = boot();
+  try {
+    const health = await pollHealth(`${base}/api/health`);
+    if (!health) { add('S1a Argus server boots', false, `no health on :${port}`); return; }
+
+    // Login is required before anything else.
+    const unauth = await argus('/api/workflows');
+    add('Login required (no session ⇒ blocked)', unauth.status === 401, `GET /api/workflows without session → ${unauth.status}`);
+
+    const li = await argus('/api/auth/login', { method: 'POST', body: { password: 'verify-admin', name: 'Verify Owner', email: 'verify@acme.example' } });
+    cookie = li.setCookies.map((c) => c.split(';')[0]).join('; ');
+
+    // Connect to n8n (mint read keys) + read the ground truth per instance.
+    const prodC = await connect(INSTANCES.prod.baseUrl);
+    const stagingC = await connect(INSTANCES.staging.baseUrl);
+    const prodWfs = await allWorkflows(prodC);
+    const stagingWfs = await allWorkflows(stagingC);
+
+    // Register both instances.
+    const r1 = await argus('/api/connections', { method: 'POST', body: { label: 'prod', baseUrl: INSTANCES.prod.baseUrl, apiKey: prodC.apiKey } });
+    const r2 = await argus('/api/connections', { method: 'POST', body: { label: 'staging', baseUrl: INSTANCES.staging.baseUrl, apiKey: stagingC.apiKey } });
+    const prodId = r1.json?.connection?.id;
+    const stagingId = r2.json?.connection?.id;
+    const conns = (await argus('/api/connections')).json?.connections ?? [];
+    const healths = conns.map((c) => c.health.status).join('/');
+    add('Register both seeded instances', r1.status === 201 && r2.status === 201 && conns.length === 2 && conns.every((c) => c.health.status === 'ok'),
+      `${conns.length} connections registered, health ${healths || 'none'}`);
+
+    // The whole estate in one view.
+    const total = ((await argus('/api/workflows')).json?.workflows ?? []).length;
+    const expected = prodWfs.length + stagingWfs.length;
+    add('Whole estate lists in one view', total === expected, `Argus ${total} = prod ${prodWfs.length} + staging ${stagingWfs.length}`);
+
+    // Filter by instance.
+    const pf = ((await argus(`/api/workflows?instanceId=${prodId}`)).json?.workflows ?? []).length;
+    const sf = ((await argus(`/api/workflows?instanceId=${stagingId}`)).json?.workflows ?? []).length;
+    add('Filter by instance', pf === prodWfs.length && sf === stagingWfs.length, `prod ${pf}, staging ${sf}`);
+
+    // API keys are never exposed.
+    const leak = JSON.stringify(conns).includes(prodC.apiKey) || JSON.stringify(conns).includes(stagingC.apiKey);
+    add('API keys never exposed (encrypted at rest)', !leak, leak ? 'KEY LEAKED in a response' : 'no key in any response');
+
+    // Live update within a minute: rename a prod workflow, watch Argus catch it.
+    const target = prodWfs.find((w) => w.name === 'Old CSV Import') ?? prodWfs[0];
+    const full = (await prodC.api('GET', `/workflows/${target.id}`)).json;
+    let liveOk = false, liveSecs = '60+';
+    if (target && full) {
+      const newName = `Argus verify — ${Date.now()}`;
+      await rename(prodC, target, full, newName);
+      const t0 = Date.now();
+      while (Date.now() - t0 < 60_000) {
+        if ((await listNames()).includes(newName)) { liveOk = true; liveSecs = ((Date.now() - t0) / 1000).toFixed(1); break; }
+        await sleep(1000);
+      }
+      add('Live update reflected within a minute', liveOk, liveOk ? `n8n edit → Argus in ${liveSecs}s` : 'not reflected within 60s');
+
+      // Self-heal: kill Argus, change n8n while it's down, restart on the same DB.
+      child.kill();
+      await sleep(700);
+      const downName = `Argus self-heal — ${Date.now()}`;
+      await rename(prodC, target, full, downName);
+      child = boot();
+      const h2 = await pollHealth(`${base}/api/health`);
+      let healed = false, healSecs = '60+';
+      if (h2) {
+        const t1 = Date.now();
+        while (Date.now() - t1 < 60_000) {
+          if ((await listNames()).includes(downName)) { healed = true; healSecs = ((Date.now() - t1) / 1000).toFixed(1); break; }
+          await sleep(1000);
+        }
+      }
+      add('Self-heals after downtime (reconciles on restart)', healed, healed ? `caught up ${healSecs}s after restart` : 'did not reconcile');
+
+      // Restore the original name so the seeded estate is untouched.
+      await rename(prodC, target, full, target.name);
+    } else {
+      add('Live update reflected within a minute', false, 'no prod workflow to edit — run `pnpm seed`');
+      add('Self-heals after downtime (reconciles on restart)', false, 'skipped (no workflow to edit)');
+    }
+  } finally {
+    try { child.kill(); } catch { /* already gone */ }
+  }
 }
 
 // ---- Report ----

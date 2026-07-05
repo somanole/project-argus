@@ -1,0 +1,141 @@
+// Argus reusable UI primitives, built entirely on the vendored n8n tokens
+// (standing rule 10 — never a hard-coded color, space, radius, or font). These
+// classes give the app an n8n-native look; views compose them + add scoped
+// layout. Every value flips with light/dark because the tokens carry both.
+
+// ---- Buttons -------------------------------------------------------------
+.btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing--3xs);
+  border: 1px solid transparent;
+  border-radius: var(--radius--md);
+  font: inherit;
+  font-size: var(--font-size--sm);
+  font-weight: var(--font-weight--medium);
+  line-height: var(--line-height--sm);
+  padding: var(--spacing--2xs) var(--spacing--md);
+  cursor: pointer;
+  transition: background-color var(--duration--snappy) var(--easing--ease-out),
+    border-color var(--duration--snappy) var(--easing--ease-out);
+}
+.btn:disabled { cursor: default; opacity: 0.6; }
+
+.btn--primary {
+  background: var(--background--brand);
+  color: var(--color--neutral-white);
+}
+.btn--primary:hover:not(:disabled) { background: var(--background--brand--hover); }
+.btn--primary:disabled { background: var(--background--brand--disabled); opacity: 1; }
+
+.btn--secondary {
+  background: var(--background--surface);
+  color: var(--color--text--shade-1);
+  border-color: var(--border-color);
+}
+.btn--secondary:hover:not(:disabled) {
+  border-color: var(--border-color--strong);
+  background: var(--background--subtle);
+}
+
+.btn--danger {
+  background: var(--background--surface);
+  color: var(--color--danger);
+  border-color: var(--border-color);
+}
+.btn--danger:hover:not(:disabled) {
+  background: var(--background--danger, var(--background--subtle));
+  border-color: var(--border-color--danger, var(--border-color--strong));
+}
+
+.btn--ghost {
+  background: transparent;
+  color: var(--color--text--shade-1);
+}
+.btn--ghost:hover:not(:disabled) { background: var(--background--hover, var(--background--subtle)); }
+
+.btn--sm { font-size: var(--font-size--2xs); padding: var(--spacing--4xs) var(--spacing--2xs); }
+.btn--block { width: 100%; }
+
+// ---- Form fields ---------------------------------------------------------
+.field { display: flex; flex-direction: column; gap: var(--spacing--4xs); }
+.field > label {
+  font-size: var(--font-size--2xs);
+  font-weight: var(--font-weight--medium);
+  color: var(--color--text--shade-1);
+}
+.field .hint { font-size: var(--font-size--3xs); color: var(--color--text--shade-1); opacity: 0.7; }
+
+.input {
+  appearance: none;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius--md);
+  background: var(--background--surface);
+  color: var(--color--text--shade-1);
+  font: inherit;
+  font-size: var(--font-size--sm);
+  padding: var(--spacing--2xs) var(--spacing--xs);
+}
+.input::placeholder { color: var(--color--text--shade-1); opacity: 0.45; }
+.input:focus {
+  outline: none;
+  border-color: var(--focus--border-color, var(--color--primary));
+  box-shadow: 0 0 0 2px var(--focus--outline-color, transparent);
+}
+
+// ---- Cards ---------------------------------------------------------------
+.card {
+  background: var(--background--subtle);
+  border: 1px solid var(--border-color--subtle);
+  border-radius: var(--radius--lg);
+  padding: var(--spacing--lg);
+}
+
+// ---- Badges --------------------------------------------------------------
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing--4xs);
+  padding: var(--spacing--5xs) var(--spacing--2xs);
+  border-radius: var(--radius--full);
+  border: 1px solid transparent;
+  font-size: var(--font-size--3xs);
+  font-weight: var(--font-weight--medium);
+  white-space: nowrap;
+}
+.badge--ok {
+  background: var(--background--success, var(--background--subtle));
+  color: var(--text-color--success, var(--color--success));
+  border-color: var(--border-color--success, transparent);
+}
+.badge--warn {
+  background: var(--background--warning, var(--background--subtle));
+  color: var(--text-color--warning, var(--color--warning));
+  border-color: var(--border-color--warning, transparent);
+}
+.badge--danger {
+  background: var(--background--danger, var(--background--subtle));
+  color: var(--text-color--danger, var(--color--danger));
+  border-color: var(--border-color--danger, transparent);
+}
+.badge--muted {
+  background: var(--background--subtle);
+  color: var(--color--text--shade-1);
+  border-color: var(--border-color);
+  opacity: 0.85;
+}
+
+// A small status dot (used in badges + the instance colour dot).
+.dot { width: 0.5rem; height: 0.5rem; border-radius: var(--radius--full); flex: none; }
+.dot--ok { background: var(--color--success); }
+.dot--warn { background: var(--color--warning); }
+.dot--danger { background: var(--color--danger); }
+.dot--muted { background: var(--icon-color, var(--color--text--tint-1)); }
+
+// ---- Utility -------------------------------------------------------------
+.muted { color: var(--color--text--shade-1); opacity: 0.65; }
+.mono { font-family: var(--font-family--monospace); font-size: var(--font-size--2xs); }
