@@ -1,0 +1,23 @@
+{
+  "$probe": "POST /api/v1/projects/{id}/users — add a member (relations:[{userId, role}])",
+  "capturedAt": "2026-07-04T19:17:22.504Z",
+  "n8nVersion": "2.29.0",
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/projects/SA5yS8APNYM2QkCt/users",
+    "body": {
+      "relations": [
+        {
+          "userId": "«memberId»",
+          "role": "project:editor"
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 201,
+    "ok": true,
+    "body": ""
+  },
+  "note": "assignableProjectRole = project:admin | project:editor | project:viewer."
+}

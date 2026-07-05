@@ -1,0 +1,18 @@
+{
+  "$probe": "Production webhook hit generates an execution (POST /webhook/{path} on an active workflow)",
+  "capturedAt": "2026-07-04T19:17:23.111Z",
+  "n8nVersion": "2.29.0",
+  "request": {
+    "method": "POST",
+    "path": "/webhook/argus-probe-hook",
+    "note": "production webhook base = <baseUrl>/webhook/<path>"
+  },
+  "response": {
+    "status": 200,
+    "ok": true,
+    "body": {
+      "message": "Workflow was started"
+    }
+  },
+  "executionsAfter": 1
+}

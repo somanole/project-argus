@@ -8,8 +8,8 @@ export const SERVER_VERSION = '0.0.0';
  * Builds the Argus Express app. Split from the listen() call in index.ts so
  * tests can exercise routes without binding a port.
  *
- * M0 surface is deliberately just `GET /api/health`. Auth, the connections
- * registry, sync, and chat all arrive in later milestones (PLAN.md).
+ * Surface today: `GET /api/health`. Connections, auth, sync, and chat arrive in
+ * later slices (the connections registry is S1a).
  */
 export function createApp(): Express {
   const app = express();

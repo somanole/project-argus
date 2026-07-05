@@ -30,3 +30,9 @@ prompts-raw.jsonl
 # editor
 .vscode/
 .idea/
+
+# Claude Code session state (harness-managed, not source)
+.claude/.session-state/
+
+# Managed local n8n instances (prod + staging data folders + logs)
+.n8n-instances/

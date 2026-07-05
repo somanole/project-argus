@@ -1,13 +1,13 @@
 {
   "$probe": "GET /api/v1/workflows/{id} — live shape incl. the `shared` array (workflow→project+role)",
-  "capturedAt": "2026-07-04T17:42:41.434Z",
+  "capturedAt": "2026-07-04T19:17:22.474Z",
   "n8nVersion": "2.29.0",
   "request": {
     "create": {
       "method": "POST",
       "path": "/api/v1/workflows",
       "body": {
-        "name": "Argus M0 probe workflow",
+        "name": "Argus probe workflow",
         "nodes": [
           {
             "parameters": {},
@@ -27,20 +27,17 @@
     },
     "fetch": {
       "method": "GET",
-      "path": "/api/v1/workflows/gtKcziYsOPbjRiXM"
-    },
-    "headers": {
-      "X-N8N-API-KEY": "«redacted»"
+      "path": "/api/v1/workflows/74JnapZp34L7A8WK"
     }
   },
   "response": {
     "status": 200,
     "ok": true,
     "body": {
-      "updatedAt": "2026-07-04T17:42:41.425Z",
-      "createdAt": "2026-07-04T17:42:41.425Z",
-      "id": "gtKcziYsOPbjRiXM",
-      "name": "Argus M0 probe workflow",
+      "updatedAt": "2026-07-04T19:17:22.466Z",
+      "createdAt": "2026-07-04T19:17:22.466Z",
+      "id": "74JnapZp34L7A8WK",
+      "name": "Argus probe workflow",
       "description": null,
       "active": false,
       "isArchived": false,
@@ -63,28 +60,28 @@
       "meta": null,
       "nodeGroups": [],
       "pinData": null,
-      "versionId": "0f4fc91a-ade5-4140-865b-35902f0855eb",
+      "versionId": "22ba88bc-e71f-4e96-878e-fa1c6d94428d",
       "activeVersionId": null,
       "versionCounter": 1,
       "triggerCount": 0,
       "sourceWorkflowId": null,
       "shared": [
         {
-          "updatedAt": "2026-07-04T17:42:41.426Z",
-          "createdAt": "2026-07-04T17:42:41.426Z",
+          "updatedAt": "2026-07-04T19:17:22.466Z",
+          "createdAt": "2026-07-04T19:17:22.466Z",
           "role": "workflow:owner",
-          "workflowId": "gtKcziYsOPbjRiXM",
-          "projectId": "iM6nWLfEEqCuKDki",
+          "workflowId": "74JnapZp34L7A8WK",
+          "projectId": "ENrg6rAzlS0mAE7Y",
           "project": {
-            "updatedAt": "2026-07-04T17:42:41.333Z",
-            "createdAt": "2026-07-04T17:42:41.333Z",
-            "id": "iM6nWLfEEqCuKDki",
+            "updatedAt": "2026-07-04T19:17:22.359Z",
+            "createdAt": "2026-07-04T19:17:22.359Z",
+            "id": "ENrg6rAzlS0mAE7Y",
             "name": "Nathan Owner <nathan@n8n.io>",
             "type": "personal",
             "icon": null,
             "description": null,
             "customTelemetryTags": [],
-            "creatorId": "c37c17bd-58aa-46ac-91a6-19c1d9dafccc"
+            "creatorId": "683b3840-6294-4b4c-b96b-05f41b4bc80c"
           }
         }
       ],
@@ -92,5 +89,5 @@
       "activeVersion": null
     }
   },
-  "note": "The `shared` array is the ownership-inference input (PLAN.md Pillar 2). Verify it is present and carries projectId + role."
+  "note": "The `shared` array is the ownership-inference input (PLAN.md Pillar 2)."
 }

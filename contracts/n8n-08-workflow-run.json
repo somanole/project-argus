@@ -1,0 +1,26 @@
+{
+  "$probe": "POST /rest/workflows/{id}/run — manual run; a bad HTTP node yields an ERROR execution",
+  "capturedAt": "2026-07-04T19:17:23.426Z",
+  "n8nVersion": "2.29.0",
+  "request": {
+    "method": "POST",
+    "path": "/rest/workflows/7CWQZaUM7XVLBRjg/run",
+    "body": {
+      "triggerToStartFrom": {
+        "name": "When clicking Test"
+      }
+    },
+    "note": "cookie-auth; body = FullManualExecutionFromKnownTrigger { triggerToStartFrom: { name } }"
+  },
+  "runResponse": {
+    "status": 200,
+    "body": {
+      "data": {
+        "executionId": "2"
+      }
+    }
+  },
+  "executionId": "2",
+  "finalStatus": "error",
+  "finding": "manual run returns { executionId }; poll GET /rest/executions/{id} for status. This run ended \"error\"."
+}

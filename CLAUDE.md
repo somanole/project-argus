@@ -90,6 +90,9 @@ Run from the repo root. Package manager is **pnpm** (workspace); Node **>=22.22*
 | `pnpm dev:server` | Run just the Express API in watch mode (tsx) on `http://127.0.0.1:3000` (`/api/health`). |
 | `pnpm dev:web` | Run just the Vite dev server on `http://localhost:5173` (proxies `/api` → server). |
 | `pnpm probe:n8n` | Capture n8n contract + discovery probes into `contracts/` (rule 1). Resets the E2E instance. |
+| `pnpm n8n:up` | Launch the two managed n8n instances — prod `:5678` + staging `:5679` — isolated by per-instance `N8N_USER_FOLDER` under `.n8n-instances/` (brokers moved off `:5679` to `6779/6780`). Does not modify `../n8n`. |
+| `pnpm seed` | **The one command.** Ensures both instances are up (launches if needed), then seeds the two-instance demo estate with the planted governance problems (rule-1 verified). Idempotent. |
+| `pnpm seed:unlock` | Re-apply the E2E license flags + quotas to both instances (lost on restart/reset) without touching seeded data. |
 
 **Before saying "done":** `pnpm typecheck && pnpm lint && pnpm test && pnpm verify` — all green.
 
@@ -99,7 +102,7 @@ Run from the repo root. Package manager is **pnpm** (workspace); Node **>=22.22*
 apps/server      Express + better-sqlite3 + tsx   (GET /api/health today)
 apps/web         Vue 3 + Vite + Pinia             (token-styled placeholder today)
 packages/shared  TypeScript types + Zod schemas   (the server↔web contract)
-scripts/         verify.mjs, probe-n8n.mjs, hooks/
+scripts/         verify.mjs, probe-n8n.mjs, seed.mjs, n8n-up.mjs, seed/, lib/, hooks/
 contracts/       captured real n8n request/response shapes
 .agents/specs/   per-subsystem specs (just-in-time)
 docs/            PLAN.md, DEV-STRATEGY.md, M0-KICKOFF.md

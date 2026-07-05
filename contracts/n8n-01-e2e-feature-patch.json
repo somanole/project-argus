@@ -1,6 +1,6 @@
 {
   "$probe": "PATCH /rest/e2e/feature accepts a license-flag patch (E2E unlock)",
-  "capturedAt": "2026-07-04T17:42:41.340Z",
+  "capturedAt": "2026-07-04T19:17:22.367Z",
   "n8nVersion": "2.29.0",
   "request": {
     "method": "PATCH",
@@ -15,5 +15,5 @@
     "ok": true,
     "body": {}
   },
-  "note": "skipAuth endpoint; body shape { feature: BooleanLicenseFeature, enabled: boolean }"
+  "note": "skipAuth endpoint; body shape { feature: BooleanLicenseFeature, enabled: boolean }. Reset wipes flags — re-apply after every reset."
 }

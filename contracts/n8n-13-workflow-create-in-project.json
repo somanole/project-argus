@@ -1,0 +1,143 @@
+{
+  "$probe": "POST /api/v1/workflows with projectId — does the workflow land in the target project?",
+  "capturedAt": "2026-07-04T19:17:22.533Z",
+  "n8nVersion": "2.29.0",
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/workflows",
+    "body": {
+      "name": "Argus Probe — Webhook WF",
+      "nodes": [
+        {
+          "parameters": {
+            "path": "argus-probe-hook",
+            "httpMethod": "POST",
+            "responseMode": "onReceived"
+          },
+          "id": "22222222-2222-4222-8222-222222222222",
+          "name": "Webhook",
+          "type": "n8n-nodes-base.webhook",
+          "typeVersion": 2,
+          "position": [
+            0,
+            0
+          ]
+        },
+        {
+          "parameters": {},
+          "id": "33333333-3333-4333-8333-333333333333",
+          "name": "NoOp",
+          "type": "n8n-nodes-base.noOp",
+          "typeVersion": 1,
+          "position": [
+            220,
+            0
+          ]
+        }
+      ],
+      "connections": {
+        "Webhook": {
+          "main": [
+            [
+              {
+                "node": "NoOp",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      },
+      "settings": {},
+      "projectId": "SA5yS8APNYM2QkCt"
+    }
+  },
+  "response": {
+    "status": 200,
+    "ok": true,
+    "body": {
+      "updatedAt": "2026-07-04T19:17:22.526Z",
+      "createdAt": "2026-07-04T19:17:22.526Z",
+      "id": "icec2uSh53kIZZ2y",
+      "name": "Argus Probe — Webhook WF",
+      "description": null,
+      "active": false,
+      "isArchived": false,
+      "nodes": [
+        {
+          "parameters": {
+            "path": "argus-probe-hook",
+            "httpMethod": "POST",
+            "responseMode": "onReceived"
+          },
+          "id": "22222222-2222-4222-8222-222222222222",
+          "name": "Webhook",
+          "type": "n8n-nodes-base.webhook",
+          "typeVersion": 2,
+          "position": [
+            0,
+            0
+          ],
+          "webhookId": "7e5bf6a8-ce69-4ff7-a262-24beabd9ec17"
+        },
+        {
+          "parameters": {},
+          "id": "33333333-3333-4333-8333-333333333333",
+          "name": "NoOp",
+          "type": "n8n-nodes-base.noOp",
+          "typeVersion": 1,
+          "position": [
+            220,
+            0
+          ]
+        }
+      ],
+      "connections": {
+        "Webhook": {
+          "main": [
+            [
+              {
+                "node": "NoOp",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      },
+      "settings": {},
+      "staticData": null,
+      "meta": null,
+      "nodeGroups": [],
+      "pinData": null,
+      "versionId": "54101f1f-1c86-4522-865f-9c6fa5147b9c",
+      "activeVersionId": null,
+      "versionCounter": 1,
+      "triggerCount": 0,
+      "sourceWorkflowId": null,
+      "shared": [
+        {
+          "updatedAt": "2026-07-04T19:17:22.527Z",
+          "createdAt": "2026-07-04T19:17:22.527Z",
+          "role": "workflow:owner",
+          "workflowId": "icec2uSh53kIZZ2y",
+          "projectId": "SA5yS8APNYM2QkCt",
+          "project": {
+            "updatedAt": "2026-07-04T19:17:22.490Z",
+            "createdAt": "2026-07-04T19:17:22.490Z",
+            "id": "SA5yS8APNYM2QkCt",
+            "name": "Argus Probe — Revenue Ops",
+            "type": "team",
+            "icon": null,
+            "description": null,
+            "customTelemetryTags": [],
+            "creatorId": "683b3840-6294-4b4c-b96b-05f41b4bc80c"
+          }
+        }
+      ],
+      "tags": [],
+      "activeVersion": null
+    }
+  },
+  "finding": "LANDED in target project (SA5yS8APNYM2QkCt)"
+}

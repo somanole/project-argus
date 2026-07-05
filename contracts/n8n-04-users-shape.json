@@ -1,6 +1,6 @@
 {
   "$probe": "GET /api/v1/users?includeRole=true — live response shape (id, email, role)",
-  "capturedAt": "2026-07-04T17:42:41.419Z",
+  "capturedAt": "2026-07-04T19:17:22.451Z",
   "n8nVersion": "2.29.0",
   "request": {
     "method": "GET",
@@ -15,37 +15,48 @@
     "body": {
       "data": [
         {
-          "id": "781f1754-8c0c-4c2e-9057-418d8e3362b3",
+          "id": "2429547a-831b-4135-9d5d-8af842a8ee3a",
           "email": "admin@n8n.io",
           "firstName": "Admin",
           "lastName": "User",
-          "createdAt": "2026-07-04T17:42:41.329Z",
-          "updatedAt": "2026-07-04T17:42:41.329Z",
+          "createdAt": "2026-07-04T19:17:22.354Z",
+          "updatedAt": "2026-07-04T19:17:22.354Z",
           "isPending": false,
           "mfaEnabled": false,
           "role": "global:admin"
         },
         {
-          "id": "c37c17bd-58aa-46ac-91a6-19c1d9dafccc",
+          "id": "49198477-e7b1-4702-beeb-8f020ae036f3",
+          "email": "chat@n8n.io",
+          "firstName": "Chat",
+          "lastName": "User",
+          "createdAt": "2026-07-04T19:17:22.359Z",
+          "updatedAt": "2026-07-04T19:17:22.359Z",
+          "isPending": false,
+          "mfaEnabled": false,
+          "role": "global:chatUser"
+        },
+        {
+          "id": "683b3840-6294-4b4c-b96b-05f41b4bc80c",
           "email": "nathan@n8n.io",
           "firstName": "Nathan",
           "lastName": "Owner",
-          "createdAt": "2026-07-04T17:42:41.327Z",
-          "updatedAt": "2026-07-04T17:42:41.000Z",
+          "createdAt": "2026-07-04T19:17:22.353Z",
+          "updatedAt": "2026-07-04T19:17:22.000Z",
           "isPending": false,
           "mfaEnabled": false,
           "role": "global:owner"
         },
         {
-          "id": "d616893b-6c2a-4197-bb40-77e488df3801",
-          "email": "chat@n8n.io",
-          "firstName": "Chat",
-          "lastName": "User",
-          "createdAt": "2026-07-04T17:42:41.331Z",
-          "updatedAt": "2026-07-04T17:42:41.331Z",
+          "id": "fb3db214-2ab6-4f7b-ac58-3e8d7988a9b4",
+          "email": "priya@n8n.io",
+          "firstName": "Priya",
+          "lastName": "Member",
+          "createdAt": "2026-07-04T19:17:22.357Z",
+          "updatedAt": "2026-07-04T19:17:22.357Z",
           "isPending": false,
           "mfaEnabled": false,
-          "role": "global:chatUser"
+          "role": "global:member"
         }
       ],
       "nextCursor": null

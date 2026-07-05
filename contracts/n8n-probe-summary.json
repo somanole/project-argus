@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-07-04T17:42:41.444Z",
+  "capturedAt": "2026-07-04T19:17:23.426Z",
   "n8nBaseUrl": "http://localhost:5678",
   "n8nVersion": "2.29.0",
   "results": [
@@ -17,7 +17,7 @@
     },
     {
       "id": "--",
-      "description": "E2E reset to known owner",
+      "description": "E2E reset to known owner + member",
       "pass": true,
       "detail": "POST /rest/e2e/reset → 200"
     },
@@ -43,13 +43,13 @@
       "id": "03",
       "description": "projects shape captured",
       "pass": true,
-      "detail": "GET /api/v1/projects → 200, 3 project(s)"
+      "detail": "GET /api/v1/projects → 200, 4 project(s)"
     },
     {
       "id": "04",
       "description": "users shape captured",
       "pass": true,
-      "detail": "GET /api/v1/users → 200, 3 user(s)"
+      "detail": "GET /api/v1/users → 200, 4 user(s), member present"
     },
     {
       "id": "05",
@@ -68,6 +68,48 @@
       "description": "agents-v2 public-API visibility",
       "pass": true,
       "detail": "NOT EXPOSED (404)"
+    },
+    {
+      "id": "10",
+      "description": "create team project",
+      "pass": true,
+      "detail": "POST /api/v1/projects → 201, id present, type=team"
+    },
+    {
+      "id": "11",
+      "description": "add member to project",
+      "pass": true,
+      "detail": "POST /projects/{id}/users → 201"
+    },
+    {
+      "id": "12",
+      "description": "create credential in project",
+      "pass": true,
+      "detail": "POST /api/v1/credentials → 200, id present"
+    },
+    {
+      "id": "13",
+      "description": "create workflow in project",
+      "pass": true,
+      "detail": "owner project matches target"
+    },
+    {
+      "id": "14",
+      "description": "activate workflow",
+      "pass": true,
+      "detail": "POST /workflows/{id}/activate → 200, active=true"
+    },
+    {
+      "id": "09",
+      "description": "webhook execution generated",
+      "pass": true,
+      "detail": "POST /webhook/argus-probe-hook → 200, execs=1"
+    },
+    {
+      "id": "08",
+      "description": "manual run → error execution",
+      "pass": true,
+      "detail": "run → executionId present, status=error"
     }
   ]
 }

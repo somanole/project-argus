@@ -18,6 +18,9 @@
     "dev:server": "pnpm --filter @argus/server dev",
     "dev:web": "pnpm --filter @argus/web dev",
     "probe:n8n": "node scripts/probe-n8n.mjs",
+    "n8n:up": "node scripts/n8n-up.mjs",
+    "seed": "node scripts/seed.mjs",
+    "seed:unlock": "node scripts/seed-unlock.mjs",
     "verify": "node scripts/verify.mjs"
   },
   "devDependencies": {

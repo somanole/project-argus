@@ -67,3 +67,85 @@ choose to use it (not an M0 deliverable). Evidence: `n8n-06-folders-visibility.j
 `members` array). Passing `null` for admin/chat crashes the reset with a 500
 (`setupUserManagement` dereferences `admin.password`). The seeder must send all
 three. Encoded in `scripts/probe-n8n.mjs`.
+
+## M1 seeder contracts (08–14) — captured live 2026-07-04
+
+All green against n8n 2.29.0. Evidence in the sibling `n8n-08..14-*.json`.
+
+- **08 · manual run → real execution.** `POST /rest/workflows/{id}/run` (cookie
+  auth, **not** public API) with body
+  `{ triggerToStartFrom: { name: "<trigger node name>" } }` returns
+  `{ data: { executionId } }`. The run is **async** — poll
+  `GET /rest/executions/{id}` until `status` leaves `running`/`new`/`waiting`. A
+  workflow whose HTTP node targets an unreachable host (`http://127.0.0.1:1/…`)
+  ends `status: "error"` deterministically. This is how the seeder plants failing
+  run history. Mode is `manual` (not `trigger`).
+- **09 · production webhook → real execution.** With a webhook workflow **active**
+  (see 14), `POST <baseUrl>/webhook/<path>` returns 200 and records one execution
+  (confirmed via `GET /rest/executions?filter={workflowId}`). This is the faithful
+  way to generate webhook-triggered history and implicit webhook→HTTP edges.
+- **10 · create project.** `POST /api/v1/projects { name }` → **201**, response
+  includes `type: "team"`, `id`, and the caller's `role: "project:admin"` +
+  scopes. An owner API key creates **team** projects. `mcp:manage` is among the
+  scopes (relevant to `availableInMCP` later).
+- **11 · add member to project.** `POST /api/v1/projects/{id}/users` with
+  `{ relations: [{ userId, role }] }` → **201**. Role is an *assignable project
+  role*: `project:admin | project:editor | project:viewer`.
+- **12 · create credential in project.** `POST /api/v1/credentials
+  { name, type, data, projectId }` → **200**, response `{ id, name, type, … }`
+  (the response does **not** echo the project; trust the `projectId` on create).
+- **13 · create workflow in project.** `POST /api/v1/workflows` with `projectId`
+  → the workflow's `shared[]` `workflow:owner` entry carries that `projectId`
+  (confirmed the workflow lands in the target team project, not owner's personal).
+- **14 · activate workflow.** `POST /api/v1/workflows/{id}/activate` → **200**,
+  `active: true`. Required before a production webhook (09) will fire.
+
+**Members via reset.** Passing `members: [{ email, password, firstName, lastName }]`
+to `/rest/e2e/reset` creates **fully active** users (not pending invites), each with
+a personal project — the seeder uses this to plant real owners rather than the
+public invite flow (which leaves users pending).
+
+## Seeder build-time findings (rule 1 — reality caught assumptions)
+
+- **Workflow *publishing* gates activation (n8n 2.29).** A workflow that references
+  a sub-workflow via `executeWorkflow` **cannot be activated** until every
+  referenced sub-workflow is **published** (`POST /api/v1/workflows/{id}/activate`
+  publishes; error otherwise: *"references workflow X which is not published"*).
+  The seeder therefore publishes a parent's non-archived callees first, in
+  topological order. **Consequence for the estate:** an **active** workflow can
+  **never** reference an **archived** sub-workflow (publishing is blocked) — so the
+  `depends_on_archived` finding is "a *live/non-archived* (but unpublished) workflow
+  calls an archived one," not "an active one." Spec + verify reflect this.
+- **`GET /api/v1/credentials` needs `credential:list` + `credential:read`** on the
+  API key (create/update/delete alone → empty list).
+- **Assigning tags needs the `workflowTags:update` scope** (not `tag:update`);
+  `PUT /api/v1/workflows/{id}/tags` with `[{ id }]`. Also: you cannot tag an
+  **archived** workflow (archive last).
+- **`availableInMCP` is a real entity column, not just a setting.** Passing
+  `settings.availableInMCP:true` on create persists in settings but does **not**
+  flip the column/filter. Set it authoritatively via internal REST
+  `PATCH /rest/mcp/workflows/toggle-access { availableInMCP, workflowIds }`; the
+  internal list filter `/rest/workflows?filter={"availableInMCP":true}` then
+  reflects it (the *public* list does not expose this filter).
+- **Ownership placement.** The owner API key **can** create a workflow directly in
+  another user's **personal** project (pass that project's `projectId`) — used for
+  the personal-space-critical workflow. Team-project creation via the owner key
+  also auto-adds the **owner** as a project member, so "sole owner" is asserted
+  over *assigned* members (excluding the instance owner).
+- **Members cannot mint API keys** (`POST /rest/api-keys` → 400 "Invalid scopes for
+  user role"), so all seeding runs through the single owner key + `projectId`.
+- **Manual-run input injection.** `POST /rest/workflows/{id}/run` with
+  `triggerToStartFrom.data` does **not** inject item data into the flow; deterministic
+  mixed success/error history is driven via **production webhook body** instead
+  (`{ fail: true|false }` → a Code node throws on `fail`).
+
+## Two-instance ports (rule 1 — reality vs. PLAN's illustration)
+
+PLAN illustrates "prod :5678 / staging :5679". **`:5679` is not free** — it is the
+default **task-runner broker port** (`N8N_RUNNERS_BROKER_PORT`, default `5679`,
+`runners.config.ts`), which a prod instance on `:5678` already binds on
+`127.0.0.1`. The seeder keeps prod=`5678` / staging=`5679` as the **main HTTP
+ports** but moves each instance's broker off them via
+`N8N_RUNNERS_BROKER_PORT` (prod `6779`, staging `6780`) so the two instances (and
+their brokers) never collide. Isolation is by `N8N_USER_FOLDER` per instance (own
+SQLite DB + encryption key + settings); no `../n8n` edits.
