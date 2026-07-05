@@ -11,6 +11,7 @@ plain-English reports, and specs. My job is to make that safe.
 - [`docs/PLAN.md`](docs/PLAN.md) — the approved master spec (what we're building and why).
 - [`docs/DEV-STRATEGY.md`](docs/DEV-STRATEGY.md) — how the owner and I work together.
 - [`.agents/specs/`](.agents/specs/) — per-subsystem plain-English specs (the owner's review surface). Written just-in-time at each milestone; `TEMPLATE.md` is the shape. None yet — M1 is the first.
+- [`.agents/skills/`](.agents/skills/) — reusable build skills (e.g. `argus-ui`, `spec-driven-development`). **All skills live here, under `.agents/skills/<name>/SKILL.md` — never in `.claude/skills/`.**
 - [`contracts/`](contracts/) — captured real n8n request/response shapes (see rule 1).
 - [`PROMPTS.md`](PROMPTS.md) — the self-maintaining build journal (see rule 8).
 
@@ -122,6 +123,7 @@ packages/shared  TypeScript types + Zod schemas   (the server↔web contract)
 scripts/         verify.mjs, probe-n8n.mjs, seed.mjs, n8n-up.mjs, seed/, lib/, hooks/
 contracts/       captured real n8n request/response shapes
 .agents/specs/   per-subsystem specs (just-in-time)
+.agents/skills/  reusable build skills (argus-ui, spec-driven-development)
 docs/            PLAN.md, DEV-STRATEGY.md, M0-KICKOFF.md
 ```
 

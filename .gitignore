@@ -13,6 +13,7 @@ dist/
 
 # Argus runtime data (SQLite cache + sacred native tables live outside git)
 data/
+*.db
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
