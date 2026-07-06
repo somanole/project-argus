@@ -44,8 +44,11 @@ detected, the data says **"couldn't analyze"**; never fabricate a value. A
 governance tool that guesses is dead. (A confident wrong answer is fatal; a
 visible "couldn't analyze" is fine.)
 
-**6. One LLM wrapper; sacred tables.** All LLM calls go through **one wrapper**
-(model, redaction, spend cap, logging). The **ownership**, **identity-merge**, and
+**6. One provider-abstracting LLM wrapper; sacred tables.** All LLM calls go through
+**one wrapper** (provider [Anthropic or OpenAI, user-chosen + BYO key], model,
+redaction, spend cap, logging) behind two stable seams — structured output against a
+Zod schema, and a streaming tool loop — so no caller sees provider specifics. The
+**ownership**, **identity-merge**, and
 **audit-log** tables are sacred: no code path may bulk-delete or rewrite them, and
 **every mutation writes its audit entry in the same transaction**.
 
