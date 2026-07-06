@@ -1,14 +1,15 @@
 ---
 name: argus-ui
-description: Build Argus UI that looks genuinely like n8n. Use whenever adding or changing anything in apps/web — a view, component, form, table, badge, or style. Enforces the vendored-token + both-themes contract (standing rule 10) and the app's reusable patterns.
+description: Build Argus UI that looks genuinely like n8n. Use whenever adding or changing anything in apps/web — a view, component, form, table, badge, or style. Enforces the vendored-token + both-themes + both-viewports (responsive) contract (standing rule 10) and the app's reusable patterns.
 ---
 
 # argus-ui — how Argus's web UI is built
 
-Argus's UI must look like a native part of n8n and render correctly in **both**
-light and dark. This is a hard rule (CLAUDE.md rule 10), not a preference.
+Argus's UI must look like a native part of n8n, render correctly in **both** light
+and dark, and stay usable from **mobile (375px) through desktop**. These are hard
+rules (CLAUDE.md rule 10), not preferences.
 
-## The three non-negotiables
+## The four non-negotiables
 
 1. **Vendored tokens only.** Every color, space, radius, font-size, weight, and
    shadow is a `var(--…)` from the vendored n8n tokens. **Never** a hard-coded
@@ -25,6 +26,11 @@ light and dark. This is a hard rule (CLAUDE.md rule 10), not a preference.
    `.field` (+`.hint`), `.card`, `.badge` (+`--ok/--warn/--danger/--muted`),
    `.dot` (+`--ok/--warn/--danger/--muted`), `.muted`, `.mono`. Compose these;
    add only *scoped* layout CSS per component.
+4. **Responsive from the first line, not retrofitted.** Desktop is the primary
+   design target, but every view must stay usable and unbroken from **375px** up —
+   **no horizontal page scroll, no cut-off fields**. Build it responsive as you go;
+   never ship a fixed-width layout meaning to "do mobile later." `pnpm verify`
+   renders each hero view at 375px and fails on horizontal overflow.
 
 ## Patterns already in the codebase (copy these)
 
@@ -41,6 +47,23 @@ light and dark. This is a hard rule (CLAUDE.md rule 10), not a preference.
 - **Reusable view atoms**: `components/StateBadge.vue`, `components/HealthBadge.vue`,
   `lib/instanceColor.ts` (stable per-instance accent from the token palette),
   `lib/time.ts` (`relativeTime`).
+
+## Responsive patterns (how to hit non-negotiable 4)
+
+- **Fluid over fixed.** Prefer `%`, `fr`, `minmax()`, `flex`, `clamp()` and the
+  spacing tokens over fixed `px` widths. A layout that never asserts a width it
+  can't have is responsive almost by default.
+- **Wide content reflows or scrolls — never clips.** The catalog table is the
+  classic trap. Either (a) collapse rows to stacked cards below a breakpoint, or
+  (b) wrap the table in an `overflow-x: auto` container so it scrolls *within its
+  panel* — never let the page itself scroll sideways or fields get cut off.
+- **The shell adapts.** Multi-column shells (list + detail drawer, filters + grid)
+  become single-column / off-canvas on narrow widths; the detail drawer goes
+  full-width. Filters collapse behind a control rather than overflowing the bar.
+- **Breakpoints:** use n8n's vendored breakpoint tokens/media mixins where present
+  (check `n8n-tokens/`); otherwise a small local set is fine — keep them few.
+- **Touch targets** stay comfortably tappable (don't shrink controls below the
+  primitive sizes on mobile).
 
 ## Token cheat-sheet (the ones you'll reach for)
 
@@ -61,5 +84,7 @@ light and dark. This is a hard rule (CLAUDE.md rule 10), not a preference.
 ## Before you finish
 
 Run the app (`preview_*` / `pnpm dev`) and confirm the change renders in **light
-AND dark** (toggle in the top bar). Then `pnpm typecheck && pnpm lint`. A UI
-change isn't done until it's correct in both themes.
+AND dark** (toggle in the top bar) **and at 375px AND desktop** (`preview_resize`
+mobile/desktop) — no horizontal overflow, no cut-off content. Then `pnpm typecheck
+&& pnpm lint`. A UI change isn't done until it's correct in **both themes and both
+widths**.

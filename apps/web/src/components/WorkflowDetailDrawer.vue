@@ -210,4 +210,9 @@ const onKeydown = (e: KeyboardEvent) => {
 .open { margin-top: var(--spacing--2xs); text-decoration: none; }
 .pad { padding: var(--spacing--md) 0; }
 .err { color: var(--text-color--danger, var(--color--danger)); }
+
+/* Mobile (≤720px): the drawer goes full-width (off-canvas → full screen). */
+@media (max-width: 720px) {
+  .drawer { width: 100vw; border-left: 0; padding: var(--spacing--md); }
+}
 </style>

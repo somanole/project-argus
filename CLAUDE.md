@@ -65,12 +65,17 @@ same session**; every acceptance criterion becomes a check in the verify report.
 The spec is the review surface, not the code. Never ask the owner to prompt "per
 the spec" — I write it from their intent. Specs are just-in-time (none for M0).
 
-**10. UI on vendored n8n tokens; both themes, always.** All UI is built on n8n's
-vendored design tokens via `var(--…)` — **never** hard-code colors, spacing, or
-fonts. Preserve light/dark mode (n8n's tokens theme via `body[data-theme]` +
-`prefers-color-scheme`; a handful use `light-dark()`); never collapse to a single
-theme. **Every UI element must render correctly in both.** Tokens live in
-[`apps/web/src/styles/n8n-tokens/`](apps/web/src/styles/n8n-tokens/) — see its
+**10. UI on vendored n8n tokens; both themes and both viewports, always.** All UI is
+built on n8n's vendored design tokens via `var(--…)` — **never** hard-code colors,
+spacing, or fonts. Preserve light/dark mode (n8n's tokens theme via `body[data-theme]`
++ `prefers-color-scheme`; a handful use `light-dark()`); never collapse to a single
+theme. **Responsiveness is designed in from the start, never retrofitted:** desktop is
+the primary target, but **every element must render correctly and remain usable from a
+375px mobile width up through desktop — no horizontal overflow, no cut-off content.**
+Wide content (tables, catalog rows) reflows or scrolls within its container; it never
+clips. **Every UI element must render correctly in both themes and at both widths** —
+checked at 375px + desktop in `pnpm verify`, mechanics in the `argus-ui` skill. Tokens
+live in [`apps/web/src/styles/n8n-tokens/`](apps/web/src/styles/n8n-tokens/) — see its
 `VENDORED.md` for provenance and re-sync.
 
 **11. Don't drop UI I can't see go missing; presence is a verify check.** The owner

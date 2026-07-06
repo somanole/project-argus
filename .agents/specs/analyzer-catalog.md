@@ -171,3 +171,12 @@ renders with its key text/state (not appearance), and a `pnpm verify` row.
 - [x] The **connection-health indicator** renders on the Connections screen (a
       signed-off S1a element; it lives there, not in the catalog header).
 
+**Responsive (standing rule 10 — both themes AND both widths).** Each hero view is
+rendered in a real browser at 375px + desktop, in light AND dark, and asserted to
+have no horizontal overflow (`documentElement.scrollWidth <= innerWidth`).
+- [x] The **catalog list** is usable at 375px — the table reflows to stacked cards,
+      no horizontal page scroll, no cut-off fields; the filter facets collapse behind
+      a "Filters" control.
+- [x] The **detail drawer** is full-width at 375px with no overflow.
+- [x] The **login** view is usable at 375px with no overflow.
+

@@ -205,6 +205,39 @@ try {
     has('connection-health') ? 'connection-health present' : 'connection-health MISSING');
 }
 
+// ---- Responsive (standing rule 10): hero views usable at 375px, both themes ----
+// Renders each hero view in a real browser (system Chrome) at 375px + desktop, in
+// light AND dark, and asserts documentElement.scrollWidth <= innerWidth (no
+// horizontal overflow) with the key element in-bounds. Hermetic (serves the built
+// bundle, mocks /api). If a browser can't launch, we say so — never fake a pass.
+{
+  let res;
+  try {
+    const { runResponsiveCheck } = await import('./responsive-check.mjs');
+    res = await runResponsiveCheck();
+  } catch (e) {
+    res = { ok: false, error: e.message, views: [] };
+  }
+  if (res.error) {
+    add('Hero views usable at 375px (no horizontal overflow)', false, `responsive check unavailable: ${res.error}`);
+  } else {
+    const byName = Object.fromEntries(res.views.map((v) => [v.name, v]));
+    const row = (label, viewName) => {
+      const v = byName[viewName];
+      const ok = !!v && v.ok;
+      const detail = ok
+        ? '375px + desktop, light + dark: no horizontal overflow'
+        : v?.worst
+          ? `overflow at ${v.worst.theme}@${v.worst.width}: scrollWidth ${v.worst.scrollWidth} > innerWidth ${v.worst.innerWidth}${!v.worst.rendered ? ' (not rendered)' : ''}`
+          : 'view not measured';
+      add(label, ok, detail);
+    };
+    row('Login usable at 375px — no horizontal overflow', 'Login');
+    row('Catalog usable at 375px — no horizontal overflow, no cut-off fields', 'Catalog list');
+    row('Detail drawer usable at 375px — full-width, no overflow', 'Detail drawer');
+  }
+}
+
 // ---- Seeder checks (M1): the planted problems are really there ----
 // Read-only, from n8n's own APIs (no Argus analyzer yet). Needs `pnpm seed` first.
 await seederChecks();

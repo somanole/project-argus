@@ -22,6 +22,10 @@ let poll: ReturnType<typeof setInterval> | undefined;
 // The selected workflow for the detail drawer.
 const selected = ref<WorkflowListItem | null>(null);
 
+// On narrow widths the facet chips collapse behind a "Filters" control (desktop
+// always shows them — the CSS only honours this below the mobile breakpoint).
+const filtersOpen = ref(false);
+
 // Debounced search box (server-side query on each change).
 const qInput = ref('');
 let qTimer: ReturnType<typeof setTimeout> | undefined;
@@ -93,50 +97,55 @@ onUnmounted(() => {
         <button :class="{ on: stateFilter === 'archived' }" @click="store.setStateFilter('archived')">Archived</button>
       </div>
       <button class="chip" :class="{ 'chip--active': mcpOnly }" data-testid="filter-mcp" @click="store.setMcpOnly(!mcpOnly)">MCP-exposed</button>
-    </div>
-
-    <!-- Instance facet -->
-    <div class="facet" role="group" aria-label="Filter by instance" data-testid="filter-instance">
-      <span class="facet-label muted">Instance</span>
-      <button class="chip" :class="{ 'chip--active': instanceId === 'all' }" @click="store.setInstance('all')">All estate</button>
-      <button
-        v-for="i in facets.instances"
-        :key="i.id"
-        class="chip"
-        :class="{ 'chip--active': instanceId === i.id }"
-        @click="store.setInstance(i.id)"
-      >
-        <span class="dot" :style="{ background: instanceColor(i.id) }" />
-        {{ i.label }} <span class="count">{{ i.count }}</span>
+      <button class="btn btn--secondary btn--sm filters-toggle" :aria-expanded="filtersOpen" @click="filtersOpen = !filtersOpen">
+        Filters<span v-if="activeFilterCount"> ({{ activeFilterCount }})</span> {{ filtersOpen ? '▲' : '▾' }}
       </button>
     </div>
 
-    <!-- System facet -->
-    <div v-if="facets.systems.length" class="facet" role="group" aria-label="Filter by external system" data-testid="filter-system">
-      <span class="facet-label muted">System</span>
-      <button
-        v-for="s in facets.systems"
-        :key="s.value"
-        class="chip"
-        :class="{ 'chip--active': systems.includes(s.value) }"
-        @click="store.toggleSystem(s.value)"
-      >
-        {{ s.value }} <span class="count">{{ s.count }}</span>
-      </button>
-    </div>
+    <div class="facets" :class="{ 'facets--collapsed': !filtersOpen }">
+      <!-- Instance facet -->
+      <div class="facet" role="group" aria-label="Filter by instance" data-testid="filter-instance">
+        <span class="facet-label muted">Instance</span>
+        <button class="chip" :class="{ 'chip--active': instanceId === 'all' }" @click="store.setInstance('all')">All estate</button>
+        <button
+          v-for="i in facets.instances"
+          :key="i.id"
+          class="chip"
+          :class="{ 'chip--active': instanceId === i.id }"
+          @click="store.setInstance(i.id)"
+        >
+          <span class="dot" :style="{ background: instanceColor(i.id) }" />
+          {{ i.label }} <span class="count">{{ i.count }}</span>
+        </button>
+      </div>
 
-    <!-- Trigger facet -->
-    <div v-if="facets.triggers.length" class="facet" role="group" aria-label="Filter by trigger" data-testid="filter-trigger">
-      <span class="facet-label muted">Trigger</span>
-      <button
-        v-for="t in facets.triggers"
-        :key="t.value"
-        class="chip"
-        :class="{ 'chip--active': triggers.includes(t.value) }"
-        @click="store.toggleTrigger(t.value)"
-      >
-        {{ t.label }} <span class="count">{{ t.count }}</span>
-      </button>
+      <!-- System facet -->
+      <div v-if="facets.systems.length" class="facet" role="group" aria-label="Filter by external system" data-testid="filter-system">
+        <span class="facet-label muted">System</span>
+        <button
+          v-for="s in facets.systems"
+          :key="s.value"
+          class="chip"
+          :class="{ 'chip--active': systems.includes(s.value) }"
+          @click="store.toggleSystem(s.value)"
+        >
+          {{ s.value }} <span class="count">{{ s.count }}</span>
+        </button>
+      </div>
+
+      <!-- Trigger facet -->
+      <div v-if="facets.triggers.length" class="facet" role="group" aria-label="Filter by trigger" data-testid="filter-trigger">
+        <span class="facet-label muted">Trigger</span>
+        <button
+          v-for="t in facets.triggers"
+          :key="t.value"
+          class="chip"
+          :class="{ 'chip--active': triggers.includes(t.value) }"
+          @click="store.toggleTrigger(t.value)"
+        >
+          {{ t.label }} <span class="count">{{ t.count }}</span>
+        </button>
+      </div>
     </div>
 
     <p v-if="state === 'loading'" class="muted pad">Loading the catalog…</p>
@@ -176,21 +185,21 @@ onUnmounted(() => {
                 <FactBadge v-if="w.understood === false" label="?" tone="warn" title="Some nodes couldn't be analysed" />
               </span>
             </td>
-            <td class="c-inst">
+            <td class="c-inst" data-label="Instance">
               <span class="instance"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span>
             </td>
-            <td class="c-sys">
+            <td class="c-sys" data-label="Systems">
               <span v-if="w.systems.length === 0" class="muted">—</span>
               <span v-else class="badges"><FactBadge v-for="s in w.systems" :key="s" :label="s" tone="system" /></span>
             </td>
-            <td class="c-trig">
+            <td class="c-trig" data-label="Triggers">
               <span v-if="w.triggers.length === 0" class="muted">—</span>
               <span v-else class="badges">
                 <FactBadge v-for="t in w.triggers" :key="t" :label="triggerLabels[t] ?? t" tone="trigger" :title="t" />
               </span>
             </td>
-            <td class="c-state"><StateBadge :active="w.active" :is-archived="w.isArchived" /></td>
-            <td class="c-upd muted">{{ relativeTime(w.updatedAt, now) }}</td>
+            <td class="c-state" data-label="Status"><StateBadge :active="w.active" :is-archived="w.isArchived" /></td>
+            <td class="c-upd muted" data-label="Updated">{{ relativeTime(w.updatedAt, now) }}</td>
           </tr>
         </tbody>
       </table>
@@ -263,4 +272,38 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 .pad { padding: var(--spacing--md) 0; }
 .err { color: var(--text-color--danger, var(--color--danger)); }
 a { color: var(--color--primary, var(--background--brand)); }
+
+/* Filters collapse behind a control on narrow widths (desktop always shows them). */
+.facets { display: flex; flex-direction: column; gap: var(--spacing--sm); }
+.filters-toggle { display: none; }
+
+/* Mobile (≤720px): filters collapse, and the catalog table reflows to stacked
+   cards — never a horizontal page scroll, never a clipped field (rule 10). */
+@media (max-width: 720px) {
+  .filters-toggle { display: inline-flex; }
+  .facets--collapsed { display: none; }
+
+  .table-wrap { border: 0; overflow: visible; }
+  .wf, .wf tbody, .wf tr, .wf td { display: block; width: 100%; }
+  .wf thead { display: none; }
+  .wf tbody tr {
+    border: 1px solid var(--border-color--subtle);
+    border-radius: var(--radius--md);
+    margin-bottom: var(--spacing--2xs);
+    padding: var(--spacing--2xs) var(--spacing--sm);
+    background: var(--background--surface);
+  }
+  .wf tbody td { border: 0; padding: var(--spacing--4xs) 0; display: flex; gap: var(--spacing--sm); align-items: baseline; }
+  .wf tbody td[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 5rem;
+    color: var(--color--text--shade-1); opacity: 0.6;
+    font-size: var(--font-size--3xs); text-transform: uppercase; letter-spacing: var(--letter-spacing--wide);
+  }
+  .c-name { font-size: var(--font-size--md); }
+  .badges { max-width: none; }
+  /* Highlight the whole card, not individual cells. */
+  .row:hover td, .row:focus-visible td { background: transparent; }
+  .row:hover, .row:focus-visible { background: var(--background--hover, var(--background--subtle)); }
+}
 </style>
