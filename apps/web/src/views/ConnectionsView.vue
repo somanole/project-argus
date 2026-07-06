@@ -105,7 +105,7 @@ onUnmounted(() => {
               <span class="dot" :style="{ background: instanceColor(c.id) }" />
               {{ c.label }}
             </span>
-            <HealthBadge :health="c.health" />
+            <HealthBadge :health="c.health" data-testid="connection-health" />
           </div>
           <div class="conn-url mono">{{ c.baseUrl }}</div>
           <dl class="meta">

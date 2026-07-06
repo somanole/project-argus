@@ -15,9 +15,15 @@ export {
 } from './connections.js';
 export {
   workflowListItemSchema,
+  workflowFacetsSchema,
   workflowsResponseSchema,
+  workflowDetailSchema,
+  coverageResponseSchema,
   type WorkflowListItem,
+  type WorkflowFacets,
   type WorkflowsResponse,
+  type WorkflowDetail,
+  type CoverageResponse,
 } from './workflows.js';
 export {
   loginRequestSchema,
@@ -29,10 +35,39 @@ export {
 } from './auth.js';
 export {
   n8nSharedEntrySchema,
+  n8nNodeSchema,
+  n8nWorkflowSettingsSchema,
   n8nWorkflowListItemSchema,
   n8nProjectSchema,
   n8nWorkflowListResponseSchema,
   n8nProjectListResponseSchema,
+  type N8nNode,
   type N8nWorkflowListItem,
   type N8nProject,
 } from './n8n.js';
+export {
+  refResolutionSchema,
+  refKindSchema,
+  directDepSchema,
+  systemFactSchema,
+  nodeTypeFactSchema,
+  triggerFactSchema,
+  dataTableRefSchema,
+  callerPolicySchema,
+  coverageGapKindSchema,
+  coverageGapSchema,
+  workflowFactsSchema,
+  coverageReportSchema,
+  type RefResolution,
+  type RefKind,
+  type DirectDep,
+  type SystemFact,
+  type NodeTypeFact,
+  type TriggerFact,
+  type DataTableRef,
+  type CallerPolicy,
+  type CoverageGapKind,
+  type CoverageGap,
+  type WorkflowFacts,
+  type CoverageReport,
+} from './facts.js';

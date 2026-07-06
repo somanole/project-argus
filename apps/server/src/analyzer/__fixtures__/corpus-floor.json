@@ -1,0 +1,5 @@
+{
+  "understoodPctFloor": 79.0,
+  "setFrom": "first real corpus run (261 templates): 79.3% understood",
+  "policy": "Ratchets UP only. `pnpm verify` fails if corpus coverage drops below this floor. Never lower it to go green (test-integrity, standing rule 2) — a drop means extend the manifest, not weaken the check. Raise it as coverage improves."
+}

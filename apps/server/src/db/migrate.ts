@@ -61,6 +61,41 @@ const MIGRATIONS: ((db: Database.Database) => void)[] = [
       CREATE INDEX workflows_by_instance ON workflows(instance_id);
     `);
   },
+
+  // v2 — S1b: catalog facts. The analyzer computes deterministic facts per workflow
+  // at sync time; we store them on the (disposable) workflows row plus normalized
+  // child tables for indexed, estate-wide filtering. All disposable cache — rebuilt
+  // every sync, cascade on connection delete; no sacred data here.
+  (db) => {
+    db.exec(`
+      ALTER TABLE workflows ADD COLUMN facts_json           TEXT;
+      ALTER TABLE workflows ADD COLUMN facts_schema_version INTEGER;
+      ALTER TABLE workflows ADD COLUMN mcp_exposed          INTEGER;
+      ALTER TABLE workflows ADD COLUMN node_count           INTEGER;
+      ALTER TABLE workflows ADD COLUMN understood           INTEGER;
+      ALTER TABLE workflows ADD COLUMN broken_ref_count     INTEGER;
+
+      -- One row per (workflow, external system) — the "touches Salesforce" filter.
+      CREATE TABLE workflow_systems (
+        instance_id TEXT NOT NULL,
+        workflow_id TEXT NOT NULL,
+        system      TEXT NOT NULL,
+        PRIMARY KEY (instance_id, workflow_id, system),
+        FOREIGN KEY (instance_id) REFERENCES connections(id) ON DELETE CASCADE
+      );
+      CREATE INDEX workflow_systems_by_system ON workflow_systems(system);
+
+      -- One row per (workflow, trigger node type) — the trigger filter.
+      CREATE TABLE workflow_triggers (
+        instance_id  TEXT NOT NULL,
+        workflow_id  TEXT NOT NULL,
+        trigger_type TEXT NOT NULL,
+        PRIMARY KEY (instance_id, workflow_id, trigger_type),
+        FOREIGN KEY (instance_id) REFERENCES connections(id) ON DELETE CASCADE
+      );
+      CREATE INDEX workflow_triggers_by_type ON workflow_triggers(trigger_type);
+    `);
+  },
 ];
 
 export function migrate(db: Database.Database): void {

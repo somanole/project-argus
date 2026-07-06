@@ -17,7 +17,7 @@ plain-English reports, and specs. My job is to make that safe.
 
 ---
 
-## The 10 standing rules
+## The 11 standing rules
 
 **1. Contract-verify before building against n8n.** Before building against any
 n8n API or event, hit the **real running n8n** first, save the actual
@@ -72,6 +72,19 @@ fonts. Preserve light/dark mode (n8n's tokens theme via `body[data-theme]` +
 theme. **Every UI element must render correctly in both.** Tokens live in
 [`apps/web/src/styles/n8n-tokens/`](apps/web/src/styles/n8n-tokens/) — see its
 `VENDORED.md` for provenance and re-sync.
+
+**11. Don't drop UI I can't see go missing; presence is a verify check.** The owner
+never reads diffs, so a silently removed or restructured UI element reaches no one
+until it reaches their eyes. Therefore: (a) **never remove or restructure existing UI
+outside the stated scope** — prefer **additive edits over rewrites**; if scoped work
+genuinely forces touching existing chrome, **stop and flag it in plain English**
+before doing it. (b) Every UI element the owner signs off becomes a **UI-presence
+check**: a fast component test (keyed on a stable `data-testid`, asserting the element
+renders with its key text/state) **and** a plain-English `pnpm verify` row — the same
+rule-3 discipline behaviors get, extended to UI. UI-presence acceptance criteria go
+into the subsystem spec (rule 9), not just behavioral ones. A visual/both-theme
+snapshot tripwire may back this on hero views; if so, **updating a baseline gets the
+same scrutiny as changing a test (rule 2)** — never a reflex.
 
 ---
 

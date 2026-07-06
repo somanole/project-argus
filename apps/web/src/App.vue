@@ -33,7 +33,7 @@ async function logout(): Promise<void> {
           <span class="name">Argus</span>
         </div>
         <nav class="nav">
-          <router-link to="/workflows">Workflows</router-link>
+          <router-link to="/workflows">Catalog</router-link>
           <router-link to="/connections">Connections</router-link>
         </nav>
       </div>

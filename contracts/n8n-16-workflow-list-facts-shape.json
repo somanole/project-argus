@@ -1,0 +1,1012 @@
+{
+  "$probe": "GET /api/v1/workflows?limit=N — FULL list-item shape for the S1b analyzer (nodes, settings, triggerCount, tags). Non-destructive; reads the seeded estate.",
+  "capturedAt": "2026-07-05T20:22:34.819Z",
+  "n8nVersion": "2.29.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/workflows?limit=250",
+    "headers": {
+      "X-N8N-API-KEY": "«redacted»"
+    }
+  },
+  "response": {
+    "status": 200,
+    "totalWorkflows": 29,
+    "itemKeys": [
+      "active",
+      "activeVersion",
+      "activeVersionId",
+      "connections",
+      "createdAt",
+      "id",
+      "isArchived",
+      "meta",
+      "name",
+      "nodeGroups",
+      "nodes",
+      "pinData",
+      "settings",
+      "shared",
+      "staticData",
+      "tags",
+      "triggerCount",
+      "updatedAt",
+      "versionId"
+    ]
+  },
+  "findings": {
+    "factFieldsPresent": "ALL PRESENT (nodes, connections, settings, triggerCount, tags)",
+    "nodeSource": "top-level `nodes` (always an array: true). `activeVersion` is NULL for 22/29 workflows (only currently-active ones populate it) — DO NOT read node facts from activeVersion.",
+    "mcpExposedSource": "settings.availableInMCP (public API surfaces it)",
+    "availableInMcpProbe": [
+      {
+        "name": "KB Lookup",
+        "settings.availableInMCP": true,
+        "hasMcpTriggerNode": false
+      },
+      {
+        "name": "Sensitive Data Exporter",
+        "settings.availableInMCP": true,
+        "hasMcpTriggerNode": false
+      }
+    ],
+    "resourceLocatorRefs": "executeWorkflow / toolWorkflow use workflowId={__rl,mode:\"list\",value:<id>}; mode=\"list\" carries a LITERAL workflow id in `value` (both the resolved Order Intake ref and the broken Lead Scorer all-zeros ref use mode=\"list\"). Treat mode∈{id,list} value as an id. agentTool may carry workflowId=null (no ref → emit nothing, never broken). typeVersion 1 executeWorkflow uses a bare-string workflowId; source=\"parameter\" is inline (dynamic, no id)."
+  },
+  "samples": {
+    "mcp": [
+      {
+        "updatedAt": "2026-07-04T19:47:08.933Z",
+        "createdAt": "2026-07-04T19:47:08.933Z",
+        "id": "1xUz5j2iin71WFaI",
+        "name": "KB Lookup",
+        "active": false,
+        "isArchived": false,
+        "nodes": [
+          {
+            "id": "6501ce06-ca74-4a7d-8b0c-a56d4762e441",
+            "name": "When Executed by Another Workflow",
+            "type": "n8n-nodes-base.executeWorkflowTrigger",
+            "typeVersion": 1.1,
+            "position": [
+              0,
+              0
+            ],
+            "parameters": {
+              "inputSource": "passthrough"
+            }
+          },
+          {
+            "id": "f14ce747-9ea1-404a-8dc6-7b2fbe3a4989",
+            "name": "Return KB Doc",
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+              260,
+              0
+            ],
+            "parameters": {
+              "assignments": {
+                "assignments": []
+              }
+            }
+          }
+        ],
+        "connections": {
+          "When Executed by Another Workflow": {
+            "main": [
+              [
+                {
+                  "node": "Return KB Doc",
+                  "type": "main",
+                  "index": 0
+                }
+              ]
+            ]
+          }
+        },
+        "settings": {
+          "executionOrder": "v1",
+          "availableInMCP": true
+        },
+        "staticData": null,
+        "meta": null,
+        "nodeGroups": [],
+        "pinData": null,
+        "versionId": "499e70c3-6643-4875-9366-bc36aaa43d96",
+        "activeVersionId": null,
+        "triggerCount": 0,
+        "shared": [
+          {
+            "updatedAt": "2026-07-04T19:47:08.933Z",
+            "createdAt": "2026-07-04T19:47:08.933Z",
+            "role": "workflow:owner",
+            "workflowId": "1xUz5j2iin71WFaI",
+            "projectId": "UuZbuJl3vuDTfpCL"
+          }
+        ],
+        "activeVersion": null,
+        "tags": [
+          {
+            "updatedAt": "2026-07-04T19:47:08.858Z",
+            "createdAt": "2026-07-04T19:47:08.858Z",
+            "id": "g56bhKnOG88WhkaZ",
+            "name": "internal"
+          },
+          {
+            "updatedAt": "2026-07-04T19:47:08.852Z",
+            "createdAt": "2026-07-04T19:47:08.852Z",
+            "id": "keyupTTxwHhgo60p",
+            "name": "ai"
+          }
+        ]
+      },
+      {
+        "updatedAt": "2026-07-04T19:47:08.975Z",
+        "createdAt": "2026-07-04T19:47:08.975Z",
+        "id": "HD4nVQLR0zQxCMQ9",
+        "name": "Sensitive Data Exporter",
+        "active": false,
+        "isArchived": false,
+        "nodes": [
+          {
+            "id": "9405c8f3-18d7-4b5d-89e8-fb2bb1c7a6c8",
+            "name": "Export",
+            "type": "n8n-nodes-base.manualTrigger",
+            "typeVersion": 1,
+            "position": [
+              0,
+              0
+            ],
+            "parameters": {}
+          },
+          {
+            "id": "47f3247e-2a97-4059-82ac-e976b7d3a975",
+            "name": "Query Warehouse",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+              260,
+              0
+            ],
+            "parameters": {
+              "operation": "executeQuery",
+              "query": "SELECT * FROM billing.customers"
+            },
+            "credentials": {
+              "postgres": {
+                "id": "QYTw6pHicjYGNhBg",
+                "name": "Postgres — Warehouse"
+              }
+            }
+          },
+          {
+            "id": "d872b5e1-5c6b-429a-871a-df6db855fa01",
+            "name": "Reconcile in Stripe",
+            "type": "n8n-nodes-base.stripe",
+            "typeVersion": 1,
+            "position": [
+              520,
+              0
+            ],
+            "parameters": {
+              "resource": "charge"
+            },
+            "credentials": {
+              "stripeApi": {
+                "id": "udMXCE5BWvTrAMHW",
+                "name": "Stripe — Billing"
+              }
+            }
+          }
+        ],
+        "connections": {
+          "Export": {
+            "main": [
+              [
+                {
+                  "node": "Query Warehouse",
+                  "type": "main",
+                  "index": 0
+                }
+              ]
+            ]
+          },
+          "Query Warehouse": {
+            "main": [
+              [
+                {
+                  "node": "Reconcile in Stripe",
+                  "type": "main",
+                  "index": 0
+                }
+              ]
+            ]
+          }
+        },
+        "settings": {
+          "executionOrder": "v1",
+          "availableInMCP": true
+        },
+        "staticData": null,
+        "meta": null,
+        "nodeGroups": [],
+        "pinData": null,
+        "versionId": "59025818-c936-402c-abf8-e8039b9a1bb6",
+        "activeVersionId": null,
+        "triggerCount": 0,
+        "shared": [
+          {
+            "updatedAt": "2026-07-04T19:47:08.975Z",
+            "createdAt": "2026-07-04T19:47:08.975Z",
+            "role": "workflow:owner",
+            "workflowId": "HD4nVQLR0zQxCMQ9",
+            "projectId": "FqPUS7vdyrHNuH1a"
+          }
+        ],
+        "activeVersion": null,
+        "tags": [
+          {
+            "updatedAt": "2026-07-04T19:47:08.855Z",
+            "createdAt": "2026-07-04T19:47:08.855Z",
+            "id": "9yx5Sr90dEq4wOVt",
+            "name": "finance"
+          }
+        ]
+      }
+    ],
+    "subRef": [
+      {
+        "updatedAt": "2026-07-04T19:47:08.883Z",
+        "createdAt": "2026-07-04T19:47:08.883Z",
+        "id": "BhZTR1PLxNR0XI6f",
+        "name": "Order Intake",
+        "active": true,
+        "isArchived": false,
+        "nodes": [
+          {
+            "id": "01f277c4-6130-41ba-8b41-3e666135e7bc",
+            "name": "Order Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [
+              0,
+              0
+            ],
+            "parameters": {
+              "path": "order-intake",
+              "httpMethod": "POST",
+              "responseMode": "onReceived",
+              "options": {}
+            },
+            "webhookId": "43d14316-fa1a-4edd-9894-08b2d676c780"
+          },
+          {
+            "id": "787bd1d0-8c21-4960-82fe-fa567b2d4041",
+            "name": "Call Enrich Customer",
+            "type": "n8n-nodes-base.executeWorkflow",
+            "typeVersion": 1.2,
+            "position": [
+              260,
+              0
+            ],
+            "parameters": {
+              "source": "database",
+              "workflowId": {
+                "__rl": true,
+                "value": "szF9uw2j9YjIVLCR",
+                "mode": "list",
+                "cachedResultName": "Enrich Customer"
+              }
+            }
+          }
+        ],
+        "connections": {
+          "Order Webhook": {
+            "main": [
+              [
+                {
+                  "node": "Call Enrich Customer",
+                  "type": "main",
+                  "index": 0
+                }
+              ]
+            ]
+          }
+        },
+        "settings": {
+          "executionOrder": "v1"
+        },
+        "staticData": null,
+        "meta": null,
+        "nodeGroups": [],
+        "pinData": null,
+        "versionId": "ff1a665a-fcbc-4466-b161-c96cd800e639",
+        "activeVersionId": "ff1a665a-fcbc-4466-b161-c96cd800e639",
+        "triggerCount": 1,
+        "shared": [
+          {
+            "updatedAt": "2026-07-04T19:47:08.883Z",
+            "createdAt": "2026-07-04T19:47:08.883Z",
+            "role": "workflow:owner",
+            "workflowId": "BhZTR1PLxNR0XI6f",
+            "projectId": "onEVCMFnvvh74uch"
+          }
+        ],
+        "activeVersion": {
+          "updatedAt": "2026-07-04T19:47:08.883Z",
+          "createdAt": "2026-07-04T19:47:08.883Z",
+          "versionId": "ff1a665a-fcbc-4466-b161-c96cd800e639",
+          "workflowId": "BhZTR1PLxNR0XI6f",
+          "nodes": [
+            {
+              "id": "01f277c4-6130-41ba-8b41-3e666135e7bc",
+              "name": "Order Webhook",
+              "type": "n8n-nodes-base.webhook",
+              "typeVersion": 2,
+              "position": [
+                0,
+                0
+              ],
+              "parameters": {
+                "path": "order-intake",
+                "httpMethod": "POST",
+                "responseMode": "onReceived",
+                "options": {}
+              },
+              "webhookId": "43d14316-fa1a-4edd-9894-08b2d676c780"
+            },
+            {
+              "id": "787bd1d0-8c21-4960-82fe-fa567b2d4041",
+              "name": "Call Enrich Customer",
+              "type": "n8n-nodes-base.executeWorkflow",
+              "typeVersion": 1.2,
+              "position": [
+                260,
+                0
+              ],
+              "parameters": {
+                "source": "database",
+                "workflowId": {
+                  "__rl": true,
+                  "value": "szF9uw2j9YjIVLCR",
+                  "mode": "list",
+                  "cachedResultName": "Enrich Customer"
+                }
+              }
+            }
+          ],
+          "connections": {
+            "Order Webhook": {
+              "main": [
+                [
+                  {
+                    "node": "Call Enrich Customer",
+                    "type": "main",
+                    "index": 0
+                  }
+                ]
+              ]
+            }
+          },
+          "nodeGroups": [],
+          "authors": "Nathan Owner",
+          "name": null,
+          "description": null,
+          "autosaved": false
+        },
+        "tags": [
+          {
+            "updatedAt": "2026-07-04T19:47:08.849Z",
+            "createdAt": "2026-07-04T19:47:08.849Z",
+            "id": "IixHnfBmqm4EcMYi",
+            "name": "production"
+          },
+          {
+            "updatedAt": "2026-07-04T19:47:08.845Z",
+            "createdAt": "2026-07-04T19:47:08.845Z",
+            "id": "Yk9gcxHlndDfDyRZ",
+            "name": "critical"
+          }
+        ]
+      },
+      {
+        "updatedAt": "2026-07-04T19:47:08.876Z",
+        "createdAt": "2026-07-04T19:47:08.876Z",
+        "id": "szF9uw2j9YjIVLCR",
+        "name": "Enrich Customer",
+        "active": true,
+        "isArchived": false,
+        "nodes": [
+          {
+            "id": "85faecd9-28cd-4671-88b1-b8fd4d96a9b3",
+            "name": "When Executed by Another Workflow",
+            "type": "n8n-nodes-base.executeWorkflowTrigger",
+            "typeVersion": 1.1,
+            "position": [
+              0,
+              0
+            ],
+            "parameters": {
+              "inputSource": "passthrough"
+            }
+          },
+          {
+            "id": "345fbb05-d7ab-49b1-8288-74a09c9c763f",
+            "name": "Call Billing Service",
+            "type": "n8n-nodes-base.executeWorkflow",
+            "typeVersion": 1.2,
+            "position": [
+              260,
+              0
+            ],
+            "parameters": {
+              "source": "database",
+              "workflowId": {
+                "__rl": true,
+                "value": "0x3D6QJDAiQ8hrTi",
+                "mode": "list",
+                "cachedResultName": "Billing Service"
+              }
+            }
+          }
+        ],
+        "connections": {
+          "When Executed by Another Workflow": {
+            "main": [
+              [
+                {
+                  "node": "Call Billing Service",
+                  "type": "main",
+                  "index": 0
+                }
+              ]
+            ]
+          }
+        },
+        "settings": {
+          "executionOrder": "v1"
+        },
+        "staticData": null,
+        "meta": null,
+        "nodeGroups": [],
+        "pinData": null,
+        "versionId": "6759cded-3813-4ca1-9fb9-da0e46f695e1",
+        "activeVersionId": "6759cded-3813-4ca1-9fb9-da0e46f695e1",
+        "triggerCount": 0,
+        "shared": [
+          {
+            "updatedAt": "2026-07-04T19:47:08.877Z",
+            "createdAt": "2026-07-04T19:47:08.877Z",
+            "role": "workflow:owner",
+            "workflowId": "szF9uw2j9YjIVLCR",
+            "projectId": "onEVCMFnvvh74uch"
+          }
+        ],
+        "activeVersion": {
+          "updatedAt": "2026-07-04T19:47:08.877Z",
+          "createdAt": "2026-07-04T19:47:08.877Z",
+          "versionId": "6759cded-3813-4ca1-9fb9-da0e46f695e1",
+          "workflowId": "szF9uw2j9YjIVLCR",
+          "nodes": [
+            {
+              "id": "85faecd9-28cd-4671-88b1-b8fd4d96a9b3",
+              "name": "When Executed by Another Workflow",
+              "type": "n8n-nodes-base.executeWorkflowTrigger",
+              "typeVersion": 1.1,
+              "position": [
+                0,
+                0
+              ],
+              "parameters": {
+                "inputSource": "passthrough"
+              }
+            },
+            {
+              "id": "345fbb05-d7ab-49b1-8288-74a09c9c763f",
+              "name": "Call Billing Service",
+              "type": "n8n-nodes-base.executeWorkflow",
+              "typeVersion": 1.2,
+              "position": [
+                260,
+                0
+              ],
+              "parameters": {
+                "source": "database",
+                "workflowId": {
+                  "__rl": true,
+                  "value": "0x3D6QJDAiQ8hrTi",
+                  "mode": "list",
+                  "cachedResultName": "Billing Service"
+                }
+              }
+            }
+          ],
+          "connections": {
+            "When Executed by Another Workflow": {
+              "main": [
+                [
+                  {
+                    "node": "Call Billing Service",
+                    "type": "main",
+                    "index": 0
+                  }
+                ]
+              ]
+            }
+          },
+          "nodeGroups": [],
+          "authors": "Nathan Owner",
+          "name": null,
+          "description": null,
+          "autosaved": false
+        },
+        "tags": [
+          {
+            "updatedAt": "2026-07-04T19:47:08.849Z",
+            "createdAt": "2026-07-04T19:47:08.849Z",
+            "id": "IixHnfBmqm4EcMYi",
+            "name": "production"
+          }
+        ]
+      }
+    ],
+    "fanInTarget": [
+      {
+        "updatedAt": "2026-07-04T19:47:08.863Z",
+        "createdAt": "2026-07-04T19:47:08.863Z",
+        "id": "7u97GoRZTfF9mDeb",
+        "name": "Send Slack Alert",
+        "active": false,
+        "isArchived": false,
+        "nodes": [
+          {
+            "id": "1776095d-89e5-4b99-8258-7782c7c0ef65",
+            "name": "When Executed by Another Workflow",
+            "type": "n8n-nodes-base.executeWorkflowTrigger",
+            "typeVersion": 1.1,
+            "position": [
+              0,
+              0
+            ],
+            "parameters": {
+              "inputSource": "passthrough"
+            }
+          },
+          {
+            "id": "a5d1717c-5eb1-4656-8902-5307765894a8",
+            "name": "Post to Slack",
+            "type": "n8n-nodes-base.slack",
+            "typeVersion": 2.3,
+            "position": [
+              260,
+              0
+            ],
+            "parameters": {
+              "resource": "message",
+              "operation": "post",
+              "select": "channel",
+              "channelId": "C-alerts",
+              "text": "={{ $json.message }}"
+            },
+            "credentials": {
+              "slackApi": {
+                "id": "yfAdhIitwAChTpsk",
+                "name": "Slack — Alerts"
+              }
+            },
+            "webhookId": "99f9a1ca-0d4c-41e7-8caf-b02431a22460"
+          }
+        ],
+        "connections": {
+          "When Executed by Another Workflow": {
+            "main": [
+              [
+                {
+                  "node": "Post to Slack",
+                  "type": "main",
+                  "index": 0
+                }
+              ]
+            ]
+          }
+        },
+        "settings": {
+          "executionOrder": "v1"
+        },
+        "staticData": null,
+        "meta": null,
+        "nodeGroups": [],
+        "pinData": null,
+        "versionId": "a5e9692e-d9db-4184-9d96-1d5cd8b01bc7",
+        "activeVersionId": null,
+        "triggerCount": 0,
+        "shared": [
+          {
+            "updatedAt": "2026-07-04T19:47:08.863Z",
+            "createdAt": "2026-07-04T19:47:08.863Z",
+            "role": "workflow:owner",
+            "workflowId": "7u97GoRZTfF9mDeb",
+            "projectId": "UuZbuJl3vuDTfpCL"
+          }
+        ],
+        "activeVersion": null,
+        "tags": [
+          {
+            "updatedAt": "2026-07-04T19:47:08.858Z",
+            "createdAt": "2026-07-04T19:47:08.858Z",
+            "id": "g56bhKnOG88WhkaZ",
+            "name": "internal"
+          }
+        ]
+      }
+    ],
+    "brokenRef": [
+      {
+        "updatedAt": "2026-07-04T19:47:09.004Z",
+        "createdAt": "2026-07-04T19:47:09.004Z",
+        "id": "wxBFt7pLhrPRQ1Vb",
+        "name": "Lead Scorer",
+        "active": false,
+        "isArchived": false,
+        "nodes": [
+          {
+            "id": "32ead96b-09e3-4e67-8173-3c6355b84bf6",
+            "name": "Score Leads",
+            "type": "n8n-nodes-base.manualTrigger",
+            "typeVersion": 1,
+            "position": [
+              0,
+              0
+            ],
+            "parameters": {}
+          },
+          {
+            "id": "eba4d98b-b5fd-4ea0-8ced-4f45145bb701",
+            "name": "Call Scoring Model",
+            "type": "n8n-nodes-base.executeWorkflow",
+            "typeVersion": 1.2,
+            "position": [
+              260,
+              0
+            ],
+            "parameters": {
+              "source": "database",
+              "workflowId": {
+                "__rl": true,
+                "value": "00000000-0000-4000-8000-000000000000",
+                "mode": "list",
+                "cachedResultName": "Scoring Model (deleted)"
+              }
+            }
+          }
+        ],
+        "connections": {
+          "Score Leads": {
+            "main": [
+              [
+                {
+                  "node": "Call Scoring Model",
+                  "type": "main",
+                  "index": 0
+                }
+              ]
+            ]
+          }
+        },
+        "settings": {
+          "executionOrder": "v1"
+        },
+        "staticData": null,
+        "meta": null,
+        "nodeGroups": [],
+        "pinData": null,
+        "versionId": "57103b30-1746-4a20-a634-7a4e428d1382",
+        "activeVersionId": null,
+        "triggerCount": 0,
+        "shared": [
+          {
+            "updatedAt": "2026-07-04T19:47:09.005Z",
+            "createdAt": "2026-07-04T19:47:09.005Z",
+            "role": "workflow:owner",
+            "workflowId": "wxBFt7pLhrPRQ1Vb",
+            "projectId": "C7NDTgU8sB6CpKgj"
+          }
+        ],
+        "activeVersion": null,
+        "tags": [
+          {
+            "updatedAt": "2026-07-04T19:47:08.849Z",
+            "createdAt": "2026-07-04T19:47:08.849Z",
+            "id": "IixHnfBmqm4EcMYi",
+            "name": "production"
+          }
+        ]
+      }
+    ],
+    "agentTool": [
+      {
+        "updatedAt": "2026-07-04T19:47:08.940Z",
+        "createdAt": "2026-07-04T19:47:08.940Z",
+        "id": "i7ZACjihZqa9HjSc",
+        "name": "AI Support Agent",
+        "active": false,
+        "isArchived": false,
+        "nodes": [
+          {
+            "id": "852ce123-b192-44b1-88ae-6e2065cb22a9",
+            "name": "When chat message received",
+            "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+            "typeVersion": 1.1,
+            "position": [
+              0,
+              0
+            ],
+            "parameters": {},
+            "webhookId": "00c24d39-5f8b-4b01-b84a-636f70e118bf"
+          },
+          {
+            "id": "4a3cc6ca-d233-4d6f-8246-c107993d5fc9",
+            "name": "AI Support Agent",
+            "type": "@n8n/n8n-nodes-langchain.agent",
+            "typeVersion": 1.7,
+            "position": [
+              260,
+              0
+            ],
+            "parameters": {
+              "promptType": "auto",
+              "options": {}
+            }
+          },
+          {
+            "id": "1b552142-5729-4270-81eb-38c81a8a8c18",
+            "name": "OpenAI Chat Model",
+            "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+            "typeVersion": 1,
+            "position": [
+              520,
+              0
+            ],
+            "parameters": {
+              "model": "gpt-4o-mini",
+              "options": {}
+            }
+          },
+          {
+            "id": "f5b06de9-303c-4fb2-8ffe-f242fc0f02cf",
+            "name": "Window Buffer Memory",
+            "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+            "typeVersion": 1.3,
+            "position": [
+              780,
+              0
+            ],
+            "parameters": {}
+          },
+          {
+            "id": "671881df-ea80-4d50-8083-b51edcf9ec13",
+            "name": "KB Lookup Tool",
+            "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+            "typeVersion": 2.2,
+            "position": [
+              1040,
+              0
+            ],
+            "parameters": {
+              "name": "kb_lookup_tool",
+              "description": "Look up an answer in the knowledge base",
+              "workflowId": {
+                "__rl": true,
+                "value": "1xUz5j2iin71WFaI",
+                "mode": "list",
+                "cachedResultName": ""
+              }
+            }
+          }
+        ],
+        "connections": {
+          "When chat message received": {
+            "main": [
+              [
+                {
+                  "node": "AI Support Agent",
+                  "type": "main",
+                  "index": 0
+                }
+              ]
+            ]
+          },
+          "OpenAI Chat Model": {
+            "ai_languageModel": [
+              [
+                {
+                  "node": "AI Support Agent",
+                  "type": "ai_languageModel",
+                  "index": 0
+                }
+              ]
+            ]
+          },
+          "Window Buffer Memory": {
+            "ai_memory": [
+              [
+                {
+                  "node": "AI Support Agent",
+                  "type": "ai_memory",
+                  "index": 0
+                }
+              ]
+            ]
+          },
+          "KB Lookup Tool": {
+            "ai_tool": [
+              [
+                {
+                  "node": "AI Support Agent",
+                  "type": "ai_tool",
+                  "index": 0
+                }
+              ]
+            ]
+          }
+        },
+        "settings": {
+          "executionOrder": "v1"
+        },
+        "staticData": null,
+        "meta": null,
+        "nodeGroups": [],
+        "pinData": null,
+        "versionId": "355c3311-05a9-4a84-aa73-53960ea05b9a",
+        "activeVersionId": null,
+        "triggerCount": 0,
+        "shared": [
+          {
+            "updatedAt": "2026-07-04T19:47:08.940Z",
+            "createdAt": "2026-07-04T19:47:08.940Z",
+            "role": "workflow:owner",
+            "workflowId": "i7ZACjihZqa9HjSc",
+            "projectId": "UuZbuJl3vuDTfpCL"
+          }
+        ],
+        "activeVersion": null,
+        "tags": [
+          {
+            "updatedAt": "2026-07-04T19:47:08.852Z",
+            "createdAt": "2026-07-04T19:47:08.852Z",
+            "id": "keyupTTxwHhgo60p",
+            "name": "ai"
+          }
+        ]
+      },
+      {
+        "updatedAt": "2026-07-04T19:47:08.946Z",
+        "createdAt": "2026-07-04T19:47:08.946Z",
+        "id": "KjA2CtGf5eRRNlHC",
+        "name": "Agent Tool Orchestrator",
+        "active": false,
+        "isArchived": false,
+        "nodes": [
+          {
+            "id": "0a1913a9-6423-4efe-8ea4-216e6dd9d967",
+            "name": "When chat message received",
+            "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+            "typeVersion": 1.1,
+            "position": [
+              0,
+              0
+            ],
+            "parameters": {},
+            "webhookId": "ef44a80d-884b-4048-a06d-5f09c793c6f4"
+          },
+          {
+            "id": "178dfdd0-8e41-4d2b-8648-c0265e8ffdc6",
+            "name": "Orchestrator Agent",
+            "type": "@n8n/n8n-nodes-langchain.agent",
+            "typeVersion": 1.7,
+            "position": [
+              260,
+              0
+            ],
+            "parameters": {
+              "promptType": "auto",
+              "options": {}
+            }
+          },
+          {
+            "id": "1e9bbf49-b076-4023-8d20-b3f07b096c7e",
+            "name": "OpenAI Chat Model",
+            "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+            "typeVersion": 1,
+            "position": [
+              520,
+              0
+            ],
+            "parameters": {
+              "model": "gpt-4o-mini",
+              "options": {}
+            }
+          },
+          {
+            "id": "4ff86184-12ab-4c8e-8c85-f846d3b32640",
+            "name": "Research Sub-Agent",
+            "type": "@n8n/n8n-nodes-langchain.agentTool",
+            "typeVersion": 2.2,
+            "position": [
+              780,
+              0
+            ],
+            "parameters": {
+              "toolDescription": "Orchestration sub-agent",
+              "promptType": "auto",
+              "options": {}
+            }
+          }
+        ],
+        "connections": {
+          "When chat message received": {
+            "main": [
+              [
+                {
+                  "node": "Orchestrator Agent",
+                  "type": "main",
+                  "index": 0
+                }
+              ]
+            ]
+          },
+          "OpenAI Chat Model": {
+            "ai_languageModel": [
+              [
+                {
+                  "node": "Orchestrator Agent",
+                  "type": "ai_languageModel",
+                  "index": 0
+                }
+              ]
+            ]
+          },
+          "Research Sub-Agent": {
+            "ai_tool": [
+              [
+                {
+                  "node": "Orchestrator Agent",
+                  "type": "ai_tool",
+                  "index": 0
+                }
+              ]
+            ]
+          }
+        },
+        "settings": {
+          "executionOrder": "v1"
+        },
+        "staticData": null,
+        "meta": null,
+        "nodeGroups": [],
+        "pinData": null,
+        "versionId": "5fc0089d-7cda-44b2-94aa-56efdcd3e8f2",
+        "activeVersionId": null,
+        "triggerCount": 0,
+        "shared": [
+          {
+            "updatedAt": "2026-07-04T19:47:08.946Z",
+            "createdAt": "2026-07-04T19:47:08.946Z",
+            "role": "workflow:owner",
+            "workflowId": "KjA2CtGf5eRRNlHC",
+            "projectId": "UuZbuJl3vuDTfpCL"
+          }
+        ],
+        "activeVersion": null,
+        "tags": [
+          {
+            "updatedAt": "2026-07-04T19:47:08.852Z",
+            "createdAt": "2026-07-04T19:47:08.852Z",
+            "id": "keyupTTxwHhgo60p",
+            "name": "ai"
+          }
+        ]
+      }
+    ]
+  }
+}

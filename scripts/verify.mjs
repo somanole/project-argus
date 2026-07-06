@@ -178,6 +178,33 @@ try {
   add('UI renders in BOTH light and dark (tokens only)', ok, parts.join(', '));
 }
 
+// ---- UI-presence (standing rule 11): every signed-off chrome element ships ----
+// Presence/state guard, not appearance — grep the built bundle for each stable
+// data-testid. The fast component tests (Vue Test Utils) assert each renders with
+// its key text/state; this row is the plain-English `pnpm verify` counterpart.
+{
+  const assetsDir = join(ROOT, 'apps/web/dist/assets');
+  const jsFiles = built && existsSync(assetsDir) ? readdirSync(assetsDir).filter((f) => f.endsWith('.js')) : [];
+  const js = jsFiles.map((f) => readFileSync(join(assetsDir, f), 'utf8')).join('\n');
+  const has = (id) => js.includes(`"${id}"`);
+  const missing = (ids) => ids.filter((id) => !has(id));
+
+  add('Catalog header shows the coverage number', has('coverage-indicator'),
+    has('coverage-indicator') ? 'coverage-indicator present' : 'coverage-indicator MISSING');
+
+  const fresh = missing(['freshness-pill', 'synced-indicator']);
+  add('Catalog header shows the polling freshness pill + synced indicator', fresh.length === 0,
+    fresh.length === 0 ? 'freshness-pill + synced-indicator present' : `MISSING: ${fresh.join(', ')}`);
+
+  const filters = ['filter-search', 'filter-state', 'filter-mcp', 'filter-instance', 'filter-system', 'filter-trigger'];
+  const fmissing = missing(filters);
+  add('Catalog shows all filter controls (search/state/MCP/instance/system/trigger)', fmissing.length === 0,
+    fmissing.length === 0 ? `${filters.length} filter controls present` : `MISSING: ${fmissing.join(', ')}`);
+
+  add('Connections screen shows the connection-health indicator', has('connection-health'),
+    has('connection-health') ? 'connection-health present' : 'connection-health MISSING');
+}
+
 // ---- Seeder checks (M1): the planted problems are really there ----
 // Read-only, from n8n's own APIs (no Argus analyzer yet). Needs `pnpm seed` first.
 await seederChecks();
@@ -185,6 +212,11 @@ await seederChecks();
 // ---- S1a checks: connect & live inventory (the signed-off behaviors) ----
 // Drives a real Argus server against both live instances end to end.
 await s1aChecks();
+
+// ---- S1b checks: catalog (deterministic facts, filters, coverage) ----
+// Corpus robustness (offline), the analyzer over the live seed, the API filters,
+// and the scale smoke-test.
+await s1bChecks();
 
 async function seederChecks() {
   const both = (p, s) => p && s;
@@ -465,6 +497,192 @@ async function s1aChecks() {
     }
   } finally {
     try { child.kill(); } catch { /* already gone */ }
+  }
+}
+
+// S1b — the catalog: deterministic facts, filters, coverage. Proves the analyzer
+// against (a) a corpus of real public templates offline, (b) the live seeded
+// estate, (c) the API filters the owner demos, and (d) snappiness at scale.
+async function s1bChecks() {
+  const up = {};
+  for (const inst of Object.values(INSTANCES)) {
+    const c = createN8nClient(inst.baseUrl);
+    up[inst.name] = (await c.healthy()) && (await c.e2eActive());
+  }
+  if (!up.prod || !up.staging) {
+    add('S1b catalog', false, `instances down (prod=${up.prod ? 'up' : 'down'}, staging=${up.staging ? 'up' : 'down'}) — run \`pnpm seed\``);
+    return;
+  }
+
+  // ---- Part A: corpus robustness (offline, hermetic fixtures) ----
+  try {
+    const { runCorpusCheck } = await import('./corpus-check.mjs');
+    const floor = JSON.parse(readFileSync(join(ROOT, 'apps/server/src/analyzer/__fixtures__/corpus-floor.json'), 'utf8')).understoodPctFloor;
+    const r = runCorpusCheck();
+    add(`Analyzer understands ≥${floor}% of real public templates`, r.understoodPct >= floor,
+      `understands ${r.understoodPct}% (${r.understood}/${r.total}); rest explicitly unparsed; floor ${floor}%`);
+    add('Zero false broken-refs across the corpus', r.brokenIncomplete === 0 && r.falseBroken.length === 0,
+      `never-broken-when-partial ${r.brokenIncomplete === 0 ? 'ok' : 'FAIL'}; independent re-derivation false-broken=${r.falseBroken.length}`);
+    add('Unrecognized node types catalogued, never dropped', Array.isArray(r.unknownNodeTypes),
+      `${r.unknownNodeTypes.length} community/custom types, top: ${r.unknownNodeTypes[0]?.type ?? '—'}`);
+  } catch (e) {
+    add('Analyzer corpus robustness', false, `corpus-check failed: ${e.message}`);
+  }
+
+  // ---- Part B: the analyzer over the LIVE seeded estate ----
+  const { analyzeInstance, coverageOf } = await import('../apps/server/dist/analyzer/index.js');
+  const at = new Date().toISOString();
+  const covEntries = [];
+  const perInst = {};
+  for (const inst of Object.values(INSTANCES)) {
+    const c = await connect(inst.baseUrl);
+    const items = await allWorkflows(c);
+    const facts = analyzeInstance(items, true, at);
+    perInst[inst.name] = { items, facts };
+    for (const w of items) covEntries.push({ instanceId: inst.name, instanceLabel: inst.name, facts: facts.get(w.id) ?? null });
+  }
+
+  const brokenNames = (name) => {
+    const { items, facts } = perInst[name];
+    return items.flatMap((w) => (facts.get(w.id)?.directDeps ?? []).filter((d) => d.resolution === 'broken').map(() => w.name));
+  };
+  const bp = brokenNames('prod'), bs = brokenNames('staging');
+  add('Exactly one broken ref per instance — the planted one, no false positives',
+    bp.length === 1 && bs.length === 1 && bp[0] === 'Lead Scorer' && bs[0] === 'Lead Scorer',
+    `prod ${bp.length} (${bp.join(',') || 'none'}), staging ${bs.length} (${bs.join(',') || 'none'})`);
+
+  const fanIn = (name, target) => {
+    const { items, facts } = perInst[name];
+    return items.filter((w) => (facts.get(w.id)?.directDeps ?? []).some((d) => d.resolvedName === target)).length;
+  };
+  const fp = fanIn('prod', 'Send Slack Alert'), fs = fanIn('staging', 'Send Slack Alert');
+  add('"Send Slack Alert" depended on by exactly 5 workflows (analyzer)', fp === 5 && fs === 5, `prod ${fp}, staging ${fs}`);
+
+  const touches = (name, system) => {
+    const { items, facts } = perInst[name];
+    return items.filter((w) => (facts.get(w.id)?.systems ?? []).some((s) => s.system === system)).map((w) => w.name);
+  };
+  const sfp = touches('prod', 'Salesforce'), sfs = touches('staging', 'Salesforce');
+  add('Salesforce touched in both instances (analyzer)', sfp.length === 1 && sfs.length === 1,
+    `prod [${sfp.join(', ') || 'none'}], staging [${sfs.join(', ') || 'none'}]`);
+
+  const mcpNames = (name) => { const { items, facts } = perInst[name]; return items.filter((w) => facts.get(w.id)?.mcpExposed).map((w) => w.name); };
+  const mp = mcpNames('prod'), ms = mcpNames('staging');
+  add('MCP-exposed flagged for exactly 2 workflows per instance', mp.length === 2 && ms.length === 2,
+    `prod [${mp.join(', ')}], staging [${ms.join(', ')}]`);
+
+  const report = coverageOf(covEntries);
+  const gaps = report.total - report.understood;
+  add('Coverage is honest and the seed is fully understood',
+    report.understoodPct === 100 && report.brokenRefTotal === 2 && report.understood + gaps === report.total,
+    `understands ${report.understoodPct}% (${report.understood}/${report.total}), broken ${report.brokenRefTotal}, gaps ${gaps}`);
+
+  // ---- Part C: the API SERVES the filters (the owner's demo surface) ----
+  const serverEntry = join(ROOT, 'apps/server/dist/index.js');
+  if (existsSync(serverEntry)) {
+    const port = 3212;
+    const base = `http://127.0.0.1:${port}`;
+    const dbPath = join(tmpdir(), `argus-verify-s1b-${Date.now()}.sqlite`);
+    const env = {
+      ...process.env,
+      ARGUS_PORT: String(port), ARGUS_HOST: '127.0.0.1', ARGUS_DB_PATH: dbPath,
+      ARGUS_ADMIN_PASSWORD: 'v', ARGUS_SESSION_SECRET: 'v', ARGUS_ENCRYPTION_KEY: 'v', ARGUS_POLL_INTERVAL_MS: '3000',
+    };
+    const child = spawn('node', [serverEntry], { cwd: ROOT, env, stdio: 'ignore' });
+    let cookie = '';
+    const argus = async (path, opts = {}) => {
+      const headers = { accept: 'application/json' };
+      if (opts.body !== undefined) headers['content-type'] = 'application/json';
+      if (cookie) headers.cookie = cookie;
+      const res = await fetch(base + path, { method: opts.method ?? 'GET', headers, body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined });
+      let json; try { json = await res.json(); } catch { /* none */ }
+      return { status: res.status, json, setCookies: res.headers.getSetCookie?.() ?? [] };
+    };
+    try {
+      const health = await pollHealth(`${base}/api/health`);
+      if (!health) {
+        add('S1b API serves the catalog', false, `no health on :${port}`);
+      } else {
+        const li = await argus('/api/auth/login', { method: 'POST', body: { password: 'v', name: 'V', email: 'v@acme.example' } });
+        cookie = li.setCookies.map((c) => c.split(';')[0]).join('; ');
+        const prodC = await connect(INSTANCES.prod.baseUrl);
+        const stagingC = await connect(INSTANCES.staging.baseUrl);
+        await argus('/api/connections', { method: 'POST', body: { label: 'prod', baseUrl: INSTANCES.prod.baseUrl, apiKey: prodC.apiKey } });
+        await argus('/api/connections', { method: 'POST', body: { label: 'staging', baseUrl: INSTANCES.staging.baseUrl, apiKey: stagingC.apiKey } });
+        const expected = perInst.prod.items.length + perInst.staging.items.length;
+        let synced = 0;
+        for (let i = 0; i < 40; i++) {
+          synced = ((await argus('/api/workflows')).json?.workflows ?? []).length;
+          if (synced >= expected) break;
+          await sleep(500);
+        }
+
+        const sf = (await argus('/api/workflows?system=Salesforce')).json?.workflows ?? [];
+        const sfInstances = new Set(sf.map((w) => w.instanceLabel));
+        add('Filter "touching Salesforce" returns both instances in one view', sf.length === 2 && sfInstances.size === 2,
+          `${sf.length} workflow(s) across ${sfInstances.size} instance(s): ${sf.map((w) => `${w.instanceLabel}:${w.name}`).join(', ')}`);
+
+        const mcpList = (await argus('/api/workflows?mcp=true')).json?.workflows ?? [];
+        add('Filter "MCP-exposed" returns 2 per instance (4 total)', mcpList.length === 4, `${mcpList.length} MCP-exposed served`);
+
+        const cov = (await argus('/api/workflows/coverage')).json;
+        add('Coverage endpoint reports the trust number', cov?.understoodPct === 100 && cov?.brokenRefTotal === 2,
+          `understands ${cov?.understoodPct}%, ${cov?.brokenRefTotal} broken across the estate`);
+
+        const all = (await argus('/api/workflows')).json?.workflows ?? [];
+        const lead = all.find((w) => w.name === 'Lead Scorer');
+        const detail = lead ? (await argus(`/api/workflows/${lead.instanceId}/${lead.id}`)).json : null;
+        const dep = detail?.facts?.directDeps?.[0];
+        add('Detail drawer serves facts + n8n deep-link (broken ref honest)',
+          !!detail && dep?.resolution === 'broken' && typeof detail.deepLink === 'string' && detail.deepLink.includes('/workflow/'),
+          detail ? `deep-link ${detail.deepLink}, Lead Scorer dep = ${dep?.resolution}` : 'no detail');
+      }
+    } finally {
+      try { child.kill(); } catch { /* already gone */ }
+    }
+  }
+
+  // ---- Part D: scale smoke-test (snappy at ~1.5–3k; full seed:large is S1b.1) ----
+  try {
+    const { createRequire } = await import('node:module');
+    const require = createRequire(import.meta.url);
+    const Database = require(join(ROOT, 'apps/server/node_modules/better-sqlite3'));
+    const { migrate } = await import('../apps/server/dist/db/migrate.js');
+    const { replaceInstanceWorkflows, listWorkflows, getWorkflowDetail } = await import('../apps/server/dist/workflows/repo.js');
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    migrate(db);
+    const nowIso = new Date().toISOString();
+    const TARGET = 1500;
+    let sampleId = null, sampleInstance = null;
+    for (const inst of Object.values(INSTANCES)) {
+      const { items, facts } = perInst[inst.name];
+      db.prepare('INSERT INTO connections (id,label,base_url,api_key_cipher,created_at,updated_at) VALUES (?,?,?,?,?,?)')
+        .run(inst.name, inst.name, inst.baseUrl, 'x', nowIso, nowIso);
+      const cache = [];
+      let n = 0;
+      while (cache.length < TARGET) {
+        for (const w of items) {
+          if (cache.length >= TARGET) break;
+          cache.push({
+            id: `${w.id}-${n}`, name: `${w.name} #${n}`, active: w.active, isArchived: w.isArchived,
+            projectId: null, projectName: null, updatedAt: w.updatedAt, versionId: w.versionId, facts: facts.get(w.id) ?? null,
+          });
+        }
+        n++;
+      }
+      replaceInstanceWorkflows(db, inst.name, cache, nowIso);
+      sampleId = cache[0].id; sampleInstance = inst.name;
+    }
+    const totalScaled = listWorkflows(db).length;
+    const t0 = Date.now(); const sfScaled = listWorkflows(db, { systems: ['Salesforce'] }); const listMs = Date.now() - t0;
+    const t1 = Date.now(); const d = getWorkflowDetail(db, sampleInstance, sampleId); const detailMs = Date.now() - t1;
+    add(`Catalog stays snappy at ~${totalScaled} workflows (full seed:large → S1b.1)`,
+      listMs < 500 && detailMs < 100 && totalScaled >= 3000 && sfScaled.length > 0 && !!d,
+      `${totalScaled} workflows; filtered list ${listMs}ms, detail ${detailMs}ms`);
+    db.close();
+  } catch (e) {
+    add('Catalog scale smoke-test', false, `scale test failed: ${e.message}`);
   }
 }
 

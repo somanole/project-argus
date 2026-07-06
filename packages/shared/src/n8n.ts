@@ -19,9 +19,47 @@ export const n8nSharedEntrySchema = z.object({
 });
 
 /**
- * A workflow as it appears in the LIST response. Note: list items carry the
- * `shared` owner link (projectId) but NOT the nested `project` object — the
- * project *name* is resolved separately via the projects endpoint.
+ * One node in a workflow's `nodes` array — the analyzer's input (S1b). Params are
+ * `passthrough()` and credentials are loose: a param/shape drift must NEVER fail
+ * the parse and drop a workflow from inventory. We only pin the handful of fields
+ * the analyzer reads; everything else rides through untouched.
+ * Contract: contracts/n8n-16-workflow-list-facts-shape.json.
+ */
+export const n8nNodeSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().optional(),
+    type: z.string(),
+    typeVersion: z.number().optional(),
+    disabled: z.boolean().optional(),
+    webhookId: z.string().optional(),
+    parameters: z.record(z.string(), z.unknown()).optional().default({}),
+    /** credential-type-name → { id, name }. Loose: unresolved ids are null. */
+    credentials: z
+      .record(z.string(), z.object({ id: z.string().nullable().optional(), name: z.string().optional() }).passthrough())
+      .optional(),
+  })
+  .passthrough();
+export type N8nNode = z.infer<typeof n8nNodeSchema>;
+
+/** Workflow-level settings the analyzer reads (rule-1 verified in n8n-16). */
+export const n8nWorkflowSettingsSchema = z
+  .object({
+    errorWorkflow: z.string().optional(),
+    availableInMCP: z.boolean().optional(),
+    callerPolicy: z.string().optional(),
+    callerIds: z.string().optional(),
+  })
+  .passthrough();
+
+/**
+ * A workflow as it appears in the LIST response. Carries the `shared` owner link
+ * (projectId) but NOT the nested `project` object (resolve the name via /projects).
+ *
+ * S1b: the list item ALSO carries the full node graph inline — node facts come from
+ * the TOP-LEVEL `nodes` array (always present), NOT `activeVersion` (null for every
+ * non-active workflow — see contracts/n8n-16). All S1b fields are optional/defaulted
+ * so a shape change degrades a workflow to "not analyzed", never drops it.
  */
 export const n8nWorkflowListItemSchema = z.object({
   id: z.string(),
@@ -32,6 +70,12 @@ export const n8nWorkflowListItemSchema = z.object({
   updatedAt: z.string(),
   versionId: z.string().nullable(),
   shared: z.array(n8nSharedEntrySchema).optional().default([]),
+  // S1b analyzer input:
+  nodes: z.array(n8nNodeSchema).optional(),
+  connections: z.record(z.string(), z.unknown()).optional(),
+  settings: n8nWorkflowSettingsSchema.optional(),
+  triggerCount: z.number().optional(),
+  tags: z.array(z.object({ id: z.string(), name: z.string() }).passthrough()).optional().default([]),
 });
 export type N8nWorkflowListItem = z.infer<typeof n8nWorkflowListItemSchema>;
 

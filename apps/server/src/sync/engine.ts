@@ -3,6 +3,7 @@ import type { ConnectionHealth, N8nWorkflowListItem, N8nProject } from '@argus/s
 import { listConnectionRows, getConnectionRow, decryptApiKey, type ConnectionRow } from '../connections/repo.js';
 import { replaceInstanceWorkflows, countByInstance, type CacheWorkflow } from '../workflows/repo.js';
 import { createN8nClient, statusForError, reason } from '../n8n/client.js';
+import { analyzeInstance } from '../analyzer/index.js';
 
 /**
  * The freshness engine. Every `pollIntervalMs` it re-lists each connection's
@@ -48,6 +49,10 @@ export function createSyncEngine(
 
   function normalize(workflows: N8nWorkflowListItem[], projects: N8nProject[]): CacheWorkflow[] {
     const nameById = new Map(projects.map((p) => [p.id, p.name]));
+    // S1b: analyze the whole instance in one pass. We only reach here when the full
+    // list was read (client.listWorkflows throws on any page error), so the id set is
+    // complete — the precondition that makes broken-ref detection sound (resolve.ts).
+    const factsById = analyzeInstance(workflows, true, new Date().toISOString());
     return workflows.map((w) => {
       const ownerProjectId = w.shared.find((s) => s.role === 'workflow:owner')?.projectId ?? null;
       return {
@@ -60,6 +65,7 @@ export function createSyncEngine(
         projectName: ownerProjectId ? nameById.get(ownerProjectId) ?? null : null,
         updatedAt: w.updatedAt,
         versionId: w.versionId,
+        facts: factsById.get(w.id) ?? null,
       };
     });
   }

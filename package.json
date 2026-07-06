@@ -18,9 +18,13 @@
     "dev:server": "pnpm --filter @argus/server dev",
     "dev:web": "pnpm --filter @argus/web dev",
     "probe:n8n": "node scripts/probe-n8n.mjs",
+    "probe:catalog": "node scripts/probe-catalog.mjs",
     "n8n:up": "node scripts/n8n-up.mjs",
     "seed": "node scripts/seed.mjs",
     "seed:unlock": "node scripts/seed-unlock.mjs",
+    "gen:manifest": "node scripts/gen-manifest.mjs",
+    "corpus:fetch": "node scripts/fetch-corpus.mjs",
+    "corpus:check": "node scripts/corpus-check.mjs",
     "verify": "node scripts/verify.mjs"
   },
   "devDependencies": {
