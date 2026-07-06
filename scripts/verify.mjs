@@ -196,6 +196,13 @@ try {
   add('Catalog header shows the polling freshness pill + synced indicator', fresh.length === 0,
     fresh.length === 0 ? 'freshness-pill + synced-indicator present' : `MISSING: ${fresh.join(', ')}`);
 
+  // The freshness pill must go HONEST when a connection stops syncing (rule 5) —
+  // a rejected key / unreachable instance surfaces as "not syncing", never a green
+  // poll. The failing-state branch ships in the bundle (state guarded by a web test).
+  const surfacesFailure = js.includes('not syncing') && js.includes('failing');
+  add('Catalog surfaces a failing sync (rejected key ≠ healthy pill)', surfacesFailure,
+    surfacesFailure ? 'failing-state pill ships' : 'failing-state pill MISSING');
+
   const filters = ['filter-search', 'filter-state', 'filter-mcp', 'filter-instance', 'filter-system', 'filter-trigger'];
   const fmissing = missing(filters);
   add('Catalog shows all filter controls (search/state/MCP/instance/system/trigger)', fmissing.length === 0,
@@ -291,9 +298,9 @@ async function seederChecks() {
   add('4 team projects per instance', both(teamsOk(pTeams) && pTeams.length === 4, teamsOk(sTeams) && sTeams.length === 4),
     `prod ${pTeams.length}, staging ${sTeams.length}`);
 
-  // 3. Workflow count per instance in range.
-  const inRange = (n) => n >= 25 && n <= 30;
-  add('Workflow count per instance in range (25–30)', both(inRange(P.wfs.length), inRange(S.wfs.length)),
+  // 3. Workflow count per instance in range (~100: curated core + procedural background).
+  const inRange = (n) => n >= 90 && n <= 115;
+  add('Workflow count per instance in range (~100)', both(inRange(P.wfs.length), inRange(S.wfs.length)),
     `prod ${P.wfs.length}, staging ${S.wfs.length}`);
 
   // 4. Sub-workflow chain depth 3 (Order Intake → Enrich → Billing).
@@ -603,6 +610,43 @@ async function s1bChecks() {
   const mp = mcpNames('prod'), ms = mcpNames('staging');
   add('MCP-exposed flagged for exactly 2 workflows per instance', mp.length === 2 && ms.length === 2,
     `prod [${mp.join(', ')}], staging [${ms.join(', ')}]`);
+
+  // Estate reads as diverse, not repetitive: the procedural background pushes the
+  // fleet across many external systems and every trigger kind (analyzer's own view).
+  const diversity = (name) => {
+    const { items, facts } = perInst[name];
+    const systems = new Set(), triggerKinds = new Set();
+    for (const w of items) {
+      const f = facts.get(w.id); if (!f) continue;
+      for (const s of f.systems) if (s.system) systems.add(s.system);
+      for (const t of f.nodeTypes) if (t.category === 'trigger') triggerKinds.add(t.type);
+    }
+    return { systems: systems.size, triggers: triggerKinds.size };
+  };
+  const dp = diversity('prod'), ds = diversity('staging');
+  add('Estate is diverse (≥15 external systems, ≥5 trigger kinds)',
+    dp.systems >= 15 && dp.triggers >= 5 && ds.systems >= 15 && ds.triggers >= 5,
+    `prod ${dp.systems} systems/${dp.triggers} triggers, staging ${ds.systems}/${ds.triggers}`);
+
+  // Real dependency clusters (not isolated islands): beyond the curated Slack hub
+  // (fan-in 5), the background forms at least one high-fan-in shared sub-workflow.
+  const topHub = (name) => {
+    const { items, facts } = perInst[name];
+    const counts = new Map();
+    for (const w of items) {
+      for (const dep of facts.get(w.id)?.directDeps ?? []) {
+        const t = dep.resolvedName;
+        if (!t || t === 'Send Slack Alert') continue;
+        counts.set(t, (counts.get(t) ?? 0) + 1);
+      }
+    }
+    let best = ['—', 0];
+    for (const e of counts) if (e[1] > best[1]) best = e;
+    return best;
+  };
+  const hp = topHub('prod'), hs = topHub('staging');
+  add('Background forms real dependency clusters (a hub with fan-in ≥8)',
+    hp[1] >= 8 && hs[1] >= 8, `prod "${hp[0]}" ×${hp[1]}, staging "${hs[0]}" ×${hs[1]}`);
 
   const report = coverageOf(covEntries);
   const gaps = report.total - report.understood;

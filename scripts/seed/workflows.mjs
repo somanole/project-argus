@@ -1,10 +1,17 @@
-// The demo fleet: ~29 workflows per instance, each carrying a specific shape or
-// planted governance problem the later analyzer must find. Every entry declares
-// where it lives (team project or a person's personal space), its tags, whether
-// it's active/archived/MCP-exposed, what it depends on (drives create order), and
-// how to generate its execution history. build(ctx) returns the literal n8n JSON.
-//
-// ctx = { ref(key)->realId, cred(key)->{id,name}, webhookBase }
+// The demo fleet. Two layers:
+//   • CURATED (~29/instance) — the planted-problem core. Each entry carries a
+//     specific shape or governance problem the analyzer/health/graph slices must
+//     find. THESE ARE THE DEMO STORY; verify pins their exact numbers. Don't dilute.
+//   • PROCEDURAL (~71/instance) — a generated background fleet (procedural.mjs) that
+//     grows the estate to ~100/instance so it reads like a real, messy enterprise
+//     with real dependency clusters, not a dozen tidy flows. It never references a
+//     curated workflow, never touches Salesforce, and is never MCP-exposed, so the
+//     curated exact-number contracts (1 broken ref, Slack fan-in 5, 1 Salesforce,
+//     2 MCP) are untouched.
+// Every entry declares where it lives (team project or a person's personal space),
+// its tags, whether it's active/archived/MCP-exposed, what it depends on (drives
+// create order), and how to generate its execution history. build(ctx) returns the
+// literal n8n JSON. ctx = { ref(key)->realId, cred(key)->{id,name}, webhookBase }
 
 import {
   buildWorkflow, BROKEN_REF,
@@ -13,10 +20,12 @@ import {
   executeWorkflow, executeWorkflowPlainString, executeWorkflowInline,
   agent, lmChatOpenAi, memoryBuffer, toolWorkflow, agentTool,
 } from './nodes.mjs';
+import { generateProceduralFleet } from './procedural.mjs';
 
 const MAYBE_FAIL = "if ($json.body?.fail) { throw new Error('Simulated downstream failure'); }\nreturn $input.all();";
 
-export const WORKFLOWS = [
+// The curated planted-problem core (order matters only via `dependsOn`).
+const CURATED = [
   // ---- shared utility (created first: everything fans into it) ----
   {
     key: 'slackAlert', name: 'Send Slack Alert', project: 'support', tags: ['internal'],
@@ -247,3 +256,7 @@ export const WORKFLOWS = [
       [{ from: 'Run', to: 'Ad-hoc Export' }]),
   },
 ];
+
+// The full per-instance fleet: curated core + procedural background (~100 total).
+// The procedural set is generated deterministically, so re-seeding is idempotent.
+export const WORKFLOWS = [...CURATED, ...generateProceduralFleet()];

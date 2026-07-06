@@ -32,12 +32,18 @@ that reads like a real company's n8n.
 - **4 team projects** — Revenue Ops, Customer Support, Data Platform, Marketing —
   with people assigned to them.
 - **People** — an owner plus several members, so ownership is real and varied.
-- **5 dummy credentials** — Slack, Postgres, Stripe, Salesforce, Email — placed in
-  the projects that use them (the Postgres/Stripe pair forms a "sensitive cluster").
-- **~25–30 workflows** created in dependency order (a workflow that calls another
-  is created after its callee, so the reference points at a real id), then tagged
-  and (where they have a production trigger) activated.
-- **Real execution history, including deliberate failures.**
+- **Dummy credentials** — the curated five (Slack, Postgres, Stripe, Salesforce,
+  Email; the Postgres/Stripe pair forms a "sensitive cluster") plus a handful more
+  for the background fleet (Notion, HubSpot, Airtable, Telegram, Mattermost,
+  MongoDB, MySQL, Google Sheets, Intercom) — placed in the projects that use them.
+- **~100 workflows** created in dependency order (a workflow that calls another is
+  created after its callee, so the reference points at a real id), then tagged and
+  (where they have a production trigger) activated. This is **two layers**:
+  - a **curated planted-problem core** (~29) — the demo story below, whose exact
+    numbers the verify report pins;
+  - a **procedural background fleet** (~71) — generated so the estate reads like a
+    real, messy enterprise (see "The procedural background" below).
+- **Real execution history, including deliberate failures** (on the curated core).
 
 **The planted problems** (this is the "messy in the ways that matter"):
 - A **3-level sub-workflow chain**: Order Intake → Enrich → Billing.
@@ -67,6 +73,27 @@ that reads like a real company's n8n.
 - One **rename-only edit** artifact (a workflow renamed after creation) — its
   behavioral effect is an M2 concern; M1 only leaves the artifact.
 
+**The procedural background** (generated, `scripts/seed/procedural.mjs`) fills the
+estate out to ~100 workflows per instance so the fleet — and especially the later
+graph slice — looks like a real company, not a dozen tidy demo flows:
+- **Diverse** — the background spans ~20 external systems (Notion, HubSpot,
+  Airtable, MongoDB, MySQL, Zendesk, Asana, Linear, GitLab, Google Sheets/Calendar,
+  Microsoft Teams, Telegram, Mattermost, Mailchimp, Trello, Intercom, Freshdesk,
+  ClickUp, …) and every trigger kind (schedule, webhook, manual, form, chat,
+  called-by-another-workflow), across all four team projects and the personal spaces.
+- **Real dependency structure, not islands** — shared utility sub-workflows with
+  high fan-in (one hub is called by ~12+ workflows), multi-hop sub-workflow chains,
+  AI agent→tool links, and cross-project calls, so the fleet forms genuine clusters.
+- **Never dilutes the planted story** — the generator references only its own
+  workflows (adds **zero** broken refs and never perturbs the Slack-hub fan-in of 5),
+  never touches Salesforce, and is never MCP-exposed (so those stay exactly one /
+  exactly two per instance). Every node type it emits is analyzer-known, so the
+  estate stays **100% understood**.
+- **Deterministic** — shape is a pure function of each workflow's key, so re-seeding
+  lands the identical fleet (idempotent) with identical verify numbers.
+- **Factored for reuse** — `generateProceduralFleet(opts)` takes tier sizes, so the
+  future scale-stress task (`seed:large`) reuses it with a bigger `scale`.
+
 **The estate-level (cross-instance) scenarios**, wired after both instances exist:
 - A **cross-instance webhook edge**: a **staging** workflow's HTTP Request calls a
   **prod** webhook URL — the scary "prod depended on by staging" finding.
@@ -74,6 +101,16 @@ that reads like a real company's n8n.
   in both instances**, solely owning critical workflows in each.
 - A **shared external system**: a **Salesforce** credential present in both
   instances, referenced by at least one workflow in each.
+
+**Refreshing a running Argus.** A reseed runs n8n's reset, which **wipes every n8n
+API key** — so any key a running Argus had stored for a connection is now dead, and
+its catalog would silently show the OLD estate until re-pointed. As its **final
+step**, `pnpm seed` therefore re-points a locally-running Argus: it mints fresh
+read-only keys and re-registers each connection **through Argus's own API** (so the
+change is audited, rule 6). It is **best-effort** — if no Argus is running on
+`ARGUS_BASE` (default `http://127.0.0.1:3000`), or its admin password isn't
+`ARGUS_ADMIN_PASSWORD` (default `argus`), it logs why and skips; it never fails the
+seed.
 
 **Companion commands.**
 - `pnpm seed:unlock` re-applies the E2E license/quota flags to both instances
@@ -121,7 +158,12 @@ Every n8n shape the seeder relies on is captured live in `contracts/` (rule 1):
 - [ ] **Two isolated E2E instances up** — prod :5678 and staging :5679 both answer
       `/healthz` and accept an E2E patch. → 2/2.
 - [ ] **4 team projects per instance** — the four named projects exist on each. → 4.
-- [ ] **Workflow count per instance in range** — 25–30 workflows each. → ~27.
+- [ ] **Workflow count per instance in range** — ~100 workflows each (curated core +
+      procedural background). → ~100.
+- [ ] **Estate is diverse** — the fleet spans ≥15 external systems and ≥5 trigger
+      kinds per instance (not a repetitive handful). → 15+ / 5+.
+- [ ] **Real dependency clusters** — beyond the curated Slack hub (fan-in 5), the
+      background forms at least one shared sub-workflow with fan-in ≥8. → 8+.
 - [ ] **Sub-workflow chain depth 3** — Order Intake → Enrich → Billing linked by
       real ids. → 3.
 - [ ] **"Send Slack Alert" fan-in = 5** — exactly 5 workflows call it. → 5.

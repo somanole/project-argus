@@ -6,19 +6,26 @@
 import { ensureAll, INSTANCES } from './lib/launch.mjs';
 import { seedInstance } from './lib/seed-runtime.mjs';
 import { crossInstanceBridge } from './seed/estate.mjs';
+import { reconnectLocalArgus } from './lib/argus-reconnect.mjs';
 
 console.log('Seeding the Argus n8n estate (prod + staging)…\n');
 
-console.log('1/3  Ensuring both instances are up');
+console.log('1/4  Ensuring both instances are up');
 await ensureAll();
 
-console.log('\n2/3  Seeding prod');
+console.log('\n2/4  Seeding prod');
 const prod = await seedInstance(INSTANCES.prod);
 
-console.log('\n3/3  Seeding staging (+ cross-instance bridge)');
+console.log('\n3/4  Seeding staging (+ cross-instance bridge)');
 const staging = await seedInstance(INSTANCES.staging, {
   extraWorkflows: [crossInstanceBridge(INSTANCES.prod.baseUrl)],
 });
+
+// The reset above invalidated any n8n API key a running Argus had stored, so
+// re-point a local Argus at the fresh estate (no-op if none is running).
+console.log('\n4/4  Refreshing local Argus connections (if running)');
+const reconnect = await reconnectLocalArgus(INSTANCES);
+if (!reconnect.skipped) console.log(`  refreshed ${reconnect.refreshed} Argus connection(s) with fresh read-only keys`);
 
 console.log('\nEstate seeded:');
 for (const s of [prod, staging]) {

@@ -166,6 +166,12 @@ renders with its key text/state (not appearance), and a `pnpm verify` row.
 - [x] The catalog header shows the **polling freshness pill** ("Polling — updates
       within ~30s") and the **"synced N ago"** indicator (assert the static label,
       not the live timestamp).
+- [x] The **freshness pill is honest** (rule 5): the catalog serves last-known data
+      even when an instance stops syncing, so when any connection's key is rejected
+      or the instance is unreachable the pill goes danger and reads **"N of M
+      instances not syncing"** (with the reason on hover) instead of a green poll —
+      the estate never silently reads healthy while going stale. Guarded by a web
+      component test (both states) and a `pnpm verify` row.
 - [x] The catalog shows every **filter control** — search, state (All/Active/
       Archived), MCP-exposed, instance, system, trigger.
 - [x] The **connection-health indicator** renders on the Connections screen (a

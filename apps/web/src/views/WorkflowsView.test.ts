@@ -29,12 +29,22 @@ const coverageBody = {
   unresolvedRefTotal: 0, dynamicRefTotal: 0, brokenRefTotal: 0, perInstance: [],
 };
 
-function stubFetch() {
+const okConnection = {
+  id: 'a', label: 'prod', baseUrl: 'http://localhost:5678', webhookHost: null,
+  createdAt: '2026-07-05T00:00:00.000Z', updatedAt: '2026-07-05T00:00:00.000Z',
+  health: { status: 'ok', lastSyncedAt: '2026-07-05T00:00:00.000Z', lastError: null, workflowCount: 1 },
+};
+const rejectedConnection = {
+  ...okConnection, id: 'b', label: 'staging', baseUrl: 'http://localhost:5679',
+  health: { status: 'unauthorized', lastSyncedAt: null, lastError: 'n8n rejected the API key (HTTP 401)', workflowCount: 0 },
+};
+
+function stubFetch(connections: unknown[] = []) {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     const u = String(url);
     const body = u.includes('/api/workflows/coverage') ? coverageBody
       : u.includes('/api/workflows') ? workflowsBody
-        : u.includes('/api/connections') ? { connections: [] }
+        : u.includes('/api/connections') ? { connections }
           : {};
     return { ok: true, status: 200, json: async () => body };
   }));
@@ -78,6 +88,38 @@ describe('Catalog chrome — UI-presence (rule 11)', () => {
     // The MCP control is labelled.
     expect(tid('filter-mcp').text()).toContain('MCP');
 
+    w.unmount();
+  });
+});
+
+describe('Catalog freshness surfaces sync failures (rule 5)', () => {
+  beforeEach(() => setActivePinia(createPinia()));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('shows a healthy polling pill when every connection is syncing', async () => {
+    stubFetch([okConnection]);
+    const w = mount(WorkflowsView, { global: { stubs: { 'router-link': RouterLinkStub } } });
+    await flushPromises();
+    const pill = w.find('[data-testid="freshness-pill"]');
+    expect(pill.text()).toContain('Polling');
+    expect(pill.classes()).not.toContain('badge--danger');
+    expect(pill.attributes('data-state')).toBeUndefined();
+    w.unmount();
+  });
+
+  it('surfaces a rejected key instead of a false-healthy pill', async () => {
+    stubFetch([okConnection, rejectedConnection]);
+    const w = mount(WorkflowsView, { global: { stubs: { 'router-link': RouterLinkStub } } });
+    await flushPromises();
+    const pill = w.find('[data-testid="freshness-pill"]');
+    // Honest: the pill goes danger and NAMES the problem — never "Polling…" green.
+    expect(pill.attributes('data-state')).toBe('failing');
+    expect(pill.classes()).toContain('badge--danger');
+    expect(pill.text()).toContain('not syncing');
+    expect(pill.text()).toContain('1 of 2');
+    expect(pill.text()).not.toContain('Polling');
+    // The failing connection's reason is available on hover.
+    expect(pill.attributes('title')).toContain('HTTP 401');
     w.unmount();
   });
 });

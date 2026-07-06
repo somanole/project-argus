@@ -39,6 +39,16 @@ const estateSize = computed(() => coverage.value?.total ?? null);
 // "synced Ns ago", advancing between refreshes via the ticking clock.
 const syncedAgo = computed(() => relativeTime(lastUpdated.value, now.value));
 
+// Honest freshness (rule 5): the catalog serves last-known data even when an
+// instance stops syncing, so the pill must reflect the *connections'* health — a
+// rejected key or unreachable instance means the estate is silently going stale,
+// and that must be surfaced here, not shown as a healthy green poll.
+const syncFailures = computed(() =>
+  connections.connections.filter((c) => c.health.status === 'unauthorized' || c.health.status === 'unreachable'));
+const syncOk = computed(() => syncFailures.value.length === 0);
+const syncFailureTitle = computed(() =>
+  syncFailures.value.map((c) => `${c.label}: ${c.health.lastError ?? c.health.status}`).join(' · '));
+
 async function refreshAll(): Promise<void> {
   await Promise.all([store.refresh(), store.refreshCoverage(), connections.refresh()]);
 }
@@ -82,7 +92,18 @@ onUnmounted(() => {
           <span class="cov-label muted">understood</span>
           <FactBadge v-if="coverage.brokenRefTotal > 0" :label="`${coverage.brokenRefTotal} broken`" tone="danger" />
         </div>
-        <span class="badge badge--muted" data-testid="freshness-pill"><span class="dot dot--ok" /> Polling — updates within ~30s</span>
+        <span
+          v-if="syncOk"
+          class="badge badge--muted"
+          data-testid="freshness-pill"
+        ><span class="dot dot--ok" /> Polling — updates within ~30s</span>
+        <span
+          v-else
+          class="badge badge--danger"
+          data-testid="freshness-pill"
+          data-state="failing"
+          :title="syncFailureTitle"
+        ><span class="dot dot--danger" /> {{ syncFailures.length }} of {{ connections.connections.length }} instances not syncing</span>
         <span class="muted synced" data-testid="synced-indicator">synced {{ syncedAgo }}</span>
         <button class="btn btn--secondary btn--sm" data-testid="refresh-button" @click="refreshAll">Refresh</button>
       </div>
