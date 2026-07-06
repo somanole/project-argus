@@ -1,10 +1,11 @@
 import type Database from 'better-sqlite3';
-import type { ConnectionHealth, N8nWorkflowListItem, N8nProject } from '@argus/shared';
+import type { ConnectionHealth, N8nWorkflowListItem, N8nProject, N8nExecution } from '@argus/shared';
 import { listConnectionRows, getConnectionRow, decryptApiKey, type ConnectionRow } from '../connections/repo.js';
 import { replaceInstanceWorkflows, countByInstance, type CacheWorkflow } from '../workflows/repo.js';
-import { createN8nClient, statusForError, reason } from '../n8n/client.js';
+import { createN8nClient, statusForError, reason, HttpError, DEFAULT_HEALTH_WINDOW_HOURS } from '../n8n/client.js';
 import { analyzeInstance } from '../analyzer/index.js';
 import { buildEnrichmentInput, hashEnrichmentInput } from '../enrichment/index.js';
+import { syncHealth } from '../health/index.js';
 
 /**
  * The freshness engine. Every `pollIntervalMs` it re-lists each connection's
@@ -18,6 +19,16 @@ import { buildEnrichmentInput, hashEnrichmentInput } from '../enrichment/index.j
 export interface N8nReader {
   listWorkflows(): Promise<N8nWorkflowListItem[]>;
   listProjects(): Promise<N8nProject[]>;
+  /** S3 health source — executions within the retention window. */
+  listExecutions(opts: { windowMs: number; now?: number }): Promise<N8nExecution[]>;
+}
+
+/** Turn an executions-fetch error into an honest reason for the `unknown` health state. */
+function healthReason(err: unknown): string {
+  if (err instanceof HttpError && (err.status === 401 || err.status === 403)) {
+    return `executions unavailable — the API key may lack \`execution:list\` (HTTP ${err.status})`;
+  }
+  return `executions unavailable — ${reason(err)}`;
 }
 export type N8nReaderFactory = (opts: { baseUrl: string; apiKey: string }) => N8nReader;
 
@@ -104,6 +115,17 @@ export function createSyncEngine(
         lastError: null,
         workflowCount: normalized.length,
       });
+      // S3 health: recompute per-workflow execution health on the SAME tick (poll-fresh).
+      // syncHealth never throws — a fetch failure degrades those workflows to `unknown`
+      // with a reason, leaving inventory (above) intact (rule 5). Guarded anyway.
+      try {
+        await syncHealth(db, row.id, client, {
+          windowHours: DEFAULT_HEALTH_WINDOW_HOURS,
+          reasonForError: healthReason,
+        });
+      } catch (healthErr) {
+        console.warn(`[argus] health sync failed for "${row.label}": ${(healthErr as Error).message}`);
+      }
       // Kick the enrichment worker (if any). Never let its failure break the sync.
       try {
         onSynced(row.id);

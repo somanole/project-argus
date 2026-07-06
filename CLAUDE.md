@@ -132,8 +132,11 @@ The Argus server reads these env vars (safe dev defaults if unset — it warns, 
 | `ARGUS_POLL_INTERVAL_MS` | `30000` | Per-connection re-list + reconcile cadence (the freshness loop). |
 
 Registering a connection needs a **read-only n8n API key** (n8n → Settings → n8n
-API); scopes `workflow:list` + `project:list` are enough. Argus is read-only
-against every instance.
+API); scopes `workflow:list` + `project:list` cover the catalog, and
+`execution:list` (+ `execution:read`) adds **health** (S3). If the key lacks the
+execution scopes, health degrades explicitly to "unavailable" per workflow (never a
+false "healthy") while the rest of Argus works. Argus is read-only against every
+instance.
 
 ### Workspace layout
 

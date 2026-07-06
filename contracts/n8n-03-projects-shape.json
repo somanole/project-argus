@@ -1,6 +1,6 @@
 {
   "$probe": "GET /api/v1/projects — live response shape (project id, name, type, role)",
-  "capturedAt": "2026-07-04T19:17:22.438Z",
+  "capturedAt": "2026-07-06T19:00:26.376Z",
   "n8nVersion": "2.29.0",
   "request": {
     "method": "GET",
@@ -15,48 +15,48 @@
     "body": {
       "data": [
         {
-          "updatedAt": "2026-07-04T19:17:22.359Z",
-          "createdAt": "2026-07-04T19:17:22.359Z",
-          "id": "ENrg6rAzlS0mAE7Y",
+          "updatedAt": "2026-07-06T19:00:26.281Z",
+          "createdAt": "2026-07-06T19:00:26.281Z",
+          "id": "C4skLqJKw0AxY3n8",
           "name": "Nathan Owner <nathan@n8n.io>",
           "type": "personal",
           "icon": null,
           "description": null,
           "customTelemetryTags": [],
-          "creatorId": "683b3840-6294-4b4c-b96b-05f41b4bc80c"
+          "creatorId": "bbfff7c4-3ae8-4d4a-844a-35855f9d3ce3"
         },
         {
-          "updatedAt": "2026-07-04T19:17:22.360Z",
-          "createdAt": "2026-07-04T19:17:22.360Z",
-          "id": "xGLcoA3JLw0RL4nA",
+          "updatedAt": "2026-07-06T19:00:26.282Z",
+          "createdAt": "2026-07-06T19:00:26.282Z",
+          "id": "OH9fsRjb4A9PVulO",
           "name": "Admin User <admin@n8n.io>",
           "type": "personal",
           "icon": null,
           "description": null,
           "customTelemetryTags": [],
-          "creatorId": "2429547a-831b-4135-9d5d-8af842a8ee3a"
+          "creatorId": "15e7b937-53ad-4648-a5a5-af821a339721"
         },
         {
-          "updatedAt": "2026-07-04T19:17:22.361Z",
-          "createdAt": "2026-07-04T19:17:22.361Z",
-          "id": "lGRALsLnb1gSVCK2",
+          "updatedAt": "2026-07-06T19:00:26.284Z",
+          "createdAt": "2026-07-06T19:00:26.284Z",
+          "id": "aF35kDeqUdXm4lC6",
           "name": "Priya Member <priya@n8n.io>",
           "type": "personal",
           "icon": null,
           "description": null,
           "customTelemetryTags": [],
-          "creatorId": "fb3db214-2ab6-4f7b-ac58-3e8d7988a9b4"
+          "creatorId": "517cf0b8-75b7-4314-845c-43c57ea1a334"
         },
         {
-          "updatedAt": "2026-07-04T19:17:22.361Z",
-          "createdAt": "2026-07-04T19:17:22.361Z",
-          "id": "czvFICHnk9XzbFLY",
+          "updatedAt": "2026-07-06T19:00:26.285Z",
+          "createdAt": "2026-07-06T19:00:26.285Z",
+          "id": "RqmC9jX6rLKJtSWC",
           "name": "Chat User <chat@n8n.io>",
           "type": "personal",
           "icon": null,
           "description": null,
           "customTelemetryTags": [],
-          "creatorId": "49198477-e7b1-4702-beeb-8f020ae036f3"
+          "creatorId": "fc9a25e4-19a7-4dd9-ab1a-626485cf7145"
         }
       ],
       "nextCursor": null

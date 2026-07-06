@@ -51,7 +51,7 @@ export function createApp(deps: AppDeps): Express {
   // Everything else is behind the session guard.
   const guard = requireAuth(config.sessionSecret);
   app.use('/api/connections', guard, connectionsRouter(db, engine, config.encryptionKey));
-  app.use('/api/workflows', guard, workflowsRouter(db, worker));
+  app.use('/api/workflows', guard, workflowsRouter(db, worker, config.encryptionKey));
   app.use('/api/settings', guard, settingsRouter(db, config.encryptionKey, config.enrichmentEnabled, worker));
 
   return app;

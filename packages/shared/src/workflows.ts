@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { workflowFactsSchema, coverageReportSchema } from './facts.js';
 import { workflowEnrichmentSchema } from './enrichment.js';
+import { workflowHealthSchema } from './workflow-health.js';
 
 /**
  * The estate-wide workflow inventory contract (server ↔ web). One flat list
@@ -37,6 +38,9 @@ export const workflowListItemSchema = z.object({
   // S2 sense-making layer (null when enrichment is off / not yet run for this workflow):
   /** LLM summary + category + criticality-with-reason + risk flags, with honest status. */
   enrichment: workflowEnrichmentSchema.nullable(),
+  // S3 health layer (null when health hasn't been computed yet for this workflow):
+  /** Argus-computed execution health with honest status + freshness (poll-fresh). */
+  health: workflowHealthSchema.nullable(),
 });
 export type WorkflowListItem = z.infer<typeof workflowListItemSchema>;
 
@@ -69,3 +73,31 @@ export type WorkflowDetail = z.infer<typeof workflowDetailSchema>;
 /** The coverage widget + verify source. */
 export const coverageResponseSchema = coverageReportSchema;
 export type CoverageResponse = z.infer<typeof coverageReportSchema>;
+
+/**
+ * The S3 "what's failing right now" view feed. Failing then degraded workflows
+ * (each a full list item, so its S2 criticality rides along), a summary count of
+ * every health state, and the per-instance retention window (shown honestly, and
+ * flagged `available: false` when executions couldn't be read for that instance).
+ */
+export const healthEstateResponseSchema = z.object({
+  failing: z.array(workflowListItemSchema),
+  degraded: z.array(workflowListItemSchema),
+  summary: z.object({
+    failing: z.number().int().min(0),
+    degraded: z.number().int().min(0),
+    healthy: z.number().int().min(0),
+    idle: z.number().int().min(0),
+    unknown: z.number().int().min(0),
+  }),
+  windows: z.array(
+    z.object({
+      instanceId: z.string(),
+      instanceLabel: z.string(),
+      windowHours: z.number().int().positive(),
+      available: z.boolean(),
+    }),
+  ),
+  generatedAt: z.string().datetime(),
+});
+export type HealthEstateResponse = z.infer<typeof healthEstateResponseSchema>;

@@ -15,7 +15,7 @@ const workflowsBody = {
       instanceId: 'a', instanceLabel: 'prod', id: 'w1', name: 'Alpha', active: true, isArchived: false,
       project: 'Revenue Ops', updatedAt: '2026-07-05T00:00:00.000Z',
       systems: ['Salesforce'], triggers: ['n8n-nodes-base.webhook'], mcpExposed: true, nodeCount: 3, understood: true, brokenRefCount: 0,
-      enrichment: null,
+      enrichment: null, health: null,
     },
   ],
   facets: {
@@ -80,11 +80,14 @@ describe('Catalog chrome — UI-presence (rule 11)', () => {
     await flushPromises();
     const tid = (id: string) => w.find(`[data-testid="${id}"]`);
 
-    for (const f of ['filter-search', 'filter-state', 'filter-mcp', 'filter-broken', 'filter-instance', 'filter-system', 'filter-criticality', 'filter-trigger']) {
+    for (const f of ['filter-search', 'filter-state', 'filter-mcp', 'filter-broken', 'filter-instance', 'filter-system', 'filter-criticality', 'filter-health', 'filter-trigger']) {
       expect(tid(f).exists(), `${f} should render`).toBe(true);
     }
     // The criticality facet offers the levels.
     expect(tid('filter-criticality').text()).toContain('high');
+    // The health facet offers the S3 statuses.
+    expect(tid('filter-health').text()).toContain('failing');
+    expect(tid('filter-health').text()).toContain('idle');
     expect(tid('filter-broken').text()).toContain('Broken');
     // The state control offers All / Active / Archived.
     expect(tid('filter-state').text()).toContain('Active');

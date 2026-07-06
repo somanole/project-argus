@@ -34,6 +34,7 @@ async function logout(): Promise<void> {
         </div>
         <nav class="nav">
           <router-link to="/workflows">Catalog</router-link>
+          <router-link to="/health">Health</router-link>
           <router-link to="/connections">Connections</router-link>
           <router-link to="/settings">Settings</router-link>
         </nav>
@@ -77,7 +78,7 @@ async function logout(): Promise<void> {
   z-index: 10;
   flex-wrap: wrap;
 }
-.left { display: flex; align-items: center; gap: var(--spacing--lg); }
+.left { display: flex; align-items: center; gap: var(--spacing--lg); flex-wrap: wrap; min-width: 0; }
 .wordmark { display: inline-flex; align-items: center; gap: var(--spacing--3xs); }
 .eye {
   width: var(--spacing--sm);
@@ -88,7 +89,7 @@ async function logout(): Promise<void> {
 }
 .name { font-size: var(--font-size--lg); font-weight: var(--font-weight--bold); letter-spacing: -0.01em; }
 
-.nav { display: flex; gap: var(--spacing--2xs); }
+.nav { display: flex; gap: var(--spacing--2xs); flex-wrap: wrap; }
 .nav a {
   text-decoration: none;
   color: var(--color--text--shade-1);

@@ -222,6 +222,14 @@ try {
   const eMissing = missing(enrichUi);
   add('Enrichment UI ships (master switch, catalog badges, drawer summary+reason, correction)', eMissing.length === 0,
     eMissing.length === 0 ? `${enrichUi.length} enrichment UI elements present` : `MISSING: ${eMissing.join(', ')}`);
+
+  // S3: health chrome — the catalog badge + health facet, the "what's failing" view
+  // (failing list, summary, retention window, poll-fresh/honest-stale indicator), and
+  // the drawer health section. Each has a component test; this is the presence counterpart.
+  const healthUi = ['health-badge', 'filter-health', 'health-view', 'health-failing-list', 'health-window', 'health-freshness', 'health-section', 'health-summary', 'execution-runs', 'execution-failure'];
+  const hMissing = missing(healthUi);
+  add('Health UI ships (catalog badge+facet, failing view, drawer health + runs/failure)', hMissing.length === 0,
+    hMissing.length === 0 ? `${healthUi.length} health UI elements present` : `MISSING: ${hMissing.join(', ')}`);
 }
 
 // ---- Responsive (standing rule 10): hero views usable at 375px, both themes ----
@@ -253,6 +261,7 @@ try {
     };
     row('Login usable at 375px — no horizontal overflow', 'Login');
     row('Catalog usable at 375px — no horizontal overflow, no cut-off fields', 'Catalog list');
+    row('Health view usable at 375px — no horizontal overflow', 'Health view');
     row('Detail drawer usable at 375px — full-width, no overflow', 'Detail drawer');
     row('Settings usable at 375px — no horizontal overflow', 'Settings');
   }
@@ -273,6 +282,11 @@ await s1aChecks();
 // Corpus robustness (offline), the analyzer over the live seed, the API filters,
 // and the scale smoke-test.
 await s1bChecks();
+
+// ---- S3 checks: health (per-workflow status from executions, the failing view) ----
+// Drives a real Argus server against both live instances; asserts the seeded health
+// scenarios read as planted and the "what's failing" feed is correct + retention-honest.
+await s3Checks();
 
 // S2 enrichment — all hermetic (built code + JSON + unit suite); no n8n, no LLM spend.
 async function s2Checks() {
@@ -840,6 +854,116 @@ async function s1bChecks() {
     db.close();
   } catch (e) {
     add('Catalog scale smoke-test', false, `scale test failed: ${e.message}`);
+  }
+}
+
+// S3 — health: boot a real Argus server against both live instances, register them,
+// wait for the health sync, and assert the seeded scenarios read as planted and the
+// "what's failing" feed is correct + retention-honest (the owner's sign-off bullets).
+async function s3Checks() {
+  const up = {};
+  for (const inst of Object.values(INSTANCES)) {
+    const c = createN8nClient(inst.baseUrl);
+    up[inst.name] = (await c.healthy()) && (await c.e2eActive());
+  }
+  if (!up.prod || !up.staging) {
+    add('S3 health', false, `instances down (prod=${up.prod ? 'up' : 'down'}, staging=${up.staging ? 'up' : 'down'}) — run \`pnpm seed\``);
+    return;
+  }
+  const serverEntry = join(ROOT, 'apps/server/dist/index.js');
+  if (!existsSync(serverEntry)) { add('S3 health', false, 'server build missing'); return; }
+
+  const port = 3213;
+  const base = `http://127.0.0.1:${port}`;
+  const dbPath = join(tmpdir(), `argus-verify-s3-${Date.now()}.sqlite`);
+  const env = {
+    ...process.env,
+    ARGUS_PORT: String(port), ARGUS_HOST: '127.0.0.1', ARGUS_DB_PATH: dbPath,
+    ARGUS_ADMIN_PASSWORD: 'v', ARGUS_SESSION_SECRET: 'v', ARGUS_ENCRYPTION_KEY: 'v', ARGUS_POLL_INTERVAL_MS: '3000',
+  };
+  const child = spawn('node', [serverEntry], { cwd: ROOT, env, stdio: 'ignore' });
+  let cookie = '';
+  const argus = async (path, opts = {}) => {
+    const headers = { accept: 'application/json' };
+    if (opts.body !== undefined) headers['content-type'] = 'application/json';
+    if (cookie) headers.cookie = cookie;
+    const res = await fetch(base + path, { method: opts.method ?? 'GET', headers, body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined });
+    let json; try { json = await res.json(); } catch { /* none */ }
+    return { status: res.status, json, setCookies: res.headers.getSetCookie?.() ?? [] };
+  };
+
+  try {
+    const health = await pollHealth(`${base}/api/health`);
+    if (!health) { add('S3 health server boots', false, `no health on :${port}`); return; }
+
+    const li = await argus('/api/auth/login', { method: 'POST', body: { password: 'v', name: 'V', email: 'v@acme.example' } });
+    cookie = li.setCookies.map((c) => c.split(';')[0]).join('; ');
+    const prodC = await connect(INSTANCES.prod.baseUrl);
+    const stagingC = await connect(INSTANCES.staging.baseUrl);
+    await argus('/api/connections', { method: 'POST', body: { label: 'prod', baseUrl: INSTANCES.prod.baseUrl, apiKey: prodC.apiKey } });
+    await argus('/api/connections', { method: 'POST', body: { label: 'staging', baseUrl: INSTANCES.staging.baseUrl, apiKey: stagingC.apiKey } });
+
+    // Wait until health has been computed for the seeded failing workflow.
+    const healthByName = async () => {
+      const wfs = (await argus('/api/workflows')).json?.workflows ?? [];
+      return new Map(wfs.map((w) => [w.name, w.health]));
+    };
+    let byName = new Map();
+    for (let i = 0; i < 60; i++) {
+      byName = await healthByName();
+      const stripe = byName.get('Daily Stripe Reconciliation');
+      if (stripe && stripe.status !== 'unknown') break;
+      await sleep(500);
+    }
+
+    const statusOf = (name) => byName.get(name)?.status ?? 'missing';
+    // The always-failing critical workflow reads failing (execution-derived, even though inactive).
+    add('Seeded always-failing workflow reads FAILING', statusOf('Daily Stripe Reconciliation') === 'failing',
+      `Daily Stripe Reconciliation = ${statusOf('Daily Stripe Reconciliation')}`);
+    // The flaky + alternating workflows read degraded (3✓/3✘).
+    add('Seeded flaky + alternating workflows read DEGRADED',
+      statusOf('Zendesk Sync') === 'degraded' && statusOf('Data Quality Sentinel') === 'degraded',
+      `Zendesk Sync = ${statusOf('Zendesk Sync')}, Data Quality Sentinel = ${statusOf('Data Quality Sentinel')}`);
+    // An all-success workflow reads healthy.
+    add('Seeded all-success workflow reads HEALTHY', statusOf('Order Intake') === 'healthy',
+      `Order Intake = ${statusOf('Order Intake')}`);
+    // A workflow with no runs reads idle, phrased against the retention window.
+    const slack = byName.get('Send Slack Alert');
+    add('Seeded run-less workflow reads IDLE (against the retention window)',
+      slack?.status === 'idle' && slack?.runsInWindow === 0 && slack?.windowHours === 336,
+      `Send Slack Alert = ${slack?.status}, runs ${slack?.runsInWindow}, window ${slack?.windowHours}h`);
+    // Poll-fresh: health carries a computed-at (not a stale/never state).
+    const stripeH = byName.get('Daily Stripe Reconciliation');
+    add('Health is poll-fresh (carries a computed-at timestamp)', !!stripeH?.computedAt && stripeH.windowHours === 336,
+      `computedAt ${stripeH?.computedAt ? 'present' : 'MISSING'}, window ${stripeH?.windowHours}h`);
+
+    // The "what's failing right now" feed lists the failing workflow, retention-honest.
+    const feed = (await argus('/api/workflows/failing')).json ?? {};
+    const failingNames = (feed.failing ?? []).map((w) => w.name);
+    const degradedNames = (feed.degraded ?? []).map((w) => w.name);
+    const windowOk = (feed.windows ?? []).length > 0 && (feed.windows ?? []).every((w) => w.windowHours === 336);
+    add('"What\'s failing" feed lists failing + degraded, retention window shown',
+      failingNames.includes('Daily Stripe Reconciliation') &&
+      degradedNames.includes('Zendesk Sync') && degradedNames.includes('Data Quality Sentinel') && windowOk,
+      `failing [${failingNames.join(', ') || 'none'}], degraded incl Zendesk=${degradedNames.includes('Zendesk Sync')}, window 336h=${windowOk}`);
+    // Summary counts + honest availability (executions were readable → available).
+    const sum = feed.summary ?? {};
+    add('Failing feed summary counts + instances report available (executions readable)',
+      (sum.failing ?? 0) >= 1 && (sum.degraded ?? 0) >= 2 && (feed.windows ?? []).every((w) => w.available === true),
+      `summary failing ${sum.failing}, degraded ${sum.degraded}, healthy ${sum.healthy}, idle ${sum.idle}; all available`);
+
+    // On-demand redacted execution debug: the drawer's failing-workflow endpoint returns
+    // the failing NODE + error type/code (redacted, no message) + per-run n8n deep links.
+    const allWfs = (await argus('/api/workflows')).json?.workflows ?? [];
+    const stripe = allWfs.find((w) => w.name === 'Daily Stripe Reconciliation');
+    const dbg = stripe ? (await argus(`/api/workflows/${stripe.instanceId}/${stripe.id}/executions`)).json : null;
+    const runOk = (dbg?.runs ?? []).length > 0 && (dbg.runs ?? []).every((r) => typeof r.deepLink === 'string' && r.deepLink.includes('/executions/'));
+    const failNodeOk = dbg?.failure?.failedNode === 'Fetch Stripe Ledger' && !!dbg?.failure?.errorType;
+    add('Redacted execution debug: failing node + error class + per-run deep links',
+      !dbg?.unavailable && runOk && failNodeOk,
+      dbg ? `node "${dbg.failure?.failedNode}", error ${dbg.failure?.errorType ?? '—'}·${dbg.failure?.errorCode ?? '—'}, ${dbg.runs?.length ?? 0} runs w/ deep links` : 'no debug payload');
+  } finally {
+    try { child.kill(); } catch { /* already gone */ }
   }
 }
 

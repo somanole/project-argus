@@ -19,6 +19,7 @@ function item(id: string, instanceId: string, instanceLabel: string) {
     understood: true,
     brokenRefCount: 0,
     enrichment: null,
+    health: null,
   };
 }
 

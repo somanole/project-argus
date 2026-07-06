@@ -7,17 +7,20 @@ import type { WorkflowListItem } from '@argus/shared';
 import StateBadge from '../components/StateBadge.vue';
 import FactBadge from '../components/FactBadge.vue';
 import EnrichmentBadges from '../components/EnrichmentBadges.vue';
+import WorkflowHealthBadge from '../components/WorkflowHealthBadge.vue';
 import WorkflowDetailDrawer from '../components/WorkflowDetailDrawer.vue';
 import { instanceColor } from '../lib/instanceColor';
 import { relativeTime } from '../lib/time';
 
 const store = useWorkflowsStore();
 const connections = useConnectionsStore();
-const { workflows, facets, coverage, enrichmentProgress, state, error, lastUpdated, instanceId, systems, triggers, criticality, mcpOnly, brokenOnly, stateFilter, activeFilterCount, triggerLabels } =
+const { workflows, facets, coverage, enrichmentProgress, state, error, lastUpdated, instanceId, systems, triggers, criticality, health, mcpOnly, brokenOnly, stateFilter, activeFilterCount, triggerLabels } =
   storeToRefs(store);
 
 // Criticality filter levels, most-severe first (from the enrichment enum).
 const CRITICALITY_LEVELS = ['critical', 'high', 'medium', 'low'];
+// Health filter levels, most-urgent first (the S3 status enum).
+const HEALTH_LEVELS = ['failing', 'degraded', 'healthy', 'idle', 'unknown'];
 
 const now = ref(Date.now());
 let clock: ReturnType<typeof setInterval> | undefined;
@@ -189,6 +192,20 @@ onUnmounted(() => {
         </button>
       </div>
 
+      <!-- Health facet (S3) -->
+      <div class="facet" role="group" aria-label="Filter by health" data-testid="filter-health">
+        <span class="facet-label muted">Health</span>
+        <button
+          v-for="h in HEALTH_LEVELS"
+          :key="h"
+          class="chip"
+          :class="{ 'chip--active': health.includes(h) }"
+          @click="store.toggleHealth(h)"
+        >
+          {{ h }}
+        </button>
+      </div>
+
       <!-- Trigger facet -->
       <div v-if="facets.triggers.length" class="facet" role="group" aria-label="Filter by trigger" data-testid="filter-trigger">
         <span class="facet-label muted">Trigger</span>
@@ -220,6 +237,7 @@ onUnmounted(() => {
             <th class="c-inst">Instance</th>
             <th class="c-sys">Systems</th>
             <th class="c-trig">Triggers</th>
+            <th class="c-health">Health</th>
             <th class="c-state">Status</th>
             <th class="c-upd">Updated</th>
           </tr>
@@ -255,6 +273,7 @@ onUnmounted(() => {
                 <FactBadge v-for="t in w.triggers" :key="t" :label="triggerLabels[t] ?? t" tone="trigger" :title="t" />
               </span>
             </td>
+            <td class="c-health" data-label="Health"><WorkflowHealthBadge :health="w.health" /></td>
             <td class="c-state" data-label="Status"><StateBadge :active="w.active" :is-archived="w.isArchived" /></td>
             <td class="c-upd muted" data-label="Updated">{{ relativeTime(w.updatedAt, now) }}</td>
           </tr>

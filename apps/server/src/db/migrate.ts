@@ -161,6 +161,33 @@ const MIGRATIONS: ((db: Database.Database) => void)[] = [
       INSERT INTO app_settings (id, enrichment_enabled) VALUES ('app', 1);
     `);
   },
+
+  // v6 — S3: per-workflow execution health (failing/degraded/healthy/idle/unknown),
+  // computed by Argus from n8n's executions on each poll. A DISPOSABLE cache — fully
+  // rebuildable from n8n, so no audit/sacred rules apply — but it is written on its OWN
+  // cadence (health sync), NOT part of the ~30s workflows-cache rebuild, so it lives in
+  // its own table and survives replaceInstanceWorkflows(). Cascades on connection delete.
+  (db) => {
+    db.exec(`
+      CREATE TABLE workflow_health (
+        instance_id        TEXT NOT NULL,
+        workflow_id        TEXT NOT NULL,
+        status             TEXT NOT NULL,     -- failing|degraded|healthy|idle|unknown
+        runs_in_window     INTEGER NOT NULL,
+        failures_in_window INTEGER NOT NULL,
+        failure_rate       REAL,              -- null when 0 runs (idle) or unknown
+        last_run_at        TEXT,
+        last_status        TEXT,
+        avg_duration_ms    INTEGER,
+        window_hours       INTEGER NOT NULL,
+        unavailable_reason TEXT,              -- set only for status='unknown'
+        computed_at        TEXT NOT NULL,
+        PRIMARY KEY (instance_id, workflow_id),
+        FOREIGN KEY (instance_id) REFERENCES connections(id) ON DELETE CASCADE
+      );
+      CREATE INDEX idx_workflow_health_status ON workflow_health (status);
+    `);
+  },
 ];
 
 export function migrate(db: Database.Database): void {

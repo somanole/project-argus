@@ -1,0 +1,54 @@
+{
+  "$probe": "GET /api/v1/executions — public executions LIST shape (Argus health source, S3)",
+  "capturedAt": "2026-07-06T19:00:27.038Z",
+  "n8nVersion": "2.29.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/executions?limit=5&includeData=false",
+    "headers": {
+      "X-N8N-API-KEY": "«redacted»"
+    }
+  },
+  "response": {
+    "status": 200,
+    "ok": true,
+    "count": 2,
+    "nextCursor": null,
+    "itemKeys": [
+      "finished",
+      "id",
+      "mode",
+      "retryOf",
+      "retrySuccessId",
+      "startedAt",
+      "status",
+      "stoppedAt",
+      "waitTill",
+      "workflowId"
+    ],
+    "sampleItem": {
+      "id": "227",
+      "finished": false,
+      "mode": "manual",
+      "retryOf": null,
+      "retrySuccessId": null,
+      "status": "error",
+      "startedAt": "2026-07-06T19:00:27.013Z",
+      "stoppedAt": "2026-07-06T19:00:27.018Z",
+      "workflowId": "0RXAjk3pRqAPggHT",
+      "waitTill": null
+    }
+  },
+  "statusFilter": {
+    "request": {
+      "method": "GET",
+      "path": "/api/v1/executions?limit=5&status=error&includeData=false&redactExecutionData=true"
+    },
+    "status": 200,
+    "count": 1,
+    "statuses": [
+      "error"
+    ]
+  },
+  "finding": "health fields ALL PRESENT on list items. fetched WITHOUT includeData and WITH redactExecutionData=true (no execution payloads reach Argus); status filter (?status=error) + cursor pagination confirmed; durations = stoppedAt − startedAt (both nullable)."
+}

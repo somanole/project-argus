@@ -7,6 +7,8 @@
 // M0 probes (00–07): reachability, E2E unlock, public-API auth, and the
 // projects/users/workflow shapes the analyzer reads.
 // S1a probe (15): the workflow LIST item shape the live inventory syncs from.
+// S3 probe (17): the public executions LIST shape the health service reads.
+// S3 probe (18): the REDACTED single-execution detail the drawer reads on-demand.
 // M1 seeder probes (08–14): the *creation* + *execution* surface the seeder needs
 //   08 workflow manual run (/rest/workflows/:id/run) → an execution that FAILS
 //   09 production webhook hit → an execution from an active webhook workflow
@@ -405,6 +407,81 @@ async function main() {
       finding: `manual run returns { executionId }; poll GET /rest/executions/{id} for status. This run ended "${waited.status}".`,
     });
     record('08', 'manual run → error execution', !!executionId, `run → executionId ${executionId ? 'present' : 'MISSING'}, status=${waited.status}`);
+  }
+
+  // 17 — PUBLIC executions LIST shape (S3 health source). By now probes 08/09 have
+  // created a couple of executions, so the list is non-empty. Argus's health service
+  // reads this endpoint — without `includeData`, with `redactExecutionData=true` — so
+  // capture the real item shape (status, startedAt, stoppedAt, workflowId) + the
+  // status-filter + pagination behaviour it relies on.
+  {
+    const listPath = '/executions?limit=5&includeData=false';
+    const r = await client.api('GET', listPath);
+    const items = r.json?.data ?? [];
+    const first = items[0] ?? {};
+    // Confirm the status filter the fetch may use, and redactExecutionData passes through.
+    const errPath = '/executions?limit=5&status=error&includeData=false&redactExecutionData=true';
+    const rErr = await client.api('GET', errPath);
+    const healthFields = ['id', 'status', 'startedAt', 'stoppedAt', 'workflowId', 'finished', 'mode'];
+    const missing = healthFields.filter((f) => !(f in first));
+    await save('n8n-17-executions-list.json', {
+      $probe: 'GET /api/v1/executions — public executions LIST shape (Argus health source, S3)',
+      capturedAt: now(), n8nVersion: N8N_VERSION,
+      request: { method: 'GET', path: `/api/v1${listPath}`, headers: { 'X-N8N-API-KEY': '«redacted»' } },
+      response: {
+        status: r.status, ok: r.ok,
+        count: items.length,
+        nextCursor: r.json?.nextCursor ?? null,
+        itemKeys: Object.keys(first).sort(),
+        sampleItem: first,
+      },
+      statusFilter: {
+        request: { method: 'GET', path: `/api/v1${errPath}` },
+        status: rErr.status,
+        count: (rErr.json?.data ?? []).length,
+        statuses: [...new Set((rErr.json?.data ?? []).map((e) => e.status))],
+      },
+      finding: [
+        `health fields ${missing.length === 0 ? 'ALL PRESENT' : `MISSING: ${missing.join(', ')}`} on list items.`,
+        'fetched WITHOUT includeData and WITH redactExecutionData=true (no execution payloads reach Argus);',
+        'status filter (?status=error) + cursor pagination confirmed; durations = stoppedAt − startedAt (both nullable).',
+      ].join(' '),
+    });
+    record('17', 'executions list shape captured', r.status === 200 && missing.length === 0,
+      `GET /api/v1/executions → ${r.status}, ${items.length} item(s), health fields ${missing.length === 0 ? 'present' : `MISSING ${missing.join(',')}`}`);
+  }
+
+  // 18 — REDACTED single-execution detail (S3 drawer debug source). On-demand only:
+  // GET /api/v1/executions/{id}?includeData=true&redactExecutionData=true. n8n redacts
+  // server-side → the useful debug signal (which node failed + error TYPE/code) survives,
+  // but the error message + all node data are stripped. Argus reads only lastNodeExecuted
+  // + redactedError.{type,httpCode}; never the message/payload. Uses probe 08's failed run.
+  {
+    // Find a failed execution (probes 08/09 created some) via the public list.
+    const errList = await client.api('GET', '/executions?status=error&limit=1&includeData=false');
+    const execId = (errList.json?.data ?? [])[0]?.id ?? '';
+    const r = execId ? await client.api('GET', `/executions/${execId}?includeData=true&redactExecutionData=true`) : { status: 0, json: {} };
+    const rd = r.json?.data?.resultData ?? r.json?.resultData;
+    // Summarize (don't dump the whole redacted graph into the contract file).
+    await save('n8n-18-execution-redacted.json', {
+      $probe: 'GET /api/v1/executions/{id}?includeData=true&redactExecutionData=true — redacted debug detail (S3 drawer)',
+      capturedAt: now(), n8nVersion: N8N_VERSION,
+      request: { method: 'GET', path: `/api/v1/executions/${execId || '{id}'}?includeData=true&redactExecutionData=true`, headers: { 'X-N8N-API-KEY': '«redacted»' } },
+      response: {
+        status: r.status,
+        topLevelKeys: r.json?.data ? Object.keys(r.json.data).sort() : Object.keys(r.json ?? {}).sort(),
+        resultDataKeys: rd ? Object.keys(rd).sort() : null,
+        lastNodeExecuted: rd?.lastNodeExecuted ?? null,
+        redactedError: rd?.redactedError ?? null,
+      },
+      finding: [
+        'with redactExecutionData=true, the error surfaces as `resultData.redactedError` ({ type, httpCode }),',
+        'plus `resultData.lastNodeExecuted` (the failing node NAME). The error MESSAGE and all node',
+        'data are stripped server-side. Argus allowlists ONLY lastNodeExecuted + redactedError.type/httpCode.',
+      ].join(' '),
+    });
+    record('18', 'redacted execution detail captured', r.status === 200,
+      `GET /api/v1/executions/{id}?includeData → ${r.status}, failing node "${rd?.lastNodeExecuted ?? '?'}", error ${rd?.redactedError?.type ?? '—'}`);
   }
 
   await finish();

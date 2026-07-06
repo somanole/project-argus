@@ -1,0 +1,35 @@
+{
+  "$probe": "GET /api/v1/executions/{id}?includeData=true&redactExecutionData=true — redacted debug detail (S3 drawer)",
+  "capturedAt": "2026-07-06T19:54:28.934Z",
+  "n8nVersion": "2.29.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/executions/246?includeData=true&redactExecutionData=true",
+    "headers": {
+      "X-N8N-API-KEY": "«redacted»"
+    }
+  },
+  "response": {
+    "status": 200,
+    "topLevelKeys": [
+      "executionData",
+      "redactionInfo",
+      "resultData",
+      "resumeToken",
+      "startData",
+      "version"
+    ],
+    "resultDataKeys": [
+      "lastNodeExecuted",
+      "pinData",
+      "redactedError",
+      "runData"
+    ],
+    "lastNodeExecuted": "Fetch Stripe Ledger",
+    "redactedError": {
+      "type": "NodeApiError",
+      "httpCode": "ECONNREFUSED"
+    }
+  },
+  "finding": "with redactExecutionData=true, the error surfaces as resultData.redactedError ({ type, httpCode }), plus resultData.lastNodeExecuted (the failing node NAME). The error MESSAGE and all node data are stripped server-side. Argus allowlists ONLY lastNodeExecuted + redactedError.type/httpCode."
+}

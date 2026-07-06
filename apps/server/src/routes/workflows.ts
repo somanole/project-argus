@@ -6,6 +6,8 @@ import {
   coverageResponseSchema,
   enrichmentProgressSchema,
   enrichmentCorrectionSchema,
+  healthEstateResponseSchema,
+  workflowExecutionsResponseSchema,
 } from '@argus/shared';
 import {
   listWorkflows,
@@ -14,10 +16,21 @@ import {
   listCoverageEntries,
   type WorkflowFilters,
 } from '../workflows/repo.js';
+import { healthEstate, fetchWorkflowExecutions } from '../health/index.js';
+import { getConnectionRow, decryptApiKey } from '../connections/repo.js';
+import { createN8nClient, HttpError, reason as n8nReason } from '../n8n/client.js';
 import { coverageOf, manifest } from '../analyzer/index.js';
 import { actorOf } from '../auth/middleware.js';
 import { correctLabel } from '../enrichment/repo.js';
 import type { EnrichmentWorker } from '../enrichment/index.js';
+
+/** Honest reason for the drawer when executions can't be read (missing scope / error). */
+function executionsReason(err: unknown): string {
+  if (err instanceof HttpError && (err.status === 401 || err.status === 403)) {
+    return `executions unavailable — the API key may lack \`execution:list\` (HTTP ${err.status})`;
+  }
+  return `executions unavailable — ${n8nReason(err)}`;
+}
 
 function deepLinkFor(baseUrl: string, id: string): string {
   const base = baseUrl.replace(/\/+$/, '');
@@ -30,7 +43,7 @@ function deepLinkFor(baseUrl: string, id: string): string {
  * `GET /:instanceId/:id` is the detail drawer (facts + deep-link); `GET /coverage`
  * is the trust number. `instanceId` is a filter, the list is always one estate.
  */
-export function workflowsRouter(db: Database.Database, worker: EnrichmentWorker): Router {
+export function workflowsRouter(db: Database.Database, worker: EnrichmentWorker, encryptionKey: string): Router {
   const router = Router();
 
   router.get('/', (req, res) => {
@@ -62,6 +75,14 @@ export function workflowsRouter(db: Database.Database, worker: EnrichmentWorker)
     res.json(enrichmentProgressSchema.parse(worker.progress()));
   });
 
+  // S3: the "what's failing right now" feed — failing then degraded workflows (each
+  // carrying its S2 criticality), a summary count, and the per-instance retention
+  // window. Declared before the two-segment detail route (single segment, no collision).
+  router.get('/failing', (_req, res) => {
+    const estate = healthEstate(db);
+    res.json(healthEstateResponseSchema.parse({ ...estate, generatedAt: new Date().toISOString() }));
+  });
+
   // One-click label correction — an audited mutation (DECISION #6).
   router.put('/:instanceId/:id/enrichment/correction', (req, res) => {
     const parsed = enrichmentCorrectionSchema.safeParse(req.body);
@@ -80,6 +101,24 @@ export function workflowsRouter(db: Database.Database, worker: EnrichmentWorker)
       return;
     }
     res.json(workflowDetailSchema.parse({ workflow: detail.item, facts: detail.facts, deepLink: deepLinkFor(detail.baseUrl, detail.item.id) }));
+  });
+
+  // S3 on-demand execution debug for one workflow — recent runs (metadata + per-run
+  // n8n deep link) + a REDACTED failure summary (failing node + error type/code only).
+  // Fetched live from n8n only when a user opens the drawer; never persisted. Degrades
+  // honestly to `unavailable` if executions can't be read (rule 5).
+  router.get('/:instanceId/:id/executions', async (req, res) => {
+    const { instanceId, id } = req.params;
+    const row = getConnectionRow(db, instanceId ?? '');
+    if (!row) {
+      res.status(404).json({ error: 'connection not found' });
+      return;
+    }
+    const client = createN8nClient({ baseUrl: row.base_url, apiKey: decryptApiKey(row, encryptionKey) });
+    const result = await fetchWorkflowExecutions(client, {
+      baseUrl: row.base_url, workflowId: id ?? '', limit: 10, reasonForError: executionsReason,
+    });
+    res.json(workflowExecutionsResponseSchema.parse({ ...result, generatedAt: new Date().toISOString() }));
   });
 
   router.get('/:instanceId/:id', (req, res) => {
@@ -120,6 +159,7 @@ function parseFilters(query: Record<string, unknown>): WorkflowFilters {
     systems: parseList(query.system),
     triggers: parseList(query.trigger),
     criticality: parseList(query.criticality),
+    health: parseList(query.health),
     q,
   };
 }

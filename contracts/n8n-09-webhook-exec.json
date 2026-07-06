@@ -1,6 +1,6 @@
 {
   "$probe": "Production webhook hit generates an execution (POST /webhook/{path} on an active workflow)",
-  "capturedAt": "2026-07-04T19:17:23.111Z",
+  "capturedAt": "2026-07-06T19:00:26.993Z",
   "n8nVersion": "2.29.0",
   "request": {
     "method": "POST",

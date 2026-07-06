@@ -3,6 +3,8 @@ import type {
   WorkflowListItem,
   WorkflowFacts,
   WorkflowEnrichment,
+  WorkflowHealth,
+  WorkflowHealthStatus,
   EnrichmentOutput,
   EnrichmentCategory,
   Criticality,
@@ -45,6 +47,8 @@ export interface WorkflowFilters {
   triggers?: string[] | undefined;
   /** OR within the facet: effective criticality is ANY of these (critical/high/medium/low). */
   criticality?: string[] | undefined;
+  /** OR within the facet: health status is ANY of these (failing/degraded/healthy/idle/unknown). */
+  health?: string[] | undefined;
   /** Only workflows with at least one certain-broken reference. */
   broken?: boolean | undefined;
   q?: string | undefined;
@@ -74,6 +78,17 @@ interface WorkflowRow {
   enriched_at: string | null;
   /** 1 when the stored enrichment matches the workflow's current input hash. */
   enrichment_fresh: number | null;
+  // S3 health (LEFT JOIN workflow_health; all null when not yet computed):
+  health_status: string | null; // failing|degraded|healthy|idle|unknown
+  health_runs: number | null;
+  health_failures: number | null;
+  health_failure_rate: number | null;
+  health_last_run_at: string | null;
+  health_last_status: string | null;
+  health_avg_duration_ms: number | null;
+  health_window_hours: number | null;
+  health_unavailable_reason: string | null;
+  health_computed_at: string | null;
 }
 
 // group_concat separator unlikely to appear in a system/type string.
@@ -179,6 +194,24 @@ function toListItem(r: WorkflowRow): WorkflowListItem {
     understood: r.understood == null ? null : r.understood === 1,
     brokenRefCount: r.broken_ref_count ?? 0,
     enrichment: mapEnrichment(r),
+    health: mapHealth(r),
+  };
+}
+
+/** Build the served health from the joined row; null when never computed. */
+function mapHealth(r: WorkflowRow): WorkflowHealth | null {
+  if (!r.health_status) return null;
+  return {
+    status: r.health_status as WorkflowHealthStatus,
+    failureRate: r.health_failure_rate,
+    runsInWindow: r.health_runs ?? 0,
+    failuresInWindow: r.health_failures ?? 0,
+    lastRunAt: r.health_last_run_at,
+    lastStatus: r.health_last_status,
+    avgDurationMs: r.health_avg_duration_ms,
+    windowHours: r.health_window_hours ?? 336,
+    computedAt: r.health_computed_at,
+    unavailableReason: r.health_unavailable_reason,
   };
 }
 
@@ -234,10 +267,15 @@ const LIST_SELECT = `
             WHERE wt.instance_id = w.instance_id AND wt.workflow_id = w.id) AS triggers,
          e.status AS enrichment_status, e.enrichment_json, e.corrected_json,
          e.provider AS enrichment_provider, e.model AS enrichment_model, e.enriched_at,
-         CASE WHEN e.input_hash IS NOT NULL AND e.input_hash = w.enrichment_input_hash THEN 1 ELSE 0 END AS enrichment_fresh
+         CASE WHEN e.input_hash IS NOT NULL AND e.input_hash = w.enrichment_input_hash THEN 1 ELSE 0 END AS enrichment_fresh,
+         h.status AS health_status, h.runs_in_window AS health_runs, h.failures_in_window AS health_failures,
+         h.failure_rate AS health_failure_rate, h.last_run_at AS health_last_run_at, h.last_status AS health_last_status,
+         h.avg_duration_ms AS health_avg_duration_ms, h.window_hours AS health_window_hours,
+         h.unavailable_reason AS health_unavailable_reason, h.computed_at AS health_computed_at
     FROM workflows w
     JOIN connections c ON c.id = w.instance_id
-    LEFT JOIN workflow_enrichments e ON e.instance_id = w.instance_id AND e.workflow_id = w.id`;
+    LEFT JOIN workflow_enrichments e ON e.instance_id = w.instance_id AND e.workflow_id = w.id
+    LEFT JOIN workflow_health h ON h.instance_id = w.instance_id AND h.workflow_id = w.id`;
 
 /**
  * The estate-wide inventory with S1b facts, filtered server-side. `instanceId` is a
@@ -273,6 +311,11 @@ export function listWorkflows(db: Database.Database, filters: WorkflowFilters = 
       `COALESCE(json_extract(e.corrected_json, '$.criticality'), json_extract(e.enrichment_json, '$.criticality')) IN (${placeholders})`,
     );
     params.push(...filters.criticality);
+  }
+  if (filters.health && filters.health.length > 0) {
+    const placeholders = filters.health.map(() => '?').join(', ');
+    where.push(`h.status IN (${placeholders})`);
+    params.push(...filters.health);
   }
   if (filters.systems && filters.systems.length > 0) {
     const placeholders = filters.systems.map(() => '?').join(', ');

@@ -38,6 +38,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
   const mcpOnly = ref<boolean>(false);
   const brokenOnly = ref<boolean>(false);
   const criticality = ref<string[]>([]);
+  const health = ref<string[]>([]);
   const stateFilter = ref<StateFilter>('all');
   const q = ref<string>('');
 
@@ -47,6 +48,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
       systems.value.length +
       triggers.value.length +
       criticality.value.length +
+      health.value.length +
       (mcpOnly.value ? 1 : 0) +
       (brokenOnly.value ? 1 : 0) +
       (stateFilter.value !== 'all' ? 1 : 0) +
@@ -64,6 +66,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     for (const s of systems.value) p.append('system', s);
     for (const t of triggers.value) p.append('trigger', t);
     for (const c of criticality.value) p.append('criticality', c);
+    for (const h of health.value) p.append('health', h);
     if (mcpOnly.value) p.set('mcp', 'true');
     if (brokenOnly.value) p.set('broken', 'true');
     if (stateFilter.value === 'active') p.set('active', 'true');
@@ -117,6 +120,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
   const toggleSystem = (s: string) => toggle(systems, s);
   const toggleTrigger = (t: string) => toggle(triggers, t);
   const toggleCriticality = (c: string) => toggle(criticality, c);
+  const toggleHealth = (h: string) => toggle(health, h);
   const setMcpOnly = (v: boolean) => {
     mcpOnly.value = v;
     void refresh();
@@ -138,6 +142,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     systems.value = [];
     triggers.value = [];
     criticality.value = [];
+    health.value = [];
     mcpOnly.value = false;
     brokenOnly.value = false;
     stateFilter.value = 'all';
@@ -157,6 +162,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     systems,
     triggers,
     criticality,
+    health,
     mcpOnly,
     brokenOnly,
     stateFilter,
@@ -170,6 +176,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     toggleSystem,
     toggleTrigger,
     toggleCriticality,
+    toggleHealth,
     setMcpOnly,
     setBrokenOnly,
     setStateFilter,

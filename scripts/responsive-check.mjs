@@ -31,16 +31,28 @@ const enrichment = {
   riskFlags: ['handles-pii', 'production-write'], suggestedOwnerRationale: 'Data Platform owns the warehouse + Salesforce credential.',
   businessContext: 'Keeps CRM and warehouse in sync for reporting.',
 };
+const mkHealth = (status, over = {}) => ({
+  status, failureRate: null, runsInWindow: 0, failuresInWindow: 0, lastRunAt: null, lastStatus: null,
+  avgDurationMs: null, windowHours: 336, computedAt: '2026-07-06T00:00:00.000Z', unavailableReason: null, ...over,
+});
 const item = (id, name, systems, triggers, over = {}) => ({
   instanceId: 'prod', instanceLabel: 'prod', id, name, active: true, isArchived: false,
   project: 'Revenue Ops', updatedAt: '2026-07-05T00:00:00.000Z',
-  systems, triggers, mcpExposed: false, nodeCount: 4, understood: true, brokenRefCount: 0, enrichment: null, ...over,
+  systems, triggers, mcpExposed: false, nodeCount: 4, understood: true, brokenRefCount: 0, enrichment: null,
+  health: mkHealth('healthy', { failureRate: 0, runsInWindow: 5 }), ...over,
 });
 const WORKFLOWS = [
-  item('w1', 'Salesforce CRM Sync — nightly enrichment', ['Salesforce', 'Postgres'], ['n8n-nodes-base.scheduleTrigger'], { mcpExposed: true, enrichment }),
-  item('w2', 'Refund Processor', ['Stripe', 'Slack'], ['n8n-nodes-base.webhook']),
-  item('w3', 'Lead Scorer', ['OpenAI'], ['n8n-nodes-base.manualTrigger'], { brokenRefCount: 1, understood: false }),
+  item('w1', 'Salesforce CRM Sync — nightly enrichment', ['Salesforce', 'Postgres'], ['n8n-nodes-base.scheduleTrigger'], { mcpExposed: true, enrichment, health: mkHealth('failing', { failureRate: 1, runsInWindow: 4, failuresInWindow: 4, lastRunAt: '2026-07-05T00:00:00.000Z', lastStatus: 'error' }) }),
+  item('w2', 'Refund Processor', ['Stripe', 'Slack'], ['n8n-nodes-base.webhook'], { health: mkHealth('degraded', { failureRate: 0.5, runsInWindow: 6, failuresInWindow: 3, lastRunAt: '2026-07-05T00:00:00.000Z', lastStatus: 'error' }) }),
+  item('w3', 'Lead Scorer', ['OpenAI'], ['n8n-nodes-base.manualTrigger'], { brokenRefCount: 1, understood: false, health: mkHealth('idle') }),
 ];
+const failingBody = {
+  failing: [WORKFLOWS[0]],
+  degraded: [WORKFLOWS[1]],
+  summary: { failing: 1, degraded: 1, healthy: 1, idle: 1, unknown: 0 },
+  windows: [{ instanceId: 'prod', instanceLabel: 'prod', windowHours: 336, available: true }],
+  generatedAt: '2026-07-05T00:00:00.000Z',
+};
 const workflowsBody = {
   workflows: WORKFLOWS,
   facets: {
@@ -67,6 +79,14 @@ const detailBody = {
   },
   deepLink: 'http://localhost:5678/workflow/w1',
 };
+const executionsBody = {
+  runs: [
+    { executionId: '9', status: 'error', startedAt: '2026-07-05T00:00:00.000Z', stoppedAt: '2026-07-05T00:00:00.005Z', mode: 'manual', durationMs: 5, deepLink: 'http://localhost:5678/workflow/w1/executions/9' },
+    { executionId: '8', status: 'success', startedAt: '2026-07-04T00:00:00.000Z', stoppedAt: '2026-07-04T00:00:02.000Z', mode: 'webhook', durationMs: 2000, deepLink: 'http://localhost:5678/workflow/w1/executions/8' },
+  ],
+  failure: { executionId: '9', failedNode: 'Fetch Stripe Ledger', errorType: 'NodeApiError', errorCode: 'ECONNREFUSED', deepLink: 'http://localhost:5678/workflow/w1/executions/9' },
+  unavailable: false, unavailableReason: null, generatedAt: '2026-07-05T00:00:00.000Z',
+};
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.woff': 'font/woff', '.json': 'application/json', '.png': 'image/png', '.ico': 'image/x-icon', '.map': 'application/json' };
 
@@ -78,6 +98,8 @@ function mockApi(route) {
   if (p.endsWith('/api/auth/logout')) return send({}, 204);
   if (p.endsWith('/api/workflows/coverage')) return send(coverageBody);
   if (p.endsWith('/api/workflows/enrichment-progress')) return send({ enabled: true, lastEnrichedAt: '2026-07-06T00:00:00.000Z', total: 3, analyzed: 3, stub: 0, stale: 0, pending: 0 });
+  if (p.endsWith('/api/workflows/failing')) return send(failingBody);
+  if (/\/api\/workflows\/[^/]+\/[^/]+\/executions$/.test(p)) return send(executionsBody);
   if (/\/api\/workflows\/[^/]+\/[^/]+$/.test(p)) return send(detailBody);
   if (p.endsWith('/api/workflows')) return send(workflowsBody);
   if (p.endsWith('/api/settings/llm')) return send({ config: { provider: 'openai', model: 'gpt-5-mini', configured: true, enabled: true, envLocked: false } });
@@ -119,6 +141,7 @@ async function serveDist() {
 const VIEWS = [
   { name: 'Login', path: '/login', mock: mockApiUnauth, waitFor: 'form.panel', key: 'form.panel' },
   { name: 'Catalog list', path: '/workflows', mock: mockApi, waitFor: '.wf tbody tr', key: '.filterbar' },
+  { name: 'Health view', path: '/health', mock: mockApi, waitFor: '[data-testid="health-failing-list"]', key: '[data-testid="health-summary"]' },
   { name: 'Detail drawer', path: '/workflows', mock: mockApi, waitFor: '.wf tbody tr', key: '.drawer',
     action: async (page) => { await page.click('.wf tbody tr'); await page.waitForSelector('.drawer', { timeout: 4000 }); } },
   { name: 'Settings', path: '/settings', mock: mockApi, waitFor: '[data-testid="settings-view"]', key: '.card' },

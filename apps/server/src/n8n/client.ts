@@ -1,10 +1,17 @@
 import {
   n8nWorkflowListItemSchema,
   n8nProjectSchema,
+  n8nExecutionSchema,
   type N8nWorkflowListItem,
   type N8nProject,
+  type N8nExecution,
 } from '@argus/shared';
 import type { ConnectionStatus } from '@argus/shared';
+
+/** How far back health looks: n8n's default execution retention (~14 days). */
+export const DEFAULT_HEALTH_WINDOW_HOURS = 336;
+/** Safety cap so a busy fleet can't make one health sweep unbounded (250×24 rows). */
+const EXECUTIONS_MAX_PAGES = 24;
 
 /**
  * Read-only client for one n8n instance's public API. Auth is the
@@ -84,6 +91,87 @@ export function createN8nClient(opts: N8nClientOptions) {
         const r = n8nProjectSchema.safeParse(raw);
         return r.success ? r.data : null;
       });
+    },
+
+    /**
+     * Executions within the retention window (S3 health source, contracts/n8n-17).
+     * Fetched newest-first WITHOUT `includeData` + WITH `redactExecutionData=true`
+     * (no execution payloads reach Argus). Stops paging once it crosses the window
+     * cutoff (list is id-desc = newest-first) or hits the page cap. Invalid rows are
+     * skipped, never fabricated (rule 5). Throws HttpError on a non-200 (e.g. a key
+     * lacking `execution:list`) so the caller can degrade health to `unknown`.
+     */
+    async listExecutions(opts: { windowMs: number; now?: number }): Promise<N8nExecution[]> {
+      const now = opts.now ?? Date.now();
+      const cutoff = now - opts.windowMs;
+      const out: N8nExecution[] = [];
+      let cursor: string | undefined;
+      let pages = 0;
+      do {
+        const q =
+          `/executions?limit=${PAGE_LIMIT}&includeData=false&redactExecutionData=true` +
+          (cursor ? `&cursor=${encodeURIComponent(cursor)}` : '');
+        const { status, json } = await get(q);
+        if (status !== 200) throw new HttpError(status);
+        const body = json as { data?: unknown[]; nextCursor?: unknown } | undefined;
+        let crossedWindow = false;
+        for (const raw of body?.data ?? []) {
+          const parsed = n8nExecutionSchema.safeParse(raw);
+          if (!parsed.success) continue;
+          const started = parsed.data.startedAt ? Date.parse(parsed.data.startedAt) : NaN;
+          // A dated run older than the window → we've paged past it (newest-first).
+          if (!Number.isNaN(started) && started < cutoff) { crossedWindow = true; continue; }
+          out.push(parsed.data);
+        }
+        cursor = typeof body?.nextCursor === 'string' ? body.nextCursor : undefined;
+        pages += 1;
+        if (crossedWindow) break;
+      } while (cursor && pages < EXECUTIONS_MAX_PAGES);
+      return out;
+    },
+
+    /**
+     * The most-recent executions for ONE workflow (S3 drawer, on-demand). Metadata
+     * only — WITHOUT `includeData` — so no payloads reach Argus. Newest-first.
+     */
+    async recentExecutions(opts: { workflowId: string; limit?: number }): Promise<N8nExecution[]> {
+      const limit = Math.min(opts.limit ?? 10, PAGE_LIMIT);
+      const { status, json } = await get(
+        `/executions?workflowId=${encodeURIComponent(opts.workflowId)}&limit=${limit}&includeData=false`,
+      );
+      if (status !== 200) throw new HttpError(status);
+      const body = json as { data?: unknown[] } | undefined;
+      const out: N8nExecution[] = [];
+      for (const raw of body?.data ?? []) {
+        const parsed = n8nExecutionSchema.safeParse(raw);
+        if (parsed.success) out.push(parsed.data);
+      }
+      return out;
+    },
+
+    /**
+     * Redacted debug detail for ONE execution (S3 drawer, on-demand). Fetched WITH
+     * `redactExecutionData=true` so n8n strips the error MESSAGE + all node data
+     * server-side. Argus **allowlists** only the failing-node name + the error
+     * type/code — it never reads or returns the message or any payload (rule 6,
+     * contracts/n8n-18). Returns null when the detail can't be read.
+     */
+    async executionDebug(executionId: string): Promise<{ failedNode: string | null; errorType: string | null; errorCode: string | null } | null> {
+      const { status, json } = await get(
+        `/executions/${encodeURIComponent(executionId)}?includeData=true&redactExecutionData=true`,
+      );
+      if (status !== 200) return null;
+      const body = json as { data?: { resultData?: unknown } } | { resultData?: unknown } | undefined;
+      const resultData = (body as { data?: { resultData?: unknown } })?.data?.resultData
+        ?? (body as { resultData?: unknown })?.resultData;
+      const rd = resultData as { lastNodeExecuted?: unknown; redactedError?: { type?: unknown; httpCode?: unknown } } | undefined;
+      if (!rd) return null;
+      const str = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
+      return {
+        failedNode: str(rd.lastNodeExecuted),
+        errorType: str(rd.redactedError?.type),
+        errorCode: str(rd.redactedError?.httpCode),
+      };
     },
 
     /** Classify reachability for the connection-health indicator. */

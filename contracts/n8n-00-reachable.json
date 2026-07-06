@@ -1,6 +1,6 @@
 {
   "$probe": "n8n instance is reachable and healthy",
-  "capturedAt": "2026-07-04T19:17:22.126Z",
+  "capturedAt": "2026-07-06T19:00:26.027Z",
   "n8nVersion": "2.29.0",
   "request": {
     "method": "GET",

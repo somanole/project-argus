@@ -1,10 +1,10 @@
 {
   "$probe": "M0 discovery: are folders exposed via the public API?",
-  "capturedAt": "2026-07-04T19:17:22.481Z",
+  "capturedAt": "2026-07-06T19:00:26.414Z",
   "n8nVersion": "2.29.0",
   "request": {
     "method": "GET",
-    "path": "/api/v1/projects/ENrg6rAzlS0mAE7Y/folders",
+    "path": "/api/v1/projects/C4skLqJKw0AxY3n8/folders",
     "headers": {
       "X-N8N-API-KEY": "«redacted»"
     }

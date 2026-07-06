@@ -54,7 +54,23 @@ export {
   type WorkflowsResponse,
   type WorkflowDetail,
   type CoverageResponse,
+  healthEstateResponseSchema,
+  type HealthEstateResponse,
 } from './workflows.js';
+export {
+  workflowHealthStatusSchema,
+  workflowHealthSchema,
+  type WorkflowHealthStatus,
+  type WorkflowHealth,
+} from './workflow-health.js';
+export {
+  workflowRunSchema,
+  executionFailureSchema,
+  workflowExecutionsResponseSchema,
+  type WorkflowRun,
+  type ExecutionFailure,
+  type WorkflowExecutionsResponse,
+} from './workflow-executions.js';
 export {
   loginRequestSchema,
   sessionActorSchema,
@@ -69,11 +85,13 @@ export {
   n8nWorkflowSettingsSchema,
   n8nWorkflowListItemSchema,
   n8nProjectSchema,
+  n8nExecutionSchema,
   n8nWorkflowListResponseSchema,
   n8nProjectListResponseSchema,
   type N8nNode,
   type N8nWorkflowListItem,
   type N8nProject,
+  type N8nExecution,
 } from './n8n.js';
 export {
   refResolutionSchema,

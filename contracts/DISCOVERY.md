@@ -139,6 +139,34 @@ public invite flow (which leaves users pending).
   mixed success/error history is driven via **production webhook body** instead
   (`{ fail: true|false }` → a Code node throws on `fail`).
 
+## S3 health contract (17) — captured live 2026-07-06
+
+- **17 · public executions LIST shape.** `GET /api/v1/executions` (public API, API-key
+  auth) returns `{ data: [...], nextCursor }`, cursor-paginated. Each item carries
+  `id, status, startedAt, stoppedAt, workflowId, finished, mode, retryOf,
+  retrySuccessId, waitTill`. **`status` is the health signal, not `finished`** — an
+  errored run showed `finished: false` with `status: "error"`. Observed status values
+  include `success | error | waiting | running | new` (n8n also emits `canceled`/`crashed`).
+  The `?status=error` filter works (returns only error rows); `?includeData=false` keeps
+  execution payloads out; `?redactExecutionData=true` passes through. Durations =
+  `stoppedAt − startedAt` (both ISO strings, both nullable for `running`/`waiting`).
+  This is the health service's source — fetched **without** `includeData`, **with**
+  `redactExecutionData=true`. Evidence: `n8n-17-executions-list.json`.
+
+## S3 redacted-execution debug (18) — captured live 2026-07-06
+
+- **18 · redacted single-execution detail.** `GET /api/v1/executions/{id}?includeData=true&redactExecutionData=true`
+  returns the execution with **server-side-redacted** result data. The debug signal that
+  survives redaction: **`resultData.lastNodeExecuted`** (the failing node's NAME, e.g.
+  "Fetch Stripe Ledger") and **`resultData.redactedError`** — a classification object,
+  e.g. `{ "type": "NodeApiError", "httpCode": "ECONNREFUSED" }`. The error **message**
+  and **all node input/output data are stripped** (a Code-node throw yields
+  `redactedError: {}`). n8n's per-execution UI deep link is
+  **`/workflow/{workflowId}/executions/{executionId}`** (VIEWS.EXECUTION_PREVIEW,
+  verified in `../n8n` router). Argus's drawer reads this **on-demand only** (when a user
+  opens a workflow) and **allowlists only** `lastNodeExecuted` + `redactedError.{type,httpCode}`
+  — never the message/payload, never persisted. Evidence: `n8n-18-execution-redacted.json`.
+
 ## Two-instance ports (rule 1 — reality vs. PLAN's illustration)
 
 PLAN illustrates "prod :5678 / staging :5679". **`:5679` is not free** — it is the

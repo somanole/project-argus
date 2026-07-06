@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-07-04T19:17:23.426Z",
+  "capturedAt": "2026-07-06T19:00:27.038Z",
   "n8nBaseUrl": "http://localhost:5678",
   "n8nVersion": "2.29.0",
   "results": [
@@ -58,6 +58,12 @@
       "detail": "GET workflow → 200, shared array PRESENT"
     },
     {
+      "id": "15",
+      "description": "workflow list shape captured",
+      "pass": true,
+      "detail": "GET /api/v1/workflows → 200, 1 item(s), inventory fields present"
+    },
+    {
       "id": "06",
       "description": "folders public-API visibility",
       "pass": true,
@@ -110,6 +116,12 @@
       "description": "manual run → error execution",
       "pass": true,
       "detail": "run → executionId present, status=error"
+    },
+    {
+      "id": "17",
+      "description": "executions list shape captured",
+      "pass": true,
+      "detail": "GET /api/v1/executions → 200, 2 item(s), health fields present"
     }
   ]
 }

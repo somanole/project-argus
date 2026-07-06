@@ -79,6 +79,24 @@ export const n8nWorkflowListItemSchema = z.object({
 });
 export type N8nWorkflowListItem = z.infer<typeof n8nWorkflowListItemSchema>;
 
+/**
+ * One entry in GET /api/v1/executions — the S3 health source (contracts/n8n-17).
+ * `status` is the health signal (NOT `finished`: an errored run reports
+ * `finished:false`). Fetched WITHOUT `includeData` + WITH `redactExecutionData=true`,
+ * so no execution payloads ride along. `startedAt`/`stoppedAt` are nullable for
+ * running/waiting runs → duration is unmeasurable there (never fabricated).
+ */
+export const n8nExecutionSchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  workflowId: z.string(),
+  startedAt: z.string().nullish(),
+  stoppedAt: z.string().nullish(),
+  finished: z.boolean().optional(),
+  mode: z.string().optional(),
+});
+export type N8nExecution = z.infer<typeof n8nExecutionSchema>;
+
 /** A project as it appears in GET /api/v1/projects. */
 export const n8nProjectSchema = z.object({
   id: z.string(),

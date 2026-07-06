@@ -14,10 +14,16 @@ vi.mock('./n8n/client.js', () => ({
       },
     ],
     listProjects: async () => [{ id: 'p1', name: 'Revenue Ops', type: 'team' }],
+    // One success + one error for w1 → a computable (degraded) health.
+    listExecutions: async () => [
+      { id: '2', status: 'error', workflowId: 'w1', startedAt: '2026-07-04T01:00:00.000Z', stoppedAt: '2026-07-04T01:00:01.000Z', finished: false },
+      { id: '1', status: 'success', workflowId: 'w1', startedAt: '2026-07-04T00:00:00.000Z', stoppedAt: '2026-07-04T00:00:01.000Z', finished: true },
+    ],
   }),
   statusForError: () => 'unreachable',
   reason: (e: unknown) => (e instanceof Error ? e.message : 'err'),
   HttpError: class extends Error {},
+  DEFAULT_HEALTH_WINDOW_HOURS: 336,
 }));
 
 const { createApp } = await import('./app.js');

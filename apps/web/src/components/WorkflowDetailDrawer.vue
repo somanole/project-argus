@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { workflowDetailSchema, type WorkflowDetail, type WorkflowListItem, type DirectDep, type RefKind } from '@argus/shared';
+import { workflowDetailSchema, workflowExecutionsResponseSchema, type WorkflowDetail, type WorkflowExecutionsResponse, type WorkflowListItem, type DirectDep, type RefKind } from '@argus/shared';
 import { api } from '../lib/api';
 import { instanceColor } from '../lib/instanceColor';
+import { relativeTime } from '../lib/time';
 import StateBadge from './StateBadge.vue';
 import FactBadge from './FactBadge.vue';
+import WorkflowHealthBadge from './WorkflowHealthBadge.vue';
 import EnrichmentSection from './EnrichmentSection.vue';
 
 // The detail drawer: fetches the selected workflow's full facts + direct deps +
@@ -16,30 +18,46 @@ const detail = ref<WorkflowDetail | null>(null);
 const state = ref<'idle' | 'loading' | 'ok' | 'error'>('idle');
 const error = ref<string | null>(null);
 
+// S3: on-demand execution debug (recent runs + redacted failure). Fetched live from
+// n8n only while the drawer is open — never persisted, never on the health poll.
+const runs = ref<WorkflowExecutionsResponse | null>(null);
+const runsState = ref<'idle' | 'loading' | 'ok' | 'error'>('idle');
+
 watch(
   () => props.selected,
   async (sel) => {
     detail.value = null;
+    runs.value = null;
     if (!sel) {
       state.value = 'idle';
+      runsState.value = 'idle';
       return;
     }
     state.value = 'loading';
+    runsState.value = 'loading';
+    const encPath = `${encodeURIComponent(sel.instanceId)}/${encodeURIComponent(sel.id)}`;
     try {
-      detail.value = await api(
-        `/api/workflows/${encodeURIComponent(sel.instanceId)}/${encodeURIComponent(sel.id)}`,
-        {},
-        workflowDetailSchema,
-      );
+      detail.value = await api(`/api/workflows/${encPath}`, {}, workflowDetailSchema);
       state.value = 'ok';
       error.value = null;
     } catch (err) {
       state.value = 'error';
       error.value = err instanceof Error ? err.message : 'could not load workflow facts';
     }
+    // Runs load independently — a failure here never blocks the facts view (rule 5).
+    try {
+      runs.value = await api(`/api/workflows/${encPath}/executions`, {}, workflowExecutionsResponseSchema);
+      runsState.value = 'ok';
+    } catch {
+      runsState.value = 'error';
+    }
   },
   { immediate: true },
 );
+
+const RUN_TONE: Record<string, 'ok' | 'danger' | 'warn' | 'muted'> = {
+  success: 'ok', error: 'danger', crashed: 'danger', canceled: 'muted', waiting: 'warn', running: 'warn', new: 'muted',
+};
 
 const KIND_LABEL: Record<RefKind, string> = {
   subWorkflow: 'Sub-workflow',
@@ -59,6 +77,15 @@ function depView(d: DirectDep): { tone: 'ok' | 'danger' | 'muted'; text: string 
     case 'unresolved':
       return { tone: 'muted', text: `couldn’t resolve${d.cachedName ? ` — “${d.cachedName}”` : ''}` };
   }
+}
+
+/** Human duration for the health panel; null → honest "—", never fabricated. */
+function fmtDuration(ms: number | null): string {
+  if (ms == null) return '—';
+  if (ms < 1000) return `${ms} ms`;
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(s < 10 ? 1 : 0)} s`;
+  return `${Math.round(s / 60)} min`;
 }
 
 const onKeydown = (e: KeyboardEvent) => {
@@ -98,6 +125,67 @@ const onKeydown = (e: KeyboardEvent) => {
           :workflow-id="selected.id"
           @updated="detail = $event"
         />
+
+        <!-- S3 health: poll-fresh execution status + the numbers behind it. -->
+        <section v-if="detail.workflow.health" class="d-sec" data-testid="health-section">
+          <h3>Health</h3>
+          <div class="health-head">
+            <WorkflowHealthBadge :health="detail.workflow.health" />
+            <span class="muted checked">
+              <template v-if="detail.workflow.health.computedAt">checked {{ relativeTime(detail.workflow.health.computedAt, Date.now()) }}</template>
+            </span>
+          </div>
+          <dl class="facts">
+            <dt>Failure rate</dt>
+            <dd>
+              <template v-if="detail.workflow.health.failureRate != null">
+                {{ Math.round(detail.workflow.health.failureRate * 100) }}%
+                <span class="muted">({{ detail.workflow.health.failuresInWindow }}/{{ detail.workflow.health.runsInWindow }} runs)</span>
+              </template>
+              <span v-else class="muted">—</span>
+            </dd>
+            <dt>Last run</dt>
+            <dd>
+              <template v-if="detail.workflow.health.lastRunAt">
+                {{ relativeTime(detail.workflow.health.lastRunAt, Date.now()) }}
+                <span v-if="detail.workflow.health.lastStatus" class="muted">· {{ detail.workflow.health.lastStatus }}</span>
+              </template>
+              <span v-else class="muted">no runs in the last ~{{ Math.round(detail.workflow.health.windowHours / 24) }} days</span>
+            </dd>
+            <dt>Avg duration</dt>
+            <dd>{{ fmtDuration(detail.workflow.health.avgDurationMs) }}</dd>
+            <dt>Window</dt>
+            <dd class="muted">~{{ Math.round(detail.workflow.health.windowHours / 24) }} days (n8n default retention)</dd>
+          </dl>
+
+          <!-- On-demand execution debug: redacted failure summary + recent runs. Full
+               logs/data stay in n8n (redacted server-side); we show the failing node +
+               error class and deep-link to the exact run. -->
+          <p v-if="runsState === 'loading'" class="muted small">Loading recent runs…</p>
+          <template v-else-if="runs && !runs.unavailable">
+            <div v-if="runs.failure" class="failbox" data-testid="execution-failure">
+              <span class="fail-title">Failing at <span class="mono">{{ runs.failure.failedNode ?? 'an unknown node' }}</span></span>
+              <span v-if="runs.failure.errorType || runs.failure.errorCode" class="fail-err mono">
+                {{ [runs.failure.errorType, runs.failure.errorCode].filter(Boolean).join(' · ') }}
+              </span>
+              <span v-else class="fail-err muted small">no error class exposed (redacted) — open the run in n8n</span>
+              <a class="run-link" :href="runs.failure.deepLink" target="_blank" rel="noopener">Open the failed run in n8n ↗</a>
+            </div>
+            <p class="runs-label muted">Recent runs</p>
+            <ul v-if="runs.runs.length" class="runlist" data-testid="execution-runs">
+              <li v-for="r in runs.runs" :key="r.executionId" class="run">
+                <FactBadge :label="r.status" :tone="RUN_TONE[r.status] ?? 'muted'" />
+                <span class="run-time muted">{{ relativeTime(r.startedAt, Date.now()) }}</span>
+                <span class="run-dur muted">{{ fmtDuration(r.durationMs) }}</span>
+                <span v-if="r.mode" class="run-mode muted">{{ r.mode }}</span>
+                <a class="run-link" :href="r.deepLink" target="_blank" rel="noopener">open ↗</a>
+              </li>
+            </ul>
+            <p v-else class="muted small">No runs in the last ~14 days.</p>
+            <p class="runs-note muted small">Full logs &amp; data stay in n8n — open a run to inspect.</p>
+          </template>
+          <p v-else-if="runs && runs.unavailable" class="muted small">{{ runs.unavailableReason ?? 'executions unavailable' }}</p>
+        </section>
 
         <template v-if="detail.facts">
           <!-- Facts -->
@@ -207,6 +295,26 @@ const onKeydown = (e: KeyboardEvent) => {
   color: var(--color--text--shade-1);
   opacity: 0.6;
 }
+.health-head { display: flex; align-items: center; gap: var(--spacing--sm); flex-wrap: wrap; margin-bottom: var(--spacing--2xs); }
+.checked { font-size: var(--font-size--2xs); }
+.small { font-size: var(--font-size--2xs); }
+.failbox {
+  display: flex; flex-direction: column; gap: var(--spacing--5xs);
+  margin: var(--spacing--2xs) 0;
+  padding: var(--spacing--2xs) var(--spacing--sm);
+  border: 1px solid var(--border-color--danger, var(--border-color));
+  border-radius: var(--radius--md);
+  background: var(--background--danger, var(--background--subtle));
+}
+.fail-title { font-size: var(--font-size--sm); font-weight: var(--font-weight--medium); color: var(--text-color--danger, var(--color--danger)); }
+.fail-err { font-size: var(--font-size--2xs); color: var(--text-color--danger, var(--color--danger)); }
+.runs-label { margin: var(--spacing--2xs) 0 var(--spacing--4xs); font-size: var(--font-size--3xs); text-transform: uppercase; letter-spacing: var(--letter-spacing--wide); }
+.runlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing--4xs); }
+.run { display: flex; align-items: center; gap: var(--spacing--2xs); flex-wrap: wrap; font-size: var(--font-size--2xs); }
+.run-time { min-width: 5rem; }
+.run-link { color: var(--color--primary, var(--background--brand)); text-decoration: none; white-space: nowrap; }
+.run-link:hover { text-decoration: underline; }
+.runs-note { margin-top: var(--spacing--4xs); font-style: italic; opacity: 0.8; }
 .facts { display: grid; grid-template-columns: auto 1fr; gap: var(--spacing--2xs) var(--spacing--sm); margin: 0; align-items: baseline; }
 .facts dt { font-size: var(--font-size--2xs); color: var(--color--text--shade-1); opacity: 0.7; }
 .facts dd { margin: 0; font-size: var(--font-size--sm); }
