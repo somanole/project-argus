@@ -20,7 +20,7 @@
 
 import { execSync, spawn } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { tmpdir } from 'node:os';
@@ -203,13 +203,25 @@ try {
   add('Catalog surfaces a failing sync (rejected key ≠ healthy pill)', surfacesFailure,
     surfacesFailure ? 'failing-state pill ships' : 'failing-state pill MISSING');
 
-  const filters = ['filter-search', 'filter-state', 'filter-mcp', 'filter-instance', 'filter-system', 'filter-trigger'];
+  const filters = ['filter-search', 'filter-state', 'filter-mcp', 'filter-broken', 'filter-instance', 'filter-system', 'filter-criticality', 'filter-trigger'];
   const fmissing = missing(filters);
-  add('Catalog shows all filter controls (search/state/MCP/instance/system/trigger)', fmissing.length === 0,
+  add('Catalog shows all filter controls (search/state/MCP/broken/instance/system/criticality/trigger)', fmissing.length === 0,
     fmissing.length === 0 ? `${filters.length} filter controls present` : `MISSING: ${fmissing.join(', ')}`);
 
   add('Connections screen shows the connection-health indicator', has('connection-health'),
     has('connection-health') ? 'connection-health present' : 'connection-health MISSING');
+
+  // S2: enrichment chrome — catalog badges, drawer section (summary + criticality
+  // reason + risk flags + correction), the "enriched X/Y" indicator, and the Settings
+  // provider/key screen. Each has a component test asserting its state; this is the
+  // plain-English presence counterpart (rule 11).
+  const enrichUi = [
+    'enrichment-badges', 'enrichment-criticality', 'enrichment-section', 'enrichment-criticality-reason',
+    'enrichment-correct-button', 'enrichment-progress', 'settings-view', 'enrichment-toggle', 'llm-provider-select', 'llm-key-input', 'llm-save',
+  ];
+  const eMissing = missing(enrichUi);
+  add('Enrichment UI ships (master switch, catalog badges, drawer summary+reason, correction)', eMissing.length === 0,
+    eMissing.length === 0 ? `${enrichUi.length} enrichment UI elements present` : `MISSING: ${eMissing.join(', ')}`);
 }
 
 // ---- Responsive (standing rule 10): hero views usable at 375px, both themes ----
@@ -242,8 +254,12 @@ try {
     row('Login usable at 375px — no horizontal overflow', 'Login');
     row('Catalog usable at 375px — no horizontal overflow, no cut-off fields', 'Catalog list');
     row('Detail drawer usable at 375px — full-width, no overflow', 'Detail drawer');
+    row('Settings usable at 375px — no horizontal overflow', 'Settings');
   }
 }
+
+// ---- S2 checks: enrichment (hermetic — no n8n, no live LLM, no spend) ----
+await s2Checks();
 
 // ---- Seeder checks (M1): the planted problems are really there ----
 // Read-only, from n8n's own APIs (no Argus analyzer yet). Needs `pnpm seed` first.
@@ -257,6 +273,70 @@ await s1aChecks();
 // Corpus robustness (offline), the analyzer over the live seed, the API filters,
 // and the scale smoke-test.
 await s1bChecks();
+
+// S2 enrichment — all hermetic (built code + JSON + unit suite); no n8n, no LLM spend.
+async function s2Checks() {
+  // 1. THE GATE (data-flow): planted secrets never reach the model. Runs the SAME
+  //    built allowlist builder the server uses; asserts params/URLs/secrets are absent
+  //    from the egress payload. Provider-agnostic — one payload for both providers.
+  try {
+    const mod = await import(pathToFileURL(join(ROOT, 'apps/server/dist/enrichment/allowlist.js')).href);
+    const S = {
+      aws: 'AKIAIOSFODNN7EXAMPLE',
+      jwt: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.sig_abc123def456ghi789jkl',
+      conn: 'postgres://u:HunterYellow42Pass@db.internal:5432/main',
+      url: 'https://apiuser:P4ssw0rdLeak@api.vendor.example/v1?api_key=tok9xKq2mVn7Pw4Lr8Ts',
+      nodeName: 'sk-proj-NODELEAKabcdefghij0123456789',
+      tag: 'xoxb-999888-TAGLEAKtokenvalue',
+    };
+    const facts = {
+      schemaVersion: 1, analyzedAt: '', nodeCount: 2, nodeTypes: [],
+      triggers: [{ type: 'n8n-nodes-base.webhook', display: 'Webhook', source: 'manifest' }],
+      triggerCountDetected: 1, triggerCountReported: 1,
+      systems: [{ system: 'Postgres', via: 'credential', credentialType: 'postgres', nodeType: null, resolved: true, raw: 'postgres' }],
+      credentialTypes: ['postgres'], dataTableRefs: [], mcpExposed: false, directDeps: [],
+      callerPolicy: { policy: null, callerIds: [] }, coverage: { understood: true, unknownNodeTypes: [], unresolvedRefs: 0, reasons: [] },
+    };
+    const wf = {
+      id: 'w', name: 'Vendor Sync', active: true, isArchived: false, createdAt: '', updatedAt: '', versionId: 'v', shared: [],
+      nodes: [
+        { type: 'n8n-nodes-base.httpRequest', name: `Call ${S.nodeName}`, parameters: { url: S.url, auth: `Bearer ${S.jwt}` } },
+        { type: 'n8n-nodes-base.postgres', name: 'Store', parameters: { conn: S.conn, aws: S.aws } },
+      ],
+      connections: {}, settings: {}, triggerCount: 1, tags: [{ id: 't', name: S.tag }],
+    };
+    const { input } = mod.buildEnrichmentInput(wf, facts, { project: 'Data Platform' });
+    const blob = JSON.stringify(input);
+    const leaked = Object.entries(S).filter(([, v]) => blob.includes(v)).map(([k]) => k);
+    const noUrl = !/https?:\/\//.test(blob);
+    add('Planted secrets never reach the model (allowlist + redaction, either provider)', leaked.length === 0 && noUrl,
+      leaked.length === 0 && noUrl ? 'no params, URLs, or planted secrets in the egress payload' : `LEAKED: ${[...leaked, noUrl ? '' : 'a URL'].filter(Boolean).join(', ')}`);
+  } catch (e) {
+    add('Planted secrets never reach the model', false, `could not load built enrichment code (build first): ${e.message}`);
+  }
+
+  // 2. The eval harness runs: the labeled set parses and the H1 scorer computes (no LLM).
+  try {
+    const labeled = JSON.parse(readFileSync(join(ROOT, 'scripts/eval/labeled/workflows.json'), 'utf8'));
+    const { score } = await import(pathToFileURL(join(ROOT, 'scripts/eval/score.mjs')).href);
+    const s = score([{ expected: { category: 'revenue-ops', criticality: 'high', riskFlags: ['x'] }, output: { category: 'revenue-ops', criticality: 'high', riskFlags: ['x'] } }]);
+    const ok = Array.isArray(labeled.cases) && labeled.cases.length >= 10 && s.categoryAccuracy === 100 && s.riskFlagPrecision === 100;
+    add('Enrichment eval harness runs (labeled set parses, H1 scorer computes)', ok, `${labeled.cases?.length ?? 0} labeled cases; scorer verified`);
+  } catch (e) {
+    add('Enrichment eval harness runs', false, `eval harness error: ${e.message}`);
+  }
+
+  // 3. The behavioral guarantees are asserted by the unit suite: re-run = 0 API calls,
+  //    correction writes an audit entry in the same transaction, kill switch = no-op,
+  //    redaction, schema gating, provider abstraction, stub-not-guess.
+  try {
+    execSync('pnpm --filter @argus/server exec vitest run src/enrichment src/llm src/app.test.ts', { cwd: ROOT, stdio: 'pipe' });
+    add('Enrichment behaviors green (0-call re-run · audited correction · kill switch · redaction)', true, 'enrichment + llm + api unit suite passed');
+  } catch (e) {
+    const out = (e.stdout?.toString() || e.message || '').slice(-160);
+    add('Enrichment behaviors green (0-call re-run · audited correction · kill switch · redaction)', false, `suite failed: ${out}`);
+  }
+}
 
 async function seederChecks() {
   const both = (p, s) => p && s;

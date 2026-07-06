@@ -1,0 +1,95 @@
+{
+  "$doc": "Self-labeled enrichment eval set (H1). Claude proposes labels; the owner reviews/edits during the weekly hour. Each `input` is exactly the allowlist shape sent to the model (no params, no URLs). `expected` is the ground truth. Starts small at S2 and grows; add the hand-labeled real-template slice here.",
+  "cases": [
+    {
+      "id": "stripe-dunning",
+      "input": { "name": "Stripe Failed Payment Dunning", "project": "Revenue Ops", "tags": ["billing", "production"], "triggerTypes": ["n8n-nodes-base.stripeTrigger"], "nodes": [{ "name": "On failed charge", "type": "n8n-nodes-base.stripeTrigger" }, { "name": "Lookup customer", "type": "n8n-nodes-base.postgres" }, { "name": "Send dunning email", "type": "n8n-nodes-base.emailSend" }], "topology": "3 nodes, 1 trigger(s), 2 connection(s), linear", "credentialTypes": ["stripeApi", "postgres", "smtp"], "systems": ["Email", "Postgres", "Stripe"], "failureStats": null, "facts": { "nodeCount": 3, "mcpExposed": false, "brokenRefCount": 0, "understood": true } },
+      "expected": { "category": "revenue-ops", "criticality": "high", "riskFlags": ["handles-financial-data", "customer-facing"] }
+    },
+    {
+      "id": "order-sync",
+      "input": { "name": "Shopify → NetSuite Order Sync", "project": "Revenue Ops", "tags": ["orders", "production"], "triggerTypes": ["n8n-nodes-base.webhook"], "nodes": [{ "name": "Order webhook", "type": "n8n-nodes-base.webhook" }, { "name": "Transform", "type": "n8n-nodes-base.set" }, { "name": "Create sales order", "type": "n8n-nodes-base.httpRequest" }], "topology": "3 nodes, 1 trigger(s), 2 connection(s), linear", "credentialTypes": ["shopifyApi", "netsuite"], "systems": ["Shopify", "NetSuite"], "failureStats": null, "facts": { "nodeCount": 3, "mcpExposed": false, "brokenRefCount": 0, "understood": true } },
+      "expected": { "category": "revenue-ops", "criticality": "critical", "riskFlags": ["production-write"] }
+    },
+    {
+      "id": "lead-enrich",
+      "input": { "name": "New Lead Enrichment → Salesforce", "project": "Marketing", "tags": ["leads"], "triggerTypes": ["n8n-nodes-base.webhook"], "nodes": [{ "name": "Form submit", "type": "n8n-nodes-base.webhook" }, { "name": "Enrich (Clearbit)", "type": "n8n-nodes-base.httpRequest" }, { "name": "Upsert lead", "type": "n8n-nodes-base.salesforce" }], "topology": "3 nodes, 1 trigger(s), 2 connection(s), linear", "credentialTypes": ["salesforceOAuth2Api"], "systems": ["Salesforce"], "failureStats": null, "facts": { "nodeCount": 3, "mcpExposed": false, "brokenRefCount": 0, "understood": true } },
+      "expected": { "category": "sales-marketing", "criticality": "medium", "riskFlags": ["handles-pii", "production-write"] }
+    },
+    {
+      "id": "campaign-blast",
+      "input": { "name": "Weekly Mailchimp Campaign", "project": "Marketing", "tags": ["email"], "triggerTypes": ["n8n-nodes-base.scheduleTrigger"], "nodes": [{ "name": "Weekly", "type": "n8n-nodes-base.scheduleTrigger" }, { "name": "Build segment", "type": "n8n-nodes-base.postgres" }, { "name": "Send campaign", "type": "n8n-nodes-base.mailchimp" }], "topology": "3 nodes, 1 trigger(s), 2 connection(s), linear", "credentialTypes": ["mailchimpApi", "postgres"], "systems": ["Mailchimp", "Postgres"], "failureStats": null, "facts": { "nodeCount": 3, "mcpExposed": false, "brokenRefCount": 0, "understood": true } },
+      "expected": { "category": "sales-marketing", "criticality": "medium", "riskFlags": ["customer-facing", "external-egress"] }
+    },
+    {
+      "id": "zendesk-triage",
+      "input": { "name": "Zendesk Ticket Auto-Triage", "project": "Customer Support", "tags": ["support", "production"], "triggerTypes": ["n8n-nodes-base.zendeskTrigger"], "nodes": [{ "name": "New ticket", "type": "n8n-nodes-base.zendeskTrigger" }, { "name": "Classify", "type": "@n8n/n8n-nodes-langchain.agent" }, { "name": "Set priority", "type": "n8n-nodes-base.zendesk" }], "topology": "3 nodes, 1 trigger(s), 2 connection(s), linear", "credentialTypes": ["zendeskApi", "openAiApi"], "systems": ["Zendesk"], "failureStats": null, "facts": { "nodeCount": 3, "mcpExposed": false, "brokenRefCount": 0, "understood": true } },
+      "expected": { "category": "customer-support", "criticality": "high", "riskFlags": ["customer-facing"] }
+    },
+    {
+      "id": "support-csat",
+      "input": { "name": "Post-Resolution CSAT Survey", "project": "Customer Support", "tags": ["support"], "triggerTypes": ["n8n-nodes-base.zendeskTrigger"], "nodes": [{ "name": "Ticket solved", "type": "n8n-nodes-base.zendeskTrigger" }, { "name": "Send survey", "type": "n8n-nodes-base.emailSend" }], "topology": "2 nodes, 1 trigger(s), 1 connection(s), linear", "credentialTypes": ["zendeskApi", "smtp"], "systems": ["Zendesk", "Email"], "failureStats": null, "facts": { "nodeCount": 2, "mcpExposed": false, "brokenRefCount": 0, "understood": true } },
+      "expected": { "category": "customer-support", "criticality": "low", "riskFlags": ["customer-facing"] }
+    },
+    {
+      "id": "warehouse-etl",
+      "input": { "name": "Nightly Postgres → BigQuery ETL", "project": "Data Platform", "tags": ["etl", "production"], "triggerTypes": ["n8n-nodes-base.scheduleTrigger"], "nodes": [{ "name": "Nightly 2am", "type": "n8n-nodes-base.scheduleTrigger" }, { "name": "Extract", "type": "n8n-nodes-base.postgres" }, { "name": "Load", "type": "n8n-nodes-base.googleBigQuery" }], "topology": "3 nodes, 1 trigger(s), 2 connection(s), linear", "credentialTypes": ["postgres", "googleBigQueryOAuth2Api"], "systems": ["Postgres", "Google BigQuery"], "failureStats": null, "facts": { "nodeCount": 3, "mcpExposed": false, "brokenRefCount": 0, "understood": true } },
+      "expected": { "category": "data-pipeline", "criticality": "high", "riskFlags": ["production-write"] }
+    },
+    {
+      "id": "airtable-sync",
+      "input": { "name": "Airtable ↔ Notion Two-way Sync", "project": "Data Platform", "tags": ["sync"], "triggerTypes": ["n8n-nodes-base.scheduleTrigger"], "nodes": [{ "name": "Every 15m", "type": "n8n-nodes-base.scheduleTrigger" }, { "name": "Read Airtable", "type": "n8n-nodes-base.airtable" }, { "name": "Upsert Notion", "type": "n8n-nodes-base.notion" }], "topology": "3 nodes, 1 trigger(s), 2 connection(s), linear", "credentialTypes": ["airtableTokenApi", "notionApi"], "systems": ["Airtable", "Notion"], "failureStats": null, "facts": { "nodeCount": 3, "mcpExposed": false, "brokenRefCount": 0, "understood": true } },
+      "expected": { "category": "data-pipeline", "criticality": "medium", "riskFlags": [] }
+    },
+    {
+      "id": "webhook-relay",
+      "input": { "name": "GitHub → Slack Webhook Relay", "project": "Data Platform", "tags": ["glue"], "triggerTypes": ["n8n-nodes-base.githubTrigger"], "nodes": [{ "name": "PR event", "type": "n8n-nodes-base.githubTrigger" }, { "name": "Format", "type": "n8n-nodes-base.set" }, { "name": "Post", "type": "n8n-nodes-base.slack" }], "topology": "3 nodes, 1 trigger(s), 2 connection(s), linear", "credentialTypes": ["githubApi", "slackApi"], "systems": ["GitHub", "Slack"], "failureStats": null, "facts": { "nodeCount": 3, "mcpExposed": false, "brokenRefCount": 0, "understood": true } },
+      "expected": { "category": "integration", "criticality": "low", "riskFlags": [] }
+    },
+    {
+      "id": "erp-bridge",
+      "input": { "name": "SAP IDoc → REST Bridge", "project": "Data Platform", "tags": ["integration", "production"], "triggerTypes": ["n8n-nodes-base.webhook"], "nodes": [{ "name": "IDoc in", "type": "n8n-nodes-base.webhook" }, { "name": "Map", "type": "n8n-nodes-base.code" }, { "name": "POST to ERP", "type": "n8n-nodes-base.httpRequest" }], "topology": "3 nodes, 1 trigger(s), 2 connection(s), linear", "credentialTypes": ["httpHeaderAuth"], "systems": [], "failureStats": null, "facts": { "nodeCount": 3, "mcpExposed": false, "brokenRefCount": 0, "understood": true } },
+      "expected": { "category": "integration", "criticality": "medium", "riskFlags": ["production-write"] }
+    },
+    {
+      "id": "onboarding",
+      "input": { "name": "New Hire Onboarding Checklist", "project": "Internal Ops", "tags": ["hr"], "triggerTypes": ["n8n-nodes-base.formTrigger"], "nodes": [{ "name": "HR form", "type": "n8n-nodes-base.formTrigger" }, { "name": "Create accounts", "type": "n8n-nodes-base.httpRequest" }, { "name": "Notify manager", "type": "n8n-nodes-base.slack" }], "topology": "3 nodes, 1 trigger(s), 2 connection(s), linear", "credentialTypes": ["slackApi"], "systems": ["Slack"], "failureStats": null, "facts": { "nodeCount": 3, "mcpExposed": false, "brokenRefCount": 0, "understood": true } },
+      "expected": { "category": "internal-ops", "criticality": "medium", "riskFlags": ["handles-pii"] }
+    },
+    {
+      "id": "expense-export",
+      "input": { "name": "Monthly Expense Report Export", "project": "Internal Ops", "tags": ["finance"], "triggerTypes": ["n8n-nodes-base.scheduleTrigger"], "nodes": [{ "name": "Month end", "type": "n8n-nodes-base.scheduleTrigger" }, { "name": "Query", "type": "n8n-nodes-base.postgres" }, { "name": "Sheet", "type": "n8n-nodes-base.googleSheets" }], "topology": "3 nodes, 1 trigger(s), 2 connection(s), linear", "credentialTypes": ["postgres", "googleSheetsOAuth2Api"], "systems": ["Postgres", "Google Sheets"], "failureStats": null, "facts": { "nodeCount": 3, "mcpExposed": false, "brokenRefCount": 0, "understood": true } },
+      "expected": { "category": "internal-ops", "criticality": "low", "riskFlags": ["handles-financial-data"] }
+    },
+    {
+      "id": "uptime-alerts",
+      "input": { "name": "Endpoint Uptime → PagerDuty", "project": "Data Platform", "tags": ["monitoring", "production"], "triggerTypes": ["n8n-nodes-base.scheduleTrigger"], "nodes": [{ "name": "Every 1m", "type": "n8n-nodes-base.scheduleTrigger" }, { "name": "Health check", "type": "n8n-nodes-base.httpRequest" }, { "name": "Page on fail", "type": "n8n-nodes-base.pagerDuty" }], "topology": "3 nodes, 1 trigger(s), 2 connection(s), branching", "credentialTypes": ["pagerDutyApi"], "systems": ["PagerDuty"], "failureStats": null, "facts": { "nodeCount": 3, "mcpExposed": false, "brokenRefCount": 0, "understood": true } },
+      "expected": { "category": "monitoring-alerting", "criticality": "high", "riskFlags": [] }
+    },
+    {
+      "id": "error-notifier",
+      "input": { "name": "Workflow Error Notifier", "project": "Data Platform", "tags": ["monitoring"], "triggerTypes": ["n8n-nodes-base.errorTrigger"], "nodes": [{ "name": "On error", "type": "n8n-nodes-base.errorTrigger" }, { "name": "Alert", "type": "n8n-nodes-base.slack" }], "topology": "2 nodes, 1 trigger(s), 1 connection(s), linear", "credentialTypes": ["slackApi"], "systems": ["Slack"], "failureStats": null, "facts": { "nodeCount": 2, "mcpExposed": false, "brokenRefCount": 0, "understood": true } },
+      "expected": { "category": "monitoring-alerting", "criticality": "medium", "riskFlags": [] }
+    },
+    {
+      "id": "support-agent",
+      "input": { "name": "AI Support Copilot (MCP)", "project": "Customer Support", "tags": ["ai", "production"], "triggerTypes": ["@n8n/n8n-nodes-langchain.chatTrigger"], "nodes": [{ "name": "Chat", "type": "@n8n/n8n-nodes-langchain.chatTrigger" }, { "name": "Agent", "type": "@n8n/n8n-nodes-langchain.agent" }, { "name": "KB tool", "type": "@n8n/n8n-nodes-langchain.toolWorkflow" }, { "name": "Memory", "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow" }], "topology": "4 nodes, 1 trigger(s), 3 connection(s), branching", "credentialTypes": ["openAiApi"], "systems": [], "failureStats": null, "facts": { "nodeCount": 4, "mcpExposed": true, "brokenRefCount": 0, "understood": true } },
+      "expected": { "category": "ai-agent", "criticality": "high", "riskFlags": ["customer-facing"] }
+    },
+    {
+      "id": "content-drafter",
+      "input": { "name": "Blog Draft Generator", "project": "Marketing", "tags": ["ai"], "triggerTypes": ["n8n-nodes-base.manualTrigger"], "nodes": [{ "name": "Manual", "type": "n8n-nodes-base.manualTrigger" }, { "name": "LLM", "type": "@n8n/n8n-nodes-langchain.agent" }, { "name": "Save", "type": "n8n-nodes-base.notion" }], "topology": "3 nodes, 1 trigger(s), 2 connection(s), linear", "credentialTypes": ["openAiApi", "notionApi"], "systems": ["Notion"], "failureStats": null, "facts": { "nodeCount": 3, "mcpExposed": false, "brokenRefCount": 0, "understood": true } },
+      "expected": { "category": "ai-agent", "criticality": "low", "riskFlags": [] }
+    },
+    {
+      "id": "adhoc-scratch",
+      "input": { "name": "test copy 2 (do not use)", "project": null, "tags": [], "triggerTypes": ["n8n-nodes-base.manualTrigger"], "nodes": [{ "name": "Manual", "type": "n8n-nodes-base.manualTrigger" }, { "name": "NoOp", "type": "n8n-nodes-base.noOp" }], "topology": "2 nodes, 1 trigger(s), 1 connection(s), linear", "credentialTypes": [], "systems": [], "failureStats": null, "facts": { "nodeCount": 2, "mcpExposed": false, "brokenRefCount": 0, "understood": true } },
+      "expected": { "category": "other", "criticality": "low", "riskFlags": [] }
+    },
+    {
+      "id": "payroll-run",
+      "input": { "name": "Bi-weekly Payroll Disbursement", "project": "Internal Ops", "tags": ["finance", "production", "payroll"], "triggerTypes": ["n8n-nodes-base.scheduleTrigger"], "nodes": [{ "name": "Payday", "type": "n8n-nodes-base.scheduleTrigger" }, { "name": "Compute", "type": "n8n-nodes-base.postgres" }, { "name": "Disburse (ACH)", "type": "n8n-nodes-base.httpRequest" }, { "name": "Notify finance", "type": "n8n-nodes-base.slack" }], "topology": "4 nodes, 1 trigger(s), 3 connection(s), linear", "credentialTypes": ["postgres", "httpHeaderAuth", "slackApi"], "systems": ["Postgres", "Slack"], "failureStats": null, "facts": { "nodeCount": 4, "mcpExposed": false, "brokenRefCount": 0, "understood": true } },
+      "expected": { "category": "internal-ops", "criticality": "critical", "riskFlags": ["handles-financial-data", "handles-pii", "production-write", "compliance-sensitive"] }
+    }
+  ]
+}

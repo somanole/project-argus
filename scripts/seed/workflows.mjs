@@ -251,8 +251,12 @@ const CURATED = [
   {
     key: 'personalOpsHack', name: 'Personal Ops Hack', ownerPersonal: 'diana', tags: ['critical'],
     exec: { kind: 'none' },
+    // A realistic governance smell AND the live planted-secret case: a hardcoded token
+    // + basic-auth creds embedded in a URL parameter. Argus's allowlist NEVER forwards
+    // URLs/params (DECISION #26), so this secret can never reach the LLM — the redaction
+    // backstop is proven by the hermetic planted-secrets test/verify row.
     build: () => buildWorkflow('Personal Ops Hack',
-      [manualTrigger('Run'), httpRequest('Ad-hoc Export', 'http://reports.internal/export')],
+      [manualTrigger('Run'), httpRequest('Ad-hoc Export', 'http://svc:hunter2Pass@reports.internal/export?token=sk-live-PLANTEDoAtQ9x2Kv7Lr8Ts5Yb')],
       [{ from: 'Run', to: 'Ad-hoc Export' }]),
   },
 ];

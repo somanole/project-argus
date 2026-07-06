@@ -31,6 +31,13 @@ export interface ArgusConfig {
   encryptionKey: string;
   /** How often each connection is re-listed + reconciled (ms). */
   pollIntervalMs: number;
+  // S2 enrichment:
+  /** Kill switch. false → a fully functional deterministic Argus, zero LLM calls. */
+  enrichmentEnabled: boolean;
+  /** Concurrent LLM calls per enrichment run. */
+  enrichmentConcurrency: number;
+  /** Per-run token budget; the run stops when reached, leaving the rest PENDING (0 = unlimited). */
+  enrichmentSpendCapTokens: number;
 }
 
 export function loadConfig(): ArgusConfig {
@@ -40,5 +47,9 @@ export function loadConfig(): ArgusConfig {
     sessionSecret: process.env.ARGUS_SESSION_SECRET ?? devDefault('ARGUS_SESSION_SECRET', 'argus-dev-session-secret'),
     encryptionKey: process.env.ARGUS_ENCRYPTION_KEY ?? devDefault('ARGUS_ENCRYPTION_KEY', 'argus-dev-encryption-key'),
     pollIntervalMs: Number(process.env.ARGUS_POLL_INTERVAL_MS ?? 30_000),
+    // Enabled by default, but a no-op until a provider + key are configured in Settings.
+    enrichmentEnabled: (process.env.ENRICHMENT_ENABLED ?? 'true').toLowerCase() !== 'false',
+    enrichmentConcurrency: Number(process.env.ARGUS_ENRICHMENT_CONCURRENCY ?? 3),
+    enrichmentSpendCapTokens: Number(process.env.ARGUS_ENRICHMENT_SPEND_CAP_TOKENS ?? 5_000_000),
   };
 }

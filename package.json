@@ -19,6 +19,8 @@
     "dev:web": "pnpm --filter @argus/web dev",
     "probe:n8n": "node scripts/probe-n8n.mjs",
     "probe:catalog": "node scripts/probe-catalog.mjs",
+    "probe:llm": "node --env-file=.env scripts/probe-llm.mjs",
+    "eval": "tsx scripts/eval/run.ts",
     "n8n:up": "node scripts/n8n-up.mjs",
     "seed": "node scripts/seed.mjs",
     "seed:unlock": "node scripts/seed-unlock.mjs",
@@ -33,6 +35,7 @@
     "eslint-plugin-vue": "^9.32.0",
     "globals": "^15.14.0",
     "playwright-core": "^1.61.1",
+    "tsx": "^4.23.0",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.19.0"
   },

@@ -1,6 +1,14 @@
 import type Database from 'better-sqlite3';
-import type { WorkflowListItem, WorkflowFacts } from '@argus/shared';
+import type {
+  WorkflowListItem,
+  WorkflowFacts,
+  WorkflowEnrichment,
+  EnrichmentOutput,
+  EnrichmentCategory,
+  Criticality,
+} from '@argus/shared';
 import type { CoverageEntry } from '../analyzer/index.js';
+import type { EnrichmentInput } from '../enrichment/allowlist.js';
 
 /**
  * Data access for the disposable `workflows` cache + its S1b facts (facts_json and
@@ -20,6 +28,9 @@ export interface CacheWorkflow {
   versionId: string | null;
   /** S1b: deterministic facts (null when the workflow couldn't be analyzed). */
   facts: WorkflowFacts | null;
+  /** S2: the redacted, no-secrets enrichment allowlist + its hash (null when not analyzed). */
+  enrichmentInput: EnrichmentInput | null;
+  enrichmentInputHash: string | null;
 }
 
 /** Filters for the estate list — every one is a WHERE, never a partition. */
@@ -32,6 +43,10 @@ export interface WorkflowFilters {
   systems?: string[] | undefined;
   /** OR within the facet: uses ANY of these trigger types. */
   triggers?: string[] | undefined;
+  /** OR within the facet: effective criticality is ANY of these (critical/high/medium/low). */
+  criticality?: string[] | undefined;
+  /** Only workflows with at least one certain-broken reference. */
+  broken?: boolean | undefined;
   q?: string | undefined;
 }
 
@@ -50,6 +65,15 @@ interface WorkflowRow {
   broken_ref_count: number | null;
   systems: string | null; // group_concat, unit-separated
   triggers: string | null;
+  // S2 enrichment (LEFT JOIN workflow_enrichments; all null when not enriched):
+  enrichment_status: string | null; // 'analyzed' | 'stub'
+  enrichment_json: string | null;
+  corrected_json: string | null;
+  enrichment_provider: string | null;
+  enrichment_model: string | null;
+  enriched_at: string | null;
+  /** 1 when the stored enrichment matches the workflow's current input hash. */
+  enrichment_fresh: number | null;
 }
 
 // group_concat separator unlikely to appear in a system/type string.
@@ -89,9 +113,11 @@ export function replaceInstanceWorkflows(
     const insertWf = db.prepare(
       `INSERT INTO workflows
          (instance_id, id, name, active, is_archived, project_id, project_name, updated_at, version_id,
-          last_synced_at, facts_json, facts_schema_version, mcp_exposed, node_count, understood, broken_ref_count)
+          last_synced_at, facts_json, facts_schema_version, mcp_exposed, node_count, understood, broken_ref_count,
+          enrichment_input_json, enrichment_input_hash)
        VALUES (@instance_id, @id, @name, @active, @is_archived, @project_id, @project_name, @updated_at, @version_id,
-          @last_synced_at, @facts_json, @facts_schema_version, @mcp_exposed, @node_count, @understood, @broken_ref_count)`,
+          @last_synced_at, @facts_json, @facts_schema_version, @mcp_exposed, @node_count, @understood, @broken_ref_count,
+          @enrichment_input_json, @enrichment_input_hash)`,
     );
     const insertSystem = db.prepare(
       'INSERT OR IGNORE INTO workflow_systems (instance_id, workflow_id, system) VALUES (?, ?, ?)',
@@ -119,6 +145,8 @@ export function replaceInstanceWorkflows(
         node_count: f ? f.nodeCount : null,
         understood: f ? (f.coverage.understood ? 1 : 0) : null,
         broken_ref_count: f ? brokenRefCount(f) : 0,
+        enrichment_input_json: w.enrichmentInput ? JSON.stringify(w.enrichmentInput) : null,
+        enrichment_input_hash: w.enrichmentInputHash ?? null,
       });
       if (f) {
         for (const system of workflowSystems(f)) insertSystem.run(instanceId, w.id, system);
@@ -150,6 +178,50 @@ function toListItem(r: WorkflowRow): WorkflowListItem {
     nodeCount: r.node_count,
     understood: r.understood == null ? null : r.understood === 1,
     brokenRefCount: r.broken_ref_count ?? 0,
+    enrichment: mapEnrichment(r),
+  };
+}
+
+/**
+ * Build the served enrichment from the joined row. Honest states (rule 5):
+ *  - no enrichment row → null (pending / off / not yet run)
+ *  - stored input hash ≠ current → 'stale' (last-known shown, flagged)
+ *  - status 'stub' → "couldn't analyze": semantic fields stay null, never fabricated
+ *  - owner corrections (corrected_json) overlay category/criticality at read time
+ */
+function mapEnrichment(r: WorkflowRow): WorkflowEnrichment | null {
+  if (!r.enrichment_status) return null;
+  const fresh = r.enrichment_fresh === 1;
+  const provider = r.enrichment_provider ?? '';
+  const model = r.enrichment_model ?? '';
+  const enrichedAt = r.enriched_at ?? '';
+
+  if (r.enrichment_status === 'stub') {
+    return {
+      status: fresh ? 'stub' : 'stale',
+      provider, model, enrichedAt, corrected: false,
+      summary: null, description: null, category: null, criticality: null,
+      criticalityReason: null, riskFlags: [], suggestedOwnerRationale: null, businessContext: null,
+    };
+  }
+
+  const output = r.enrichment_json ? (JSON.parse(r.enrichment_json) as EnrichmentOutput) : null;
+  if (!output) return null;
+  const corrected = r.corrected_json
+    ? (JSON.parse(r.corrected_json) as { category?: EnrichmentCategory; criticality?: Criticality })
+    : null;
+  return {
+    status: fresh ? 'analyzed' : 'stale',
+    provider, model, enrichedAt,
+    corrected: corrected != null,
+    summary: output.summary,
+    description: output.description,
+    category: corrected?.category ?? output.category,
+    criticality: corrected?.criticality ?? output.criticality,
+    criticalityReason: output.criticalityReason,
+    riskFlags: output.riskFlags,
+    suggestedOwnerRationale: output.suggestedOwnerRationale,
+    businessContext: output.businessContext,
   };
 }
 
@@ -159,9 +231,13 @@ const LIST_SELECT = `
          (SELECT group_concat(ws.system, char(31)) FROM workflow_systems ws
             WHERE ws.instance_id = w.instance_id AND ws.workflow_id = w.id) AS systems,
          (SELECT group_concat(wt.trigger_type, char(31)) FROM workflow_triggers wt
-            WHERE wt.instance_id = w.instance_id AND wt.workflow_id = w.id) AS triggers
+            WHERE wt.instance_id = w.instance_id AND wt.workflow_id = w.id) AS triggers,
+         e.status AS enrichment_status, e.enrichment_json, e.corrected_json,
+         e.provider AS enrichment_provider, e.model AS enrichment_model, e.enriched_at,
+         CASE WHEN e.input_hash IS NOT NULL AND e.input_hash = w.enrichment_input_hash THEN 1 ELSE 0 END AS enrichment_fresh
     FROM workflows w
-    JOIN connections c ON c.id = w.instance_id`;
+    JOIN connections c ON c.id = w.instance_id
+    LEFT JOIN workflow_enrichments e ON e.instance_id = w.instance_id AND e.workflow_id = w.id`;
 
 /**
  * The estate-wide inventory with S1b facts, filtered server-side. `instanceId` is a
@@ -186,6 +262,17 @@ export function listWorkflows(db: Database.Database, filters: WorkflowFilters = 
   }
   if (filters.mcp) {
     where.push('w.mcp_exposed = 1');
+  }
+  if (filters.broken) {
+    where.push('w.broken_ref_count > 0');
+  }
+  if (filters.criticality && filters.criticality.length > 0) {
+    const placeholders = filters.criticality.map(() => '?').join(', ');
+    // Match the EFFECTIVE criticality: an owner correction overrides the model's label.
+    where.push(
+      `COALESCE(json_extract(e.corrected_json, '$.criticality'), json_extract(e.enrichment_json, '$.criticality')) IN (${placeholders})`,
+    );
+    params.push(...filters.criticality);
   }
   if (filters.systems && filters.systems.length > 0) {
     const placeholders = filters.systems.map(() => '?').join(', ');

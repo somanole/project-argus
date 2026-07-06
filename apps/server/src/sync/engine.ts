@@ -4,6 +4,7 @@ import { listConnectionRows, getConnectionRow, decryptApiKey, type ConnectionRow
 import { replaceInstanceWorkflows, countByInstance, type CacheWorkflow } from '../workflows/repo.js';
 import { createN8nClient, statusForError, reason } from '../n8n/client.js';
 import { analyzeInstance } from '../analyzer/index.js';
+import { buildEnrichmentInput, hashEnrichmentInput } from '../enrichment/index.js';
 
 /**
  * The freshness engine. Every `pollIntervalMs` it re-lists each connection's
@@ -36,6 +37,8 @@ export function createSyncEngine(
   encryptionKey: string,
   pollIntervalMs: number,
   factory: N8nReaderFactory = defaultFactory,
+  /** Fired after each SUCCESSFUL sync — the enrichment worker subscribes here (S2). */
+  onSynced: (instanceId: string) => void = () => {},
 ): SyncEngine {
   const health = new Map<string, ConnectionHealth>();
   const inFlight = new Set<string>();
@@ -55,6 +58,21 @@ export function createSyncEngine(
     const factsById = analyzeInstance(workflows, true, new Date().toISOString());
     return workflows.map((w) => {
       const ownerProjectId = w.shared.find((s) => s.role === 'workflow:owner')?.projectId ?? null;
+      const projectName = ownerProjectId ? nameById.get(ownerProjectId) ?? null : null;
+      const facts = factsById.get(w.id) ?? null;
+      // Build the redacted, no-secrets allowlist here (raw + facts both in scope). Its
+      // hash is the enrichment gating key. Redaction runs before storage (spec).
+      // NEVER let an enrichment-input failure break the core inventory sync — Argus must
+      // work regardless of enrichment (kill switch / feature). On error, this workflow
+      // simply won't be enriched; the catalog + facts are unaffected (rule 5).
+      let built: ReturnType<typeof buildEnrichmentInput> | null = null;
+      if (facts) {
+        try {
+          built = buildEnrichmentInput(w, facts, { project: projectName });
+        } catch (err) {
+          console.warn(`[argus] enrichment-input build failed for workflow ${w.id} (not enriched): ${(err as Error).message}`);
+        }
+      }
       return {
         id: w.id,
         name: w.name,
@@ -62,10 +80,12 @@ export function createSyncEngine(
         isArchived: w.isArchived,
         projectId: ownerProjectId,
         // null (not a guess) when the project can't be resolved (standing rule 5).
-        projectName: ownerProjectId ? nameById.get(ownerProjectId) ?? null : null,
+        projectName,
         updatedAt: w.updatedAt,
         versionId: w.versionId,
-        facts: factsById.get(w.id) ?? null,
+        facts,
+        enrichmentInput: built ? built.input : null,
+        enrichmentInputHash: built ? hashEnrichmentInput(built.input) : null,
       };
     });
   }
@@ -84,6 +104,12 @@ export function createSyncEngine(
         lastError: null,
         workflowCount: normalized.length,
       });
+      // Kick the enrichment worker (if any). Never let its failure break the sync.
+      try {
+        onSynced(row.id);
+      } catch (hookErr) {
+        console.warn(`[argus] onSynced hook failed for "${row.label}": ${(hookErr as Error).message}`);
+      }
     } catch (err) {
       // Keep the last-known cache; report the connection as unhealthy, honestly.
       const prev = health.get(row.id);

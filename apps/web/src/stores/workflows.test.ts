@@ -18,6 +18,7 @@ function item(id: string, instanceId: string, instanceLabel: string) {
     nodeCount: 2,
     understood: true,
     brokenRefCount: 0,
+    enrichment: null,
   };
 }
 

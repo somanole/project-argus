@@ -1,6 +1,12 @@
 import { Router } from 'express';
 import type Database from 'better-sqlite3';
-import { workflowsResponseSchema, workflowDetailSchema, coverageResponseSchema } from '@argus/shared';
+import {
+  workflowsResponseSchema,
+  workflowDetailSchema,
+  coverageResponseSchema,
+  enrichmentProgressSchema,
+  enrichmentCorrectionSchema,
+} from '@argus/shared';
 import {
   listWorkflows,
   getWorkflowDetail,
@@ -9,6 +15,14 @@ import {
   type WorkflowFilters,
 } from '../workflows/repo.js';
 import { coverageOf, manifest } from '../analyzer/index.js';
+import { actorOf } from '../auth/middleware.js';
+import { correctLabel } from '../enrichment/repo.js';
+import type { EnrichmentWorker } from '../enrichment/index.js';
+
+function deepLinkFor(baseUrl: string, id: string): string {
+  const base = baseUrl.replace(/\/+$/, '');
+  return base ? `${base}/workflow/${id}` : '';
+}
 
 /**
  * The S1b catalog API. `GET /` serves the estate-wide inventory with catalog facts,
@@ -16,7 +30,7 @@ import { coverageOf, manifest } from '../analyzer/index.js';
  * `GET /:instanceId/:id` is the detail drawer (facts + deep-link); `GET /coverage`
  * is the trust number. `instanceId` is a filter, the list is always one estate.
  */
-export function workflowsRouter(db: Database.Database): Router {
+export function workflowsRouter(db: Database.Database, worker: EnrichmentWorker): Router {
   const router = Router();
 
   router.get('/', (req, res) => {
@@ -43,16 +57,38 @@ export function workflowsRouter(db: Database.Database): Router {
     res.json(coverageResponseSchema.parse(report));
   });
 
+  // Estate-wide enrichment progress for the "enriched X/Y" indicator.
+  router.get('/enrichment-progress', (_req, res) => {
+    res.json(enrichmentProgressSchema.parse(worker.progress()));
+  });
+
+  // One-click label correction — an audited mutation (DECISION #6).
+  router.put('/:instanceId/:id/enrichment/correction', (req, res) => {
+    const parsed = enrichmentCorrectionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'invalid request' });
+      return;
+    }
+    const ok = correctLabel(db, actorOf(res), req.params.instanceId ?? '', req.params.id ?? '', parsed.data);
+    if (!ok) {
+      res.status(404).json({ error: 'workflow not enriched' });
+      return;
+    }
+    const detail = getWorkflowDetail(db, req.params.instanceId ?? '', req.params.id ?? '');
+    if (!detail) {
+      res.status(404).json({ error: 'workflow not found' });
+      return;
+    }
+    res.json(workflowDetailSchema.parse({ workflow: detail.item, facts: detail.facts, deepLink: deepLinkFor(detail.baseUrl, detail.item.id) }));
+  });
+
   router.get('/:instanceId/:id', (req, res) => {
     const detail = getWorkflowDetail(db, req.params.instanceId, req.params.id);
     if (!detail) {
       res.status(404).json({ error: 'workflow not found' });
       return;
     }
-    // Deep-link opens the workflow in that instance's n8n editor.
-    const base = detail.baseUrl.replace(/\/+$/, '');
-    const deepLink = base ? `${base}/workflow/${detail.item.id}` : '';
-    res.json(workflowDetailSchema.parse({ workflow: detail.item, facts: detail.facts, deepLink }));
+    res.json(workflowDetailSchema.parse({ workflow: detail.item, facts: detail.facts, deepLink: deepLinkFor(detail.baseUrl, detail.item.id) }));
   });
 
   return router;
@@ -80,8 +116,10 @@ function parseFilters(query: Record<string, unknown>): WorkflowFilters {
     active: parseBool(query.active),
     archived: parseBool(query.archived),
     mcp: parseBool(query.mcp) === true ? true : undefined,
+    broken: parseBool(query.broken) === true ? true : undefined,
     systems: parseList(query.system),
     triggers: parseList(query.trigger),
+    criticality: parseList(query.criticality),
     q,
   };
 }

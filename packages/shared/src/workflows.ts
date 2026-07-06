@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { workflowFactsSchema, coverageReportSchema } from './facts.js';
+import { workflowEnrichmentSchema } from './enrichment.js';
 
 /**
  * The estate-wide workflow inventory contract (server ↔ web). One flat list
@@ -33,6 +34,9 @@ export const workflowListItemSchema = z.object({
   understood: z.boolean().nullable(),
   /** Count of certain-broken outbound references. */
   brokenRefCount: z.number().int(),
+  // S2 sense-making layer (null when enrichment is off / not yet run for this workflow):
+  /** LLM summary + category + criticality-with-reason + risk flags, with honest status. */
+  enrichment: workflowEnrichmentSchema.nullable(),
 });
 export type WorkflowListItem = z.infer<typeof workflowListItemSchema>;
 

@@ -23,6 +23,9 @@ importers:
       playwright-core:
         specifier: ^1.61.1
         version: 1.61.1
+      tsx:
+        specifier: ^4.23.0
+        version: 4.23.0
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
@@ -41,6 +44,9 @@ importers:
       express:
         specifier: ^4.21.2
         version: 4.22.2
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.6.12

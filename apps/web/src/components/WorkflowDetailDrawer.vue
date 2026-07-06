@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { instanceColor } from '../lib/instanceColor';
 import StateBadge from './StateBadge.vue';
 import FactBadge from './FactBadge.vue';
+import EnrichmentSection from './EnrichmentSection.vue';
 
 // The detail drawer: fetches the selected workflow's full facts + direct deps +
 // n8n deep-link. Everything is deterministic ground truth; unknowns say so.
@@ -89,6 +90,14 @@ const onKeydown = (e: KeyboardEvent) => {
           <FactBadge v-if="detail.facts && !detail.facts.coverage.understood" label="partly unparsed" tone="warn" />
           <FactBadge v-if="selected.brokenRefCount > 0" :label="`${selected.brokenRefCount} broken ref${selected.brokenRefCount > 1 ? 's' : ''}`" tone="danger" />
         </div>
+
+        <!-- S2 sense-making: summary + criticality-with-reason + risk flags + correction. -->
+        <EnrichmentSection
+          :enrichment="detail.workflow.enrichment"
+          :instance-id="selected.instanceId"
+          :workflow-id="selected.id"
+          @updated="detail = $event"
+        />
 
         <template v-if="detail.facts">
           <!-- Facts -->

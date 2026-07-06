@@ -24,13 +24,20 @@ const DESKTOP = 1280;
 
 // ---- canned API data (schema-valid) ----
 const ACTOR = { name: 'Owner', email: 'owner@acme.example' };
+const enrichment = {
+  status: 'analyzed', provider: 'openai', model: 'gpt-5-mini', enrichedAt: '2026-07-05T00:00:00.000Z', corrected: false,
+  summary: 'Nightly sync of Salesforce accounts into the warehouse.', description: 'Pulls Salesforce records and upserts them into Postgres each night.',
+  category: 'data-pipeline', criticality: 'high', criticalityReason: 'Feeds downstream revenue reporting; a failure stales analytics.',
+  riskFlags: ['handles-pii', 'production-write'], suggestedOwnerRationale: 'Data Platform owns the warehouse + Salesforce credential.',
+  businessContext: 'Keeps CRM and warehouse in sync for reporting.',
+};
 const item = (id, name, systems, triggers, over = {}) => ({
   instanceId: 'prod', instanceLabel: 'prod', id, name, active: true, isArchived: false,
   project: 'Revenue Ops', updatedAt: '2026-07-05T00:00:00.000Z',
-  systems, triggers, mcpExposed: false, nodeCount: 4, understood: true, brokenRefCount: 0, ...over,
+  systems, triggers, mcpExposed: false, nodeCount: 4, understood: true, brokenRefCount: 0, enrichment: null, ...over,
 });
 const WORKFLOWS = [
-  item('w1', 'Salesforce CRM Sync — nightly enrichment', ['Salesforce', 'Postgres'], ['n8n-nodes-base.scheduleTrigger'], { mcpExposed: true }),
+  item('w1', 'Salesforce CRM Sync — nightly enrichment', ['Salesforce', 'Postgres'], ['n8n-nodes-base.scheduleTrigger'], { mcpExposed: true, enrichment }),
   item('w2', 'Refund Processor', ['Stripe', 'Slack'], ['n8n-nodes-base.webhook']),
   item('w3', 'Lead Scorer', ['OpenAI'], ['n8n-nodes-base.manualTrigger'], { brokenRefCount: 1, understood: false }),
 ];
@@ -70,8 +77,10 @@ function mockApi(route) {
   if (p.endsWith('/api/auth/login')) return send({ authenticated: true, actor: ACTOR });
   if (p.endsWith('/api/auth/logout')) return send({}, 204);
   if (p.endsWith('/api/workflows/coverage')) return send(coverageBody);
+  if (p.endsWith('/api/workflows/enrichment-progress')) return send({ enabled: true, lastEnrichedAt: '2026-07-06T00:00:00.000Z', total: 3, analyzed: 3, stub: 0, stale: 0, pending: 0 });
   if (/\/api\/workflows\/[^/]+\/[^/]+$/.test(p)) return send(detailBody);
   if (p.endsWith('/api/workflows')) return send(workflowsBody);
+  if (p.endsWith('/api/settings/llm')) return send({ config: { provider: 'openai', model: 'gpt-5-mini', configured: true, enabled: true, envLocked: false } });
   if (p.endsWith('/api/connections')) return send(connectionsBody);
   return send({});
 }
@@ -112,6 +121,7 @@ const VIEWS = [
   { name: 'Catalog list', path: '/workflows', mock: mockApi, waitFor: '.wf tbody tr', key: '.filterbar' },
   { name: 'Detail drawer', path: '/workflows', mock: mockApi, waitFor: '.wf tbody tr', key: '.drawer',
     action: async (page) => { await page.click('.wf tbody tr'); await page.waitForSelector('.drawer', { timeout: 4000 }); } },
+  { name: 'Settings', path: '/settings', mock: mockApi, waitFor: '[data-testid="settings-view"]', key: '.card' },
 ];
 
 export async function runResponsiveCheck() {

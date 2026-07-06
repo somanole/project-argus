@@ -23,14 +23,16 @@ vi.mock('./n8n/client.js', () => ({
 const { createApp } = await import('./app.js');
 const { openDb } = await import('./db/index.js');
 const { createSyncEngine } = await import('./sync/engine.js');
+const { createEnrichmentWorker } = await import('./enrichment/index.js');
 
-const config = { adminPassword: 'pw', sessionSecret: 's', encryptionKey: 'e' };
+const config = { adminPassword: 'pw', sessionSecret: 's', encryptionKey: 'e', enrichmentEnabled: true };
 const SECRET_KEY = 'my-real-n8n-api-key';
 
 function build() {
   const db = openDb(':memory:');
-  const engine = createSyncEngine(db, config.encryptionKey, 999_999);
-  return createApp({ db, engine, config });
+  const worker = createEnrichmentWorker({ db, encryptionKey: config.encryptionKey, envAllowed: true, concurrency: 3, spendCapTokens: 0 });
+  const engine = createSyncEngine(db, config.encryptionKey, 999_999, undefined, (id) => worker.enqueue(id));
+  return createApp({ db, engine, worker, config });
 }
 
 describe('Argus API', () => {
@@ -99,5 +101,61 @@ describe('Argus API', () => {
     expect((await agent.delete(`/api/connections/${id}`)).status).toBe(204);
     expect((await agent.get('/api/workflows')).body.workflows).toHaveLength(0);
     expect((await agent.get('/api/connections')).body.connections).toHaveLength(0);
+  });
+
+  it('LLM settings: stores the key encrypted and NEVER returns it', async () => {
+    const agent = request.agent(app);
+    await agent.post('/api/auth/login').send({ password: 'pw', name: 'Sam', email: 'sam@acme.example' });
+
+    const before = await agent.get('/api/settings/llm');
+    expect(before.body.config).toMatchObject({ provider: null, configured: false });
+
+    const put = await agent.put('/api/settings/llm').send({ provider: 'openai', apiKey: 'sk-super-secret-key-value' });
+    expect(put.status).toBe(200);
+    expect(put.body.config).toMatchObject({ provider: 'openai', model: 'gpt-5-mini', configured: true, enabled: true });
+    expect(JSON.stringify(put.body)).not.toContain('sk-super-secret-key-value');
+
+    const after = await agent.get('/api/settings/llm');
+    expect(JSON.stringify(after.body)).not.toContain('sk-super-secret-key-value');
+  });
+
+  it('LLM settings: the master switch toggles enrichment on/off (audited)', async () => {
+    const agent = request.agent(app);
+    await agent.post('/api/auth/login').send({ password: 'pw', name: 'Sam', email: 'sam@acme.example' });
+
+    // Default on.
+    expect((await agent.get('/api/settings/llm')).body.config).toMatchObject({ enabled: true, envLocked: false });
+    // Turn it off.
+    const off = await agent.put('/api/settings/enrichment').send({ enabled: false });
+    expect(off.status).toBe(200);
+    expect(off.body.config.enabled).toBe(false);
+    // Turn it back on.
+    const on = await agent.put('/api/settings/enrichment').send({ enabled: true });
+    expect(on.body.config.enabled).toBe(true);
+  });
+
+  it('exposes enrichment progress (off until a provider is set) with a last-ran field', async () => {
+    const agent = request.agent(app);
+    await agent.post('/api/auth/login').send({ password: 'pw', name: 'Sam', email: 'sam@acme.example' });
+    const res = await agent.get('/api/workflows/enrichment-progress');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ enabled: false, lastEnrichedAt: null });
+  });
+
+  it('"Enrich now" accepts the trigger and returns progress', async () => {
+    const agent = request.agent(app);
+    await agent.post('/api/auth/login').send({ password: 'pw', name: 'Sam', email: 'sam@acme.example' });
+    const res = await agent.post('/api/settings/enrichment/run');
+    expect(res.status).toBe(202);
+    expect(res.body).toMatchObject({ lastEnrichedAt: null });
+  });
+
+  it('rejects a correction for a workflow with no enrichment (nothing to correct)', async () => {
+    const agent = request.agent(app);
+    await agent.post('/api/auth/login').send({ password: 'pw', name: 'Sam', email: 'sam@acme.example' });
+    const reg = await agent.post('/api/connections').send({ label: 'prod', baseUrl: 'http://localhost:5678', apiKey: SECRET_KEY });
+    const id = reg.body.connection.id as string;
+    const res = await agent.put(`/api/workflows/${id}/w1/enrichment/correction`).send({ criticality: 'critical' });
+    expect(res.status).toBe(404);
   });
 });

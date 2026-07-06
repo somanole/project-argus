@@ -35,6 +35,7 @@ async function logout(): Promise<void> {
         <nav class="nav">
           <router-link to="/workflows">Catalog</router-link>
           <router-link to="/connections">Connections</router-link>
+          <router-link to="/settings">Settings</router-link>
         </nav>
       </div>
       <div class="right">

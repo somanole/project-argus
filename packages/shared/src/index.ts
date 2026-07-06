@@ -1,5 +1,35 @@
 export { healthResponseSchema, type HealthResponse } from './health.js';
 export {
+  enrichmentCategorySchema,
+  criticalitySchema,
+  riskFlagSchema,
+  enrichmentStatusSchema,
+  enrichmentOutputSchema,
+  workflowEnrichmentSchema,
+  enrichmentCorrectionSchema,
+  enrichmentProgressSchema,
+  type EnrichmentCategory,
+  type Criticality,
+  type RiskFlag,
+  type EnrichmentStatus,
+  type EnrichmentOutput,
+  type WorkflowEnrichment,
+  type EnrichmentCorrection,
+  type EnrichmentProgress,
+} from './enrichment.js';
+export {
+  llmProviderSchema,
+  llmConfigInputSchema,
+  llmConfigSchema,
+  llmConfigResponseSchema,
+  enrichmentToggleSchema,
+  type LlmProvider,
+  type LlmConfigInput,
+  type LlmConfig,
+  type LlmConfigResponse,
+  type EnrichmentToggle,
+} from './llm-config.js';
+export {
   connectionInputSchema,
   connectionStatusSchema,
   connectionHealthSchema,

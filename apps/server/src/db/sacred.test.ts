@@ -67,7 +67,7 @@ describe('sacred tables (rule 6)', () => {
   it('removing a connection cascades its cached workflows and audits the removal', () => {
     const row = createConnection(db, ACTOR, { label: 'prod', baseUrl: 'http://x', apiKey: 'k' }, ENC);
     replaceInstanceWorkflows(db, row.id, [
-      { id: 'w1', name: 'A', active: true, isArchived: false, projectId: null, projectName: null, updatedAt: null, versionId: null },
+      { id: 'w1', name: 'A', active: true, isArchived: false, projectId: null, projectName: null, updatedAt: null, versionId: null, facts: null, enrichmentInput: null, enrichmentInputHash: null },
     ], new Date().toISOString());
     expect(countByInstance(db, row.id)).toBe(1);
 

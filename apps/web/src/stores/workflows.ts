@@ -3,9 +3,11 @@ import { ref, computed } from 'vue';
 import {
   workflowsResponseSchema,
   coverageResponseSchema,
+  enrichmentProgressSchema,
   type WorkflowListItem,
   type WorkflowFacets,
   type CoverageResponse,
+  type EnrichmentProgress,
 } from '@argus/shared';
 import { api } from '../lib/api';
 
@@ -24,6 +26,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
   const workflows = ref<WorkflowListItem[]>([]);
   const facets = ref<WorkflowFacets>(emptyFacets);
   const coverage = ref<CoverageResponse | null>(null);
+  const enrichmentProgress = ref<EnrichmentProgress | null>(null);
   const state = ref<'idle' | 'loading' | 'ok' | 'error'>('idle');
   const error = ref<string | null>(null);
   const lastUpdated = ref<string | null>(null);
@@ -33,6 +36,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
   const systems = ref<string[]>([]);
   const triggers = ref<string[]>([]);
   const mcpOnly = ref<boolean>(false);
+  const brokenOnly = ref<boolean>(false);
+  const criticality = ref<string[]>([]);
   const stateFilter = ref<StateFilter>('all');
   const q = ref<string>('');
 
@@ -41,7 +46,9 @@ export const useWorkflowsStore = defineStore('workflows', () => {
       (instanceId.value !== 'all' ? 1 : 0) +
       systems.value.length +
       triggers.value.length +
+      criticality.value.length +
       (mcpOnly.value ? 1 : 0) +
+      (brokenOnly.value ? 1 : 0) +
       (stateFilter.value !== 'all' ? 1 : 0) +
       (q.value.trim() ? 1 : 0),
   );
@@ -56,7 +63,9 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     if (instanceId.value !== 'all') p.set('instanceId', instanceId.value);
     for (const s of systems.value) p.append('system', s);
     for (const t of triggers.value) p.append('trigger', t);
+    for (const c of criticality.value) p.append('criticality', c);
     if (mcpOnly.value) p.set('mcp', 'true');
+    if (brokenOnly.value) p.set('broken', 'true');
     if (stateFilter.value === 'active') p.set('active', 'true');
     if (stateFilter.value === 'archived') p.set('archived', 'true');
     const query = q.value.trim();
@@ -88,6 +97,14 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     }
   }
 
+  async function refreshEnrichmentProgress(): Promise<void> {
+    try {
+      enrichmentProgress.value = await api('/api/workflows/enrichment-progress', {}, enrichmentProgressSchema);
+    } catch {
+      enrichmentProgress.value = null;
+    }
+  }
+
   // ---- filter mutations (each re-queries) ----
   const toggle = (list: typeof systems, value: string) => {
     list.value = list.value.includes(value) ? list.value.filter((v) => v !== value) : [...list.value, value];
@@ -99,8 +116,13 @@ export const useWorkflowsStore = defineStore('workflows', () => {
   };
   const toggleSystem = (s: string) => toggle(systems, s);
   const toggleTrigger = (t: string) => toggle(triggers, t);
+  const toggleCriticality = (c: string) => toggle(criticality, c);
   const setMcpOnly = (v: boolean) => {
     mcpOnly.value = v;
+    void refresh();
+  };
+  const setBrokenOnly = (v: boolean) => {
+    brokenOnly.value = v;
     void refresh();
   };
   const setStateFilter = (v: StateFilter) => {
@@ -115,7 +137,9 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     instanceId.value = 'all';
     systems.value = [];
     triggers.value = [];
+    criticality.value = [];
     mcpOnly.value = false;
+    brokenOnly.value = false;
     stateFilter.value = 'all';
     q.value = '';
     void refresh();
@@ -125,23 +149,29 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     workflows,
     facets,
     coverage,
+    enrichmentProgress,
     state,
     error,
     lastUpdated,
     instanceId,
     systems,
     triggers,
+    criticality,
     mcpOnly,
+    brokenOnly,
     stateFilter,
     q,
     activeFilterCount,
     triggerLabels,
     refresh,
     refreshCoverage,
+    refreshEnrichmentProgress,
     setInstance,
     toggleSystem,
     toggleTrigger,
+    toggleCriticality,
     setMcpOnly,
+    setBrokenOnly,
     setStateFilter,
     setQuery,
     clearFilters,

@@ -6,14 +6,18 @@ import { useConnectionsStore } from '../stores/connections';
 import type { WorkflowListItem } from '@argus/shared';
 import StateBadge from '../components/StateBadge.vue';
 import FactBadge from '../components/FactBadge.vue';
+import EnrichmentBadges from '../components/EnrichmentBadges.vue';
 import WorkflowDetailDrawer from '../components/WorkflowDetailDrawer.vue';
 import { instanceColor } from '../lib/instanceColor';
 import { relativeTime } from '../lib/time';
 
 const store = useWorkflowsStore();
 const connections = useConnectionsStore();
-const { workflows, facets, coverage, state, error, lastUpdated, instanceId, systems, triggers, mcpOnly, stateFilter, activeFilterCount, triggerLabels } =
+const { workflows, facets, coverage, enrichmentProgress, state, error, lastUpdated, instanceId, systems, triggers, criticality, mcpOnly, brokenOnly, stateFilter, activeFilterCount, triggerLabels } =
   storeToRefs(store);
+
+// Criticality filter levels, most-severe first (from the enrichment enum).
+const CRITICALITY_LEVELS = ['critical', 'high', 'medium', 'low'];
 
 const now = ref(Date.now());
 let clock: ReturnType<typeof setInterval> | undefined;
@@ -50,8 +54,15 @@ const syncFailureTitle = computed(() =>
   syncFailures.value.map((c) => `${c.label}: ${c.health.lastError ?? c.health.status}`).join(' · '));
 
 async function refreshAll(): Promise<void> {
-  await Promise.all([store.refresh(), store.refreshCoverage(), connections.refresh()]);
+  await Promise.all([store.refresh(), store.refreshCoverage(), store.refreshEnrichmentProgress(), connections.refresh()]);
 }
+
+// "enriched X/Y" — only shown when enrichment is enabled + configured.
+const enrichmentLabel = computed(() => {
+  const p = enrichmentProgress.value;
+  if (!p || !p.enabled) return null;
+  return `${p.analyzed}/${p.total}`;
+});
 
 onMounted(async () => {
   await refreshAll();
@@ -93,6 +104,15 @@ onUnmounted(() => {
           <FactBadge v-if="coverage.brokenRefTotal > 0" :label="`${coverage.brokenRefTotal} broken`" tone="danger" />
         </div>
         <span
+          v-if="enrichmentLabel"
+          class="coverage"
+          data-testid="enrichment-progress"
+          :title="`${enrichmentProgress?.analyzed} analyzed, ${enrichmentProgress?.stub} couldn't analyze, ${enrichmentProgress?.stale} stale, ${enrichmentProgress?.pending} pending`"
+        >
+          <span class="cov-pct">{{ enrichmentLabel }}</span>
+          <span class="cov-label muted">enriched</span>
+        </span>
+        <span
           v-if="syncOk"
           class="badge badge--muted"
           data-testid="freshness-pill"
@@ -118,6 +138,7 @@ onUnmounted(() => {
         <button :class="{ on: stateFilter === 'archived' }" @click="store.setStateFilter('archived')">Archived</button>
       </div>
       <button class="chip" :class="{ 'chip--active': mcpOnly }" data-testid="filter-mcp" @click="store.setMcpOnly(!mcpOnly)">MCP-exposed</button>
+      <button class="chip" :class="{ 'chip--active': brokenOnly }" data-testid="filter-broken" @click="store.setBrokenOnly(!brokenOnly)">Broken refs</button>
       <button class="btn btn--secondary btn--sm filters-toggle" :aria-expanded="filtersOpen" @click="filtersOpen = !filtersOpen">
         Filters<span v-if="activeFilterCount"> ({{ activeFilterCount }})</span> {{ filtersOpen ? '▲' : '▾' }}
       </button>
@@ -151,6 +172,20 @@ onUnmounted(() => {
           @click="store.toggleSystem(s.value)"
         >
           {{ s.value }} <span class="count">{{ s.count }}</span>
+        </button>
+      </div>
+
+      <!-- Criticality facet (enrichment) -->
+      <div class="facet" role="group" aria-label="Filter by criticality" data-testid="filter-criticality">
+        <span class="facet-label muted">Criticality</span>
+        <button
+          v-for="c in CRITICALITY_LEVELS"
+          :key="c"
+          class="chip"
+          :class="{ 'chip--active': criticality.includes(c) }"
+          @click="store.toggleCriticality(c)"
+        >
+          {{ c }}
         </button>
       </div>
 
@@ -204,6 +239,7 @@ onUnmounted(() => {
                 <FactBadge v-if="w.mcpExposed" label="MCP" tone="mcp" title="Published to n8n's MCP server" />
                 <FactBadge v-if="w.brokenRefCount > 0" :label="`${w.brokenRefCount} broken`" tone="danger" title="Broken workflow reference" />
                 <FactBadge v-if="w.understood === false" label="?" tone="warn" title="Some nodes couldn't be analysed" />
+                <EnrichmentBadges :enrichment="w.enrichment" />
               </span>
             </td>
             <td class="c-inst" data-label="Instance">

@@ -6,14 +6,17 @@ import { authRouter } from './auth/routes.js';
 import { requireAuth } from './auth/middleware.js';
 import { connectionsRouter } from './routes/connections.js';
 import { workflowsRouter } from './routes/workflows.js';
+import { settingsRouter } from './routes/settings.js';
 import type { SyncEngine } from './sync/engine.js';
+import type { EnrichmentWorker } from './enrichment/index.js';
 
 export const SERVER_VERSION = '0.1.0';
 
 export interface AppDeps {
   db: Database.Database;
   engine: SyncEngine;
-  config: { adminPassword: string; sessionSecret: string; encryptionKey: string };
+  worker: EnrichmentWorker;
+  config: { adminPassword: string; sessionSecret: string; encryptionKey: string; enrichmentEnabled: boolean };
 }
 
 /**
@@ -24,7 +27,7 @@ export interface AppDeps {
  * `/api/auth/*` login surface (PLAN.md — everything behind the login).
  */
 export function createApp(deps: AppDeps): Express {
-  const { db, engine, config } = deps;
+  const { db, engine, worker, config } = deps;
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '1mb' }));
@@ -48,7 +51,8 @@ export function createApp(deps: AppDeps): Express {
   // Everything else is behind the session guard.
   const guard = requireAuth(config.sessionSecret);
   app.use('/api/connections', guard, connectionsRouter(db, engine, config.encryptionKey));
-  app.use('/api/workflows', guard, workflowsRouter(db));
+  app.use('/api/workflows', guard, workflowsRouter(db, worker));
+  app.use('/api/settings', guard, settingsRouter(db, config.encryptionKey, config.enrichmentEnabled, worker));
 
   return app;
 }
