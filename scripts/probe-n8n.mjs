@@ -303,6 +303,46 @@ async function main() {
     record('11', 'add member to project', r.status >= 200 && r.status < 300, `POST /projects/{id}/users → ${r.status}`);
   }
 
+  // 19 — project MEMBERS roster with roles (S4 ownership-inference source).
+  // GET /api/v1/projects/{id}/users → [{ id, email, firstName, lastName, role }].
+  // Team-project inference picks the most-privileged member (project:admin >
+  // project:editor > project:viewer) as the advisory owner. Requires the instance
+  // licensed for project roles AND the key's `user:list` scope; without either it
+  // 401/403s — inference then degrades honestly to "couldn't infer" (rule 5).
+  {
+    const path = projectId ? `/projects/${projectId}/users` : '/projects/{id}/users';
+    const r = projectId
+      ? await client.api('GET', path)
+      : { status: 0, ok: false, json: { data: [] } };
+    const items = r.json?.data ?? [];
+    const first = items[0] ?? {};
+    const memberFields = ['id', 'email', 'firstName', 'lastName', 'role'];
+    const missing = memberFields.filter((f) => !(f in first));
+    const roles = [...new Set(items.map((m) => m.role).filter(Boolean))];
+    await save('n8n-19-project-members-shape.json', {
+      $probe: 'GET /api/v1/projects/{id}/users — project members + roles (Argus ownership-inference source, S4)',
+      capturedAt: now(), n8nVersion: N8N_VERSION,
+      request: { method: 'GET', path: `/api/v1/projects/${projectId || '{id}'}/users`, headers: { 'X-N8N-API-KEY': '«redacted»' } },
+      response: {
+        status: r.status, ok: r.ok,
+        count: items.length,
+        nextCursor: r.json?.nextCursor ?? null,
+        itemKeys: Object.keys(first).sort(),
+        sampleItem: first,
+        roles,
+      },
+      finding: [
+        `member fields ${missing.length === 0 ? 'ALL PRESENT' : `MISSING: ${missing.join(', ')}`} on member items;`,
+        'role is the per-project role slug (project:admin | project:editor | project:viewer).',
+        'inference picks the most-privileged member (admin > editor > viewer) as the advisory team owner.',
+        'Requires license feat:projectRole:admin + API key scope user:list; otherwise 401/403 →',
+        "inference degrades to \"couldn't infer\" (rule 5), never a fabricated owner.",
+      ].join(' '),
+    });
+    record('19', 'project members shape captured', r.status === 200 && missing.length === 0,
+      `GET /api/v1/projects/{id}/users → ${r.status}, ${items.length} member(s), roles [${roles.join(', ')}], fields ${missing.length === 0 ? 'present' : `MISSING ${missing.join(',')}`}`);
+  }
+
   // 12 — create a credential inside the project.
   {
     const body = { name: 'Probe Slack', type: 'slackApi', data: { accessToken: 'xoxb-probe-not-real' }, projectId };

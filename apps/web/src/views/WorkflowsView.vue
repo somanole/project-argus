@@ -8,6 +8,7 @@ import StateBadge from '../components/StateBadge.vue';
 import FactBadge from '../components/FactBadge.vue';
 import EnrichmentBadges from '../components/EnrichmentBadges.vue';
 import WorkflowHealthBadge from '../components/WorkflowHealthBadge.vue';
+import OwnerBadge from '../components/OwnerBadge.vue';
 import WorkflowDetailDrawer from '../components/WorkflowDetailDrawer.vue';
 import { instanceColor } from '../lib/instanceColor';
 import { relativeTime } from '../lib/time';
@@ -238,6 +239,7 @@ onUnmounted(() => {
             <th class="c-sys">Systems</th>
             <th class="c-trig">Triggers</th>
             <th class="c-health">Health</th>
+            <th class="c-owner">Owner</th>
             <th class="c-state">Status</th>
             <th class="c-upd">Updated</th>
           </tr>
@@ -274,6 +276,7 @@ onUnmounted(() => {
               </span>
             </td>
             <td class="c-health" data-label="Health"><WorkflowHealthBadge :health="w.health" /></td>
+            <td class="c-owner" data-label="Owner"><OwnerBadge :owner="w.owner" /></td>
             <td class="c-state" data-label="Status"><StateBadge :active="w.active" :is-archived="w.isArchived" /></td>
             <td class="c-upd muted" data-label="Updated">{{ relativeTime(w.updatedAt, now) }}</td>
           </tr>

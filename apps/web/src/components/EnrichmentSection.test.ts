@@ -48,7 +48,7 @@ describe('EnrichmentSection (rule 11)', () => {
       instanceId: 'a', instanceLabel: 'prod', id: 'w1', name: 'Alpha', active: true, isArchived: false,
       project: 'Revenue Ops', updatedAt: '2026-07-05T00:00:00.000Z', systems: [], triggers: [],
       mcpExposed: false, nodeCount: 3, understood: true, brokenRefCount: 0,
-      enrichment: enr({ criticality: 'critical', corrected: true }), health: null,
+      enrichment: enr({ criticality: 'critical', corrected: true }), health: null, owner: null,
     };
     const updated = { workflow, facts: null, deepLink: '' };
     const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => updated }));

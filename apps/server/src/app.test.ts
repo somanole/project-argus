@@ -13,11 +13,18 @@ vi.mock('./n8n/client.js', () => ({
         versionId: 'v1', shared: [{ role: 'workflow:owner', projectId: 'p1' }],
       },
     ],
-    listProjects: async () => [{ id: 'p1', name: 'Revenue Ops', type: 'team' }],
+    listProjects: async () => [{ id: 'p1', name: 'Revenue Ops', type: 'team', creatorId: 'u1' }],
     // One success + one error for w1 → a computable (degraded) health.
     listExecutions: async () => [
       { id: '2', status: 'error', workflowId: 'w1', startedAt: '2026-07-04T01:00:00.000Z', stoppedAt: '2026-07-04T01:00:01.000Z', finished: false },
       { id: '1', status: 'success', workflowId: 'w1', startedAt: '2026-07-04T00:00:00.000Z', stoppedAt: '2026-07-04T00:00:01.000Z', finished: true },
+    ],
+    // S4 ownership-inference source: p1's most-privileged member is Nathan (admin).
+    listProjectMembers: async () => [
+      { id: 'u1', email: 'nathan@n8n.io', firstName: 'Nathan', lastName: 'Owner', role: 'project:admin' },
+    ],
+    listUsers: async () => [
+      { id: 'u1', email: 'nathan@n8n.io', firstName: 'Nathan', lastName: 'Owner', role: 'global:owner' },
     ],
   }),
   statusForError: () => 'unreachable',
@@ -163,5 +170,56 @@ describe('Argus API', () => {
     const id = reg.body.connection.id as string;
     const res = await agent.put(`/api/workflows/${id}/w1/enrichment/correction`).send({ criticality: 'critical' });
     expect(res.status).toBe(404);
+  });
+
+  it('S4: inference rides on the catalog; assign overrides it and lands in the audit timeline', async () => {
+    const agent = request.agent(app);
+    await agent.post('/api/auth/login').send({ password: 'pw', name: 'Sam Rivers', email: 'sam@acme.example' });
+    const reg = await agent.post('/api/connections').send({ label: 'prod', baseUrl: 'http://localhost:5678', apiKey: SECRET_KEY });
+    const id = reg.body.connection.id as string;
+
+    // The workflow's advisory owner is inferred from project membership (Nathan, admin).
+    const before = await agent.get('/api/workflows');
+    expect(before.body.workflows[0].owner).toMatchObject({ status: 'inferred', owner: { email: 'nathan@n8n.io' }, memberRole: 'project:admin' });
+
+    // The picker offers the instance's known n8n users.
+    const users = await agent.get(`/api/ownership/${id}/assignable-users`);
+    expect(users.body).toMatchObject({ available: true });
+    expect(users.body.users[0]).toMatchObject({ email: 'nathan@n8n.io' });
+
+    // Assign an explicit owner — it overrides inference.
+    const assign = await agent.put(`/api/ownership/${id}/w1/owner`).send({ ownerEmail: 'sam@acme.example', ownerName: 'Sam Rivers', reason: 'owns billing' });
+    expect(assign.status).toBe(200);
+    expect(assign.body).toMatchObject({ status: 'assigned', owner: { email: 'sam@acme.example' } });
+
+    const after = await agent.get('/api/workflows');
+    expect(after.body.workflows[0].owner).toMatchObject({ status: 'assigned', owner: { email: 'sam@acme.example' } });
+
+    // The assignment is on the self-audit timeline with who + before→after.
+    const audit = await agent.get('/api/ownership/audit');
+    const entry = audit.body.entries.find((e: { action: string }) => e.action === 'ownership.assign');
+    expect(entry).toBeTruthy();
+    expect(entry).toMatchObject({ actorEmail: 'sam@acme.example', entityId: `${id}/w1` });
+    expect(entry.detail.after.ownerEmail).toBe('sam@acme.example');
+
+    // CSV export is attachment + contains the entry.
+    const csv = await agent.get('/api/ownership/audit/export.csv');
+    expect(csv.headers['content-type']).toContain('text/csv');
+    expect(csv.headers['content-disposition']).toContain('attachment');
+    expect(csv.text).toContain('ownership.assign');
+  });
+
+  it('S4: governance gaps endpoint returns the four gap groups', async () => {
+    const agent = request.agent(app);
+    await agent.post('/api/auth/login').send({ password: 'pw', name: 'Sam', email: 'sam@acme.example' });
+    await agent.post('/api/connections').send({ label: 'prod', baseUrl: 'http://localhost:5678', apiKey: SECRET_KEY });
+    const gaps = await agent.get('/api/ownership/gaps');
+    expect(gaps.status).toBe(200);
+    expect(gaps.body).toMatchObject({
+      unowned: expect.any(Array),
+      singleOwnerCritical: expect.any(Array),
+      personalSpaceCritical: expect.any(Array),
+      noBackupOwner: expect.any(Array),
+    });
   });
 });

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { workflowFactsSchema, coverageReportSchema } from './facts.js';
 import { workflowEnrichmentSchema } from './enrichment.js';
 import { workflowHealthSchema } from './workflow-health.js';
+import { workflowOwnerSchema } from './ownership.js';
 
 /**
  * The estate-wide workflow inventory contract (server ↔ web). One flat list
@@ -41,6 +42,9 @@ export const workflowListItemSchema = z.object({
   // S3 health layer (null when health hasn't been computed yet for this workflow):
   /** Argus-computed execution health with honest status + freshness (poll-fresh). */
   health: workflowHealthSchema.nullable(),
+  // S4 ownership layer (null before ownership has ever been resolved for this workflow):
+  /** The resolved owner — assigned (authoritative) over inferred (advisory) over unowned. */
+  owner: workflowOwnerSchema.nullable(),
 });
 export type WorkflowListItem = z.infer<typeof workflowListItemSchema>;
 

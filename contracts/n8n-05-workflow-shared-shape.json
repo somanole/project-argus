@@ -1,6 +1,6 @@
 {
   "$probe": "GET /api/v1/workflows/{id} — live shape incl. the `shared` array (workflow→project+role)",
-  "capturedAt": "2026-07-06T19:00:26.396Z",
+  "capturedAt": "2026-07-07T13:40:49.895Z",
   "n8nVersion": "2.29.0",
   "request": {
     "create": {
@@ -27,16 +27,16 @@
     },
     "fetch": {
       "method": "GET",
-      "path": "/api/v1/workflows/gU18fDqdFRmCGuxu"
+      "path": "/api/v1/workflows/RElEfcFuYoWCbvcu"
     }
   },
   "response": {
     "status": 200,
     "ok": true,
     "body": {
-      "updatedAt": "2026-07-06T19:00:26.389Z",
-      "createdAt": "2026-07-06T19:00:26.389Z",
-      "id": "gU18fDqdFRmCGuxu",
+      "updatedAt": "2026-07-07T13:40:49.887Z",
+      "createdAt": "2026-07-07T13:40:49.887Z",
+      "id": "RElEfcFuYoWCbvcu",
       "name": "Argus probe workflow",
       "description": null,
       "active": false,
@@ -60,28 +60,28 @@
       "meta": null,
       "nodeGroups": [],
       "pinData": null,
-      "versionId": "635c8397-832c-415f-9bb3-0fabbc5fec8b",
+      "versionId": "a87430de-95c4-45e0-97b3-9795af9108a5",
       "activeVersionId": null,
       "versionCounter": 1,
       "triggerCount": 0,
       "sourceWorkflowId": null,
       "shared": [
         {
-          "updatedAt": "2026-07-06T19:00:26.389Z",
-          "createdAt": "2026-07-06T19:00:26.389Z",
+          "updatedAt": "2026-07-07T13:40:49.888Z",
+          "createdAt": "2026-07-07T13:40:49.888Z",
           "role": "workflow:owner",
-          "workflowId": "gU18fDqdFRmCGuxu",
-          "projectId": "C4skLqJKw0AxY3n8",
+          "workflowId": "RElEfcFuYoWCbvcu",
+          "projectId": "YiuGDedeChPmcPi8",
           "project": {
-            "updatedAt": "2026-07-06T19:00:26.281Z",
-            "createdAt": "2026-07-06T19:00:26.281Z",
-            "id": "C4skLqJKw0AxY3n8",
+            "updatedAt": "2026-07-07T13:40:49.772Z",
+            "createdAt": "2026-07-07T13:40:49.772Z",
+            "id": "YiuGDedeChPmcPi8",
             "name": "Nathan Owner <nathan@n8n.io>",
             "type": "personal",
             "icon": null,
             "description": null,
             "customTelemetryTags": [],
-            "creatorId": "bbfff7c4-3ae8-4d4a-844a-35855f9d3ce3"
+            "creatorId": "8582558e-09a3-4e27-98fd-8682fdbe3f2a"
           }
         }
       ],

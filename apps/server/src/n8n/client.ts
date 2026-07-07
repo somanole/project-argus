@@ -1,9 +1,13 @@
 import {
   n8nWorkflowListItemSchema,
   n8nProjectSchema,
+  n8nProjectMemberSchema,
+  n8nUserSchema,
   n8nExecutionSchema,
   type N8nWorkflowListItem,
   type N8nProject,
+  type N8nProjectMember,
+  type N8nUser,
   type N8nExecution,
 } from '@argus/shared';
 import type { ConnectionStatus } from '@argus/shared';
@@ -62,10 +66,12 @@ export function createN8nClient(opts: N8nClientOptions) {
   async function paginate<T>(pathBase: string, parseItem: (v: unknown) => T | null): Promise<T[]> {
     const out: T[] = [];
     let cursor: string | undefined;
+    // Some paths already carry a query string (e.g. /users?includeRole=true).
+    const sep = pathBase.includes('?') ? '&' : '?';
     do {
       const q = cursor
-        ? `?limit=${PAGE_LIMIT}&cursor=${encodeURIComponent(cursor)}`
-        : `?limit=${PAGE_LIMIT}`;
+        ? `${sep}limit=${PAGE_LIMIT}&cursor=${encodeURIComponent(cursor)}`
+        : `${sep}limit=${PAGE_LIMIT}`;
       const { status, json } = await get(`${pathBase}${q}`);
       if (status !== 200) throw new HttpError(status);
       const body = json as { data?: unknown[]; nextCursor?: unknown } | undefined;
@@ -89,6 +95,31 @@ export function createN8nClient(opts: N8nClientOptions) {
     async listProjects(): Promise<N8nProject[]> {
       return paginate('/projects', (raw) => {
         const r = n8nProjectSchema.safeParse(raw);
+        return r.success ? r.data : null;
+      });
+    },
+
+    /**
+     * Members of ONE team project, with their per-project role (S4 ownership-inference
+     * source, contracts/n8n-19). Throws HttpError on a non-200 — notably 401/403 when
+     * the instance isn't licensed for project roles or the key lacks `user:list` — so
+     * inference degrades honestly to "couldn't infer" (rule 5), never a fabricated owner.
+     */
+    async listProjectMembers(projectId: string): Promise<N8nProjectMember[]> {
+      return paginate(`/projects/${encodeURIComponent(projectId)}/users`, (raw) => {
+        const r = n8nProjectMemberSchema.safeParse(raw);
+        return r.success ? r.data : null;
+      });
+    },
+
+    /**
+     * The instance's users with their GLOBAL role (contracts/n8n-04) — resolves a
+     * personal project's creator to a person and populates the assign-owner picker.
+     * Throws HttpError on a non-200 (e.g. a key without `user:list`).
+     */
+    async listUsers(): Promise<N8nUser[]> {
+      return paginate('/users?includeRole=true', (raw) => {
+        const r = n8nUserSchema.safeParse(raw);
         return r.success ? r.data : null;
       });
     },

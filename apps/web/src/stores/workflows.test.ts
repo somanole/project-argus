@@ -20,6 +20,7 @@ function item(id: string, instanceId: string, instanceLabel: string) {
     brokenRefCount: 0,
     enrichment: null,
     health: null,
+    owner: null,
   };
 }
 

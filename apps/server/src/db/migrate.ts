@@ -188,6 +188,57 @@ const MIGRATIONS: ((db: Database.Database) => void)[] = [
       CREATE INDEX idx_workflow_health_status ON workflow_health (status);
     `);
   },
+
+  // v7 — S4: ownership & accountability. Two tables, two provenances kept apart:
+  //
+  //  - workflow_ownership is DURABLE and holds EXPLICIT HUMAN ASSIGNMENTS. Like
+  //    workflow_enrichments it has NO foreign key to `workflows`, so a full inventory
+  //    resync (replaceInstanceWorkflows delete+reinsert) can NEVER touch it — that is
+  //    guarantee (i): a resync does not wipe ownership. It cascades only on connection
+  //    delete. Every mutation of this table goes through the sacred audit DAO
+  //    (withAudit) — the mutation + its append-only audit_log entry commit together —
+  //    which is guarantee (ii): no ownership change without an audit entry.
+  //    owner_email is nullable (a backup-only row is legal mid-lifecycle).
+  //
+  //  - workflow_inferred_owner is a DISPOSABLE cache: the advisory owner Argus infers
+  //    from n8n project membership, recomputed every sync (like workflow_health) and
+  //    NEVER audited. owner_email NULL = "couldn't infer" (honest degradation, rule 5).
+  //    An inference must never outlive the n8n state that justified it, so it is
+  //    rebuilt, not preserved. It never overrides an assignment (read-path COALESCE).
+  (db) => {
+    db.exec(`
+      CREATE TABLE workflow_ownership (
+        instance_id        TEXT NOT NULL,
+        workflow_id        TEXT NOT NULL,
+        owner_email        TEXT,              -- nullable: a backup-only row is legal
+        owner_name         TEXT,
+        backup_owner_email TEXT,
+        backup_owner_name  TEXT,
+        reason             TEXT,
+        assigned_by_name   TEXT NOT NULL,     -- who assigned (also in audit_log; denormalized for reads)
+        assigned_by_email  TEXT NOT NULL,
+        assigned_at        TEXT NOT NULL,
+        updated_at         TEXT NOT NULL,
+        PRIMARY KEY (instance_id, workflow_id),
+        FOREIGN KEY (instance_id) REFERENCES connections(id) ON DELETE CASCADE
+      );
+      CREATE INDEX workflow_ownership_by_owner    ON workflow_ownership(owner_email);
+      CREATE INDEX workflow_ownership_by_instance ON workflow_ownership(instance_id);
+
+      CREATE TABLE workflow_inferred_owner (
+        instance_id  TEXT NOT NULL,
+        workflow_id  TEXT NOT NULL,
+        owner_email  TEXT,                    -- NULL = couldn't infer (rule 5)
+        owner_name   TEXT,
+        source       TEXT NOT NULL,           -- 'personal-project' | 'project-member' | 'unavailable'
+        member_role  TEXT,                    -- winning project role when source='project-member'
+        reason       TEXT,                    -- honest reason when owner_email is NULL
+        computed_at  TEXT NOT NULL,
+        PRIMARY KEY (instance_id, workflow_id),
+        FOREIGN KEY (instance_id) REFERENCES connections(id) ON DELETE CASCADE
+      );
+    `);
+  },
 ];
 
 export function migrate(db: Database.Database): void {

@@ -35,11 +35,12 @@ const mkHealth = (status, over = {}) => ({
   status, failureRate: null, runsInWindow: 0, failuresInWindow: 0, lastRunAt: null, lastStatus: null,
   avgDurationMs: null, windowHours: 336, computedAt: '2026-07-06T00:00:00.000Z', unavailableReason: null, ...over,
 });
+const inferredOwner = { status: 'inferred', owner: { email: 'sam@acme.example', name: 'Sam Rivers' }, backupOwner: null, reason: null, source: 'project-member', memberRole: 'project:admin', assignedBy: null, assignedAt: null };
 const item = (id, name, systems, triggers, over = {}) => ({
   instanceId: 'prod', instanceLabel: 'prod', id, name, active: true, isArchived: false,
   project: 'Revenue Ops', updatedAt: '2026-07-05T00:00:00.000Z',
   systems, triggers, mcpExposed: false, nodeCount: 4, understood: true, brokenRefCount: 0, enrichment: null,
-  health: mkHealth('healthy', { failureRate: 0, runsInWindow: 5 }), ...over,
+  health: mkHealth('healthy', { failureRate: 0, runsInWindow: 5 }), owner: inferredOwner, ...over,
 });
 const WORKFLOWS = [
   item('w1', 'Salesforce CRM Sync — nightly enrichment', ['Salesforce', 'Postgres'], ['n8n-nodes-base.scheduleTrigger'], { mcpExposed: true, enrichment, health: mkHealth('failing', { failureRate: 1, runsInWindow: 4, failuresInWindow: 4, lastRunAt: '2026-07-05T00:00:00.000Z', lastStatus: 'error' }) }),
@@ -63,6 +64,22 @@ const workflowsBody = {
   generatedAt: '2026-07-05T00:00:00.000Z',
 };
 const coverageBody = { total: 3, understood: 2, understoodPct: 66.7, gapsByKind: {}, unknownNodeTypes: [], unresolvedRefTotal: 0, dynamicRefTotal: 0, brokenRefTotal: 1, perInstance: [] };
+const gapWf = (id, name, over = {}) => ({ instanceId: 'prod', instanceLabel: 'prod', workflowId: id, name, criticality: 'critical', criticalityReason: 'handles money', ...over });
+const gapsBody = {
+  unowned: [{ ...gapWf('u1', 'Orphan Report'), inferred: null }],
+  singleOwnerCritical: [{ owner: { email: 'sam@acme.example', name: 'Sam Rivers' }, workflows: [gapWf('w1', 'Daily Stripe Reconciliation'), gapWf('w2', 'Refund Processor', { instanceId: 'staging', instanceLabel: 'staging' })], crossInstance: true }],
+  personalSpaceCritical: [{ ...gapWf('p1', 'Personal Ops Hack'), person: { email: 'diana@acme.example', name: 'Diana' } }],
+  noBackupOwner: [{ ...gapWf('nb1', 'Invoice Dispatch'), owner: { email: 'sam@acme.example', name: 'Sam Rivers' } }],
+  generatedAt: '2026-07-05T00:00:00.000Z',
+};
+const auditBody = {
+  entries: [
+    { id: 2, ts: '2026-07-06T10:00:00.000Z', actorName: 'Ops Admin', actorEmail: 'ops@acme.example', action: 'ownership.assign', entityType: 'workflow_ownership', entityId: 'prod/w1', detail: { after: { ownerEmail: 'sam@acme.example' } } },
+    { id: 1, ts: '2026-07-06T09:00:00.000Z', actorName: 'Ops Admin', actorEmail: 'ops@acme.example', action: 'connection.register', entityType: 'connection', entityId: 'prod', detail: null },
+  ],
+  actions: ['connection.register', 'ownership.assign'],
+  generatedAt: '2026-07-05T00:00:00.000Z',
+};
 const connectionsBody = { connections: [{ id: 'prod', label: 'prod', baseUrl: 'http://localhost:5678', webhookHost: null, createdAt: '2026-07-05T00:00:00.000Z', updatedAt: '2026-07-05T00:00:00.000Z', health: { status: 'ok', lastSyncedAt: '2026-07-05T00:00:00.000Z', lastError: null, workflowCount: 3 } }] };
 const detailBody = {
   workflow: WORKFLOWS[0],
@@ -99,6 +116,9 @@ function mockApi(route) {
   if (p.endsWith('/api/workflows/coverage')) return send(coverageBody);
   if (p.endsWith('/api/workflows/enrichment-progress')) return send({ enabled: true, lastEnrichedAt: '2026-07-06T00:00:00.000Z', total: 3, analyzed: 3, stub: 0, stale: 0, pending: 0 });
   if (p.endsWith('/api/workflows/failing')) return send(failingBody);
+  if (p.endsWith('/api/ownership/gaps')) return send(gapsBody);
+  if (p.endsWith('/api/ownership/audit')) return send(auditBody);
+  if (/\/api\/ownership\/[^/]+\/assignable-users$/.test(p)) return send({ users: [{ email: 'sam@acme.example', name: 'Sam Rivers', role: 'global:member' }], available: true, reason: null });
   if (/\/api\/workflows\/[^/]+\/[^/]+\/executions$/.test(p)) return send(executionsBody);
   if (/\/api\/workflows\/[^/]+\/[^/]+$/.test(p)) return send(detailBody);
   if (p.endsWith('/api/workflows')) return send(workflowsBody);
@@ -142,6 +162,7 @@ const VIEWS = [
   { name: 'Login', path: '/login', mock: mockApiUnauth, waitFor: 'form.panel', key: 'form.panel' },
   { name: 'Catalog list', path: '/workflows', mock: mockApi, waitFor: '.wf tbody tr', key: '.filterbar' },
   { name: 'Health view', path: '/health', mock: mockApi, waitFor: '[data-testid="health-failing-list"]', key: '[data-testid="health-summary"]' },
+  { name: 'Governance view', path: '/governance', mock: mockApi, waitFor: '[data-testid="governance-gaps"]', key: '[data-testid="governance-audit-timeline"]' },
   { name: 'Detail drawer', path: '/workflows', mock: mockApi, waitFor: '.wf tbody tr', key: '.drawer',
     action: async (page) => { await page.click('.wf tbody tr'); await page.waitForSelector('.drawer', { timeout: 4000 }); } },
   { name: 'Settings', path: '/settings', mock: mockApi, waitFor: '[data-testid="settings-view"]', key: '.card' },

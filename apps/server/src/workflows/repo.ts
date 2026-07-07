@@ -5,12 +5,14 @@ import type {
   WorkflowEnrichment,
   WorkflowHealth,
   WorkflowHealthStatus,
+  WorkflowOwner,
   EnrichmentOutput,
   EnrichmentCategory,
   Criticality,
 } from '@argus/shared';
 import type { CoverageEntry } from '../analyzer/index.js';
 import type { EnrichmentInput } from '../enrichment/allowlist.js';
+import { buildResolvedOwner } from '../ownership/repo.js';
 
 /**
  * Data access for the disposable `workflows` cache + its S1b facts (facts_json and
@@ -89,6 +91,21 @@ interface WorkflowRow {
   health_window_hours: number | null;
   health_unavailable_reason: string | null;
   health_computed_at: string | null;
+  // S4 ownership (LEFT JOIN workflow_ownership o; all null when unassigned):
+  own_owner_email: string | null;
+  own_owner_name: string | null;
+  own_backup_email: string | null;
+  own_backup_name: string | null;
+  own_reason: string | null;
+  own_assigned_by_name: string | null;
+  own_assigned_by_email: string | null;
+  own_assigned_at: string | null;
+  // S4 inferred owner (LEFT JOIN workflow_inferred_owner io; all null before inference runs):
+  inf_owner_email: string | null;
+  inf_owner_name: string | null;
+  inf_source: string | null;
+  inf_member_role: string | null;
+  inf_reason: string | null;
 }
 
 // group_concat separator unlikely to appear in a system/type string.
@@ -195,7 +212,36 @@ function toListItem(r: WorkflowRow): WorkflowListItem {
     brokenRefCount: r.broken_ref_count ?? 0,
     enrichment: mapEnrichment(r),
     health: mapHealth(r),
+    owner: mapOwner(r),
   };
+}
+
+/** Resolve the served owner from the joined row (assigned over inferred over unowned). */
+function mapOwner(r: WorkflowRow): WorkflowOwner {
+  const a =
+    r.own_assigned_at != null
+      ? {
+          owner_email: r.own_owner_email,
+          owner_name: r.own_owner_name,
+          backup_owner_email: r.own_backup_email,
+          backup_owner_name: r.own_backup_name,
+          reason: r.own_reason,
+          assigned_by_name: r.own_assigned_by_name,
+          assigned_by_email: r.own_assigned_by_email,
+          assigned_at: r.own_assigned_at,
+        }
+      : null;
+  const i =
+    r.inf_source != null
+      ? {
+          owner_email: r.inf_owner_email,
+          owner_name: r.inf_owner_name,
+          source: r.inf_source,
+          member_role: r.inf_member_role,
+          reason: r.inf_reason,
+        }
+      : null;
+  return buildResolvedOwner(a, i);
 }
 
 /** Build the served health from the joined row; null when never computed. */
@@ -271,11 +317,19 @@ const LIST_SELECT = `
          h.status AS health_status, h.runs_in_window AS health_runs, h.failures_in_window AS health_failures,
          h.failure_rate AS health_failure_rate, h.last_run_at AS health_last_run_at, h.last_status AS health_last_status,
          h.avg_duration_ms AS health_avg_duration_ms, h.window_hours AS health_window_hours,
-         h.unavailable_reason AS health_unavailable_reason, h.computed_at AS health_computed_at
+         h.unavailable_reason AS health_unavailable_reason, h.computed_at AS health_computed_at,
+         o.owner_email AS own_owner_email, o.owner_name AS own_owner_name,
+         o.backup_owner_email AS own_backup_email, o.backup_owner_name AS own_backup_name,
+         o.reason AS own_reason, o.assigned_by_name AS own_assigned_by_name,
+         o.assigned_by_email AS own_assigned_by_email, o.assigned_at AS own_assigned_at,
+         io.owner_email AS inf_owner_email, io.owner_name AS inf_owner_name,
+         io.source AS inf_source, io.member_role AS inf_member_role, io.reason AS inf_reason
     FROM workflows w
     JOIN connections c ON c.id = w.instance_id
     LEFT JOIN workflow_enrichments e ON e.instance_id = w.instance_id AND e.workflow_id = w.id
-    LEFT JOIN workflow_health h ON h.instance_id = w.instance_id AND h.workflow_id = w.id`;
+    LEFT JOIN workflow_health h ON h.instance_id = w.instance_id AND h.workflow_id = w.id
+    LEFT JOIN workflow_ownership o ON o.instance_id = w.instance_id AND o.workflow_id = w.id
+    LEFT JOIN workflow_inferred_owner io ON io.instance_id = w.instance_id AND io.workflow_id = w.id`;
 
 /**
  * The estate-wide inventory with S1b facts, filtered server-side. `instanceId` is a

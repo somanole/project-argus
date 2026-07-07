@@ -14,6 +14,7 @@ const item = (over: Record<string, unknown>) => ({
   enrichment: { status: 'analyzed', provider: 'openai', model: 'm', enrichedAt: '2026-07-05T00:00:00.000Z', corrected: false,
     summary: 's', description: 'd', category: 'revenue-ops', criticality: 'critical', criticalityReason: 'money', riskFlags: [], suggestedOwnerRationale: null, businessContext: null },
   health: { status: 'failing', failureRate: 1, runsInWindow: 4, failuresInWindow: 4, lastRunAt: '2026-07-05T00:00:00.000Z', lastStatus: 'error', avgDurationMs: 5, windowHours: 336, computedAt: '2026-07-05T00:00:00.000Z', unavailableReason: null },
+  owner: null,
   ...over,
 });
 
@@ -58,6 +59,8 @@ describe('Health view — UI-presence (rule 11)', () => {
     // Poll-fresh indicator present (healthy connections → "Polling").
     expect(tid('health-freshness').exists()).toBe(true);
     expect(tid('health-freshness').text()).toContain('Polling');
+    // S4: a failing workflow shows its owner (start of the incident view).
+    expect(tid('incident-owner').exists()).toBe(true);
     w.unmount();
   });
 

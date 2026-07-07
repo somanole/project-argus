@@ -15,7 +15,7 @@ const workflowsBody = {
       instanceId: 'a', instanceLabel: 'prod', id: 'w1', name: 'Alpha', active: true, isArchived: false,
       project: 'Revenue Ops', updatedAt: '2026-07-05T00:00:00.000Z',
       systems: ['Salesforce'], triggers: ['n8n-nodes-base.webhook'], mcpExposed: true, nodeCount: 3, understood: true, brokenRefCount: 0,
-      enrichment: null, health: null,
+      enrichment: null, health: null, owner: null,
     },
   ],
   facets: {
@@ -71,6 +71,8 @@ describe('Catalog chrome — UI-presence (rule 11)', () => {
     expect(tid('synced-indicator').text()).toContain('synced');
     // Refresh control.
     expect(tid('refresh-button').exists()).toBe(true);
+    // S4: the owner column renders an owner badge per row.
+    expect(tid('owner-badge').exists()).toBe(true);
 
     w.unmount();
   });

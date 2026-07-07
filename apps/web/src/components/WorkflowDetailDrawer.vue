@@ -8,6 +8,7 @@ import StateBadge from './StateBadge.vue';
 import FactBadge from './FactBadge.vue';
 import WorkflowHealthBadge from './WorkflowHealthBadge.vue';
 import EnrichmentSection from './EnrichmentSection.vue';
+import OwnershipSection from './OwnershipSection.vue';
 
 // The detail drawer: fetches the selected workflow's full facts + direct deps +
 // n8n deep-link. Everything is deterministic ground truth; unknowns say so.
@@ -124,6 +125,14 @@ const onKeydown = (e: KeyboardEvent) => {
           :instance-id="selected.instanceId"
           :workflow-id="selected.id"
           @updated="detail = $event"
+        />
+
+        <!-- S4 ownership: who is accountable + the audited assign/reassign/remove controls. -->
+        <OwnershipSection
+          :instance-id="selected.instanceId"
+          :workflow-id="selected.id"
+          :owner="detail.workflow.owner"
+          @updated="detail.workflow.owner = $event"
         />
 
         <!-- S3 health: poll-fresh execution status + the numbers behind it. -->

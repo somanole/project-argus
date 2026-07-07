@@ -1,0 +1,41 @@
+{
+  "$probe": "GET /api/v1/projects/{id}/users — project members + roles (Argus ownership-inference source, S4)",
+  "capturedAt": "2026-07-07T13:40:49.929Z",
+  "n8nVersion": "2.29.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/projects/Kz82z0aY5CZ3OCMb/users",
+    "headers": {
+      "X-N8N-API-KEY": "«redacted»"
+    }
+  },
+  "response": {
+    "status": 200,
+    "ok": true,
+    "count": 2,
+    "nextCursor": null,
+    "itemKeys": [
+      "createdAt",
+      "email",
+      "firstName",
+      "id",
+      "lastName",
+      "role",
+      "updatedAt"
+    ],
+    "sampleItem": {
+      "id": "8582558e-09a3-4e27-98fd-8682fdbe3f2a",
+      "email": "nathan@n8n.io",
+      "firstName": "Nathan",
+      "lastName": "Owner",
+      "createdAt": "2026-07-07T13:40:49.715Z",
+      "updatedAt": "2026-07-07T13:40:49.000Z",
+      "role": "project:admin"
+    },
+    "roles": [
+      "project:admin",
+      "project:editor"
+    ]
+  },
+  "finding": "member fields ALL PRESENT on member items; role is the per-project role slug (project:admin | project:editor | project:viewer). inference picks the most-privileged member (admin > editor > viewer) as the advisory team owner. Requires license feat:projectRole:admin + API key scope user:list; otherwise 401/403 → inference degrades to \"couldn't infer\" (rule 5), never a fabricated owner."
+}

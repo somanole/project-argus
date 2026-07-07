@@ -1,11 +1,13 @@
 import type Database from 'better-sqlite3';
-import type { ConnectionHealth, N8nWorkflowListItem, N8nProject, N8nExecution } from '@argus/shared';
+import type { ConnectionHealth, N8nWorkflowListItem, N8nProject, N8nProjectMember, N8nUser, N8nExecution } from '@argus/shared';
 import { listConnectionRows, getConnectionRow, decryptApiKey, type ConnectionRow } from '../connections/repo.js';
 import { replaceInstanceWorkflows, countByInstance, type CacheWorkflow } from '../workflows/repo.js';
 import { createN8nClient, statusForError, reason, HttpError, DEFAULT_HEALTH_WINDOW_HOURS } from '../n8n/client.js';
 import { analyzeInstance } from '../analyzer/index.js';
 import { buildEnrichmentInput, hashEnrichmentInput } from '../enrichment/index.js';
 import { syncHealth } from '../health/index.js';
+import { inferOwnership, type InferenceReader } from '../ownership/inference.js';
+import { replaceInferredOwners } from '../ownership/repo.js';
 
 /**
  * The freshness engine. Every `pollIntervalMs` it re-lists each connection's
@@ -21,6 +23,9 @@ export interface N8nReader {
   listProjects(): Promise<N8nProject[]>;
   /** S3 health source — executions within the retention window. */
   listExecutions(opts: { windowMs: number; now?: number }): Promise<N8nExecution[]>;
+  /** S4 ownership-inference source (optional — inference simply skips when absent). */
+  listProjectMembers?(projectId: string): Promise<N8nProjectMember[]>;
+  listUsers?(): Promise<N8nUser[]>;
 }
 
 /** Turn an executions-fetch error into an honest reason for the `unknown` health state. */
@@ -125,6 +130,22 @@ export function createSyncEngine(
         });
       } catch (healthErr) {
         console.warn(`[argus] health sync failed for "${row.label}": ${(healthErr as Error).message}`);
+      }
+      // S4 ownership inference: recompute the advisory owner from project membership on
+      // the SAME tick (poll-fresh, like health). Membership/roles only. Writes ONLY the
+      // disposable inferred cache — never workflow_ownership — so assignments (and their
+      // resync-safety) are untouched. Degrades honestly and never breaks the sync (rule 5).
+      if (typeof client.listProjectMembers === 'function' && typeof client.listUsers === 'function') {
+        try {
+          const inferred = await inferOwnership(
+            client as InferenceReader,
+            projects,
+            normalized.map((w) => ({ id: w.id, projectId: w.projectId })),
+          );
+          replaceInferredOwners(db, row.id, inferred, new Date().toISOString());
+        } catch (infErr) {
+          console.warn(`[argus] ownership inference failed for "${row.label}": ${(infErr as Error).message}`);
+        }
       }
       // Kick the enrichment worker (if any). Never let its failure break the sync.
       try {

@@ -6,6 +6,7 @@ import { authRouter } from './auth/routes.js';
 import { requireAuth } from './auth/middleware.js';
 import { connectionsRouter } from './routes/connections.js';
 import { workflowsRouter } from './routes/workflows.js';
+import { ownershipRouter } from './routes/ownership.js';
 import { settingsRouter } from './routes/settings.js';
 import type { SyncEngine } from './sync/engine.js';
 import type { EnrichmentWorker } from './enrichment/index.js';
@@ -52,6 +53,7 @@ export function createApp(deps: AppDeps): Express {
   const guard = requireAuth(config.sessionSecret);
   app.use('/api/connections', guard, connectionsRouter(db, engine, config.encryptionKey));
   app.use('/api/workflows', guard, workflowsRouter(db, worker, config.encryptionKey));
+  app.use('/api/ownership', guard, ownershipRouter(db, config.encryptionKey));
   app.use('/api/settings', guard, settingsRouter(db, config.encryptionKey, config.enrichmentEnabled, worker));
 
   return app;

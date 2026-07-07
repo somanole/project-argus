@@ -97,13 +97,48 @@ export const n8nExecutionSchema = z.object({
 });
 export type N8nExecution = z.infer<typeof n8nExecutionSchema>;
 
-/** A project as it appears in GET /api/v1/projects. */
+/**
+ * A project as it appears in GET /api/v1/projects (contracts/n8n-03). `type` is
+ * `personal` | `team`; a personal project's `name` embeds the human ("First Last
+ * <email>"); `creatorId` links to the user roster — both used for S4 ownership
+ * inference. `creatorId` is optional so a shape drift never drops a project.
+ */
 export const n8nProjectSchema = z.object({
   id: z.string(),
   name: z.string(),
   type: z.string(),
+  creatorId: z.string().nullish(),
 });
 export type N8nProject = z.infer<typeof n8nProjectSchema>;
+
+/**
+ * One member of a team project — GET /api/v1/projects/{id}/users (contracts/n8n-19).
+ * `role` is the per-project role slug (project:admin | project:editor | project:viewer),
+ * the S4 team-inference signal. Requires the instance licensed for project roles + the
+ * key's `user:list` scope; otherwise the endpoint 401/403s and inference degrades honestly.
+ */
+export const n8nProjectMemberSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  firstName: z.string().nullish(),
+  lastName: z.string().nullish(),
+  role: z.string().nullable(),
+});
+export type N8nProjectMember = z.infer<typeof n8nProjectMemberSchema>;
+
+/**
+ * One user from GET /api/v1/users?includeRole=true (contracts/n8n-04) — resolves a
+ * personal project's `creatorId` to a person and populates the assign-owner picker.
+ * `role` here is the GLOBAL role (global:admin/member/owner/…), not a project role.
+ */
+export const n8nUserSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  firstName: z.string().nullish(),
+  lastName: z.string().nullish(),
+  role: z.string().nullish(),
+});
+export type N8nUser = z.infer<typeof n8nUserSchema>;
 
 /** The cursor-paginated envelope both list endpoints share. */
 export const n8nWorkflowListResponseSchema = z.object({
@@ -113,5 +148,15 @@ export const n8nWorkflowListResponseSchema = z.object({
 
 export const n8nProjectListResponseSchema = z.object({
   data: z.array(n8nProjectSchema),
+  nextCursor: z.string().nullish(),
+});
+
+export const n8nProjectMemberListResponseSchema = z.object({
+  data: z.array(n8nProjectMemberSchema),
+  nextCursor: z.string().nullish(),
+});
+
+export const n8nUserListResponseSchema = z.object({
+  data: z.array(n8nUserSchema),
   nextCursor: z.string().nullish(),
 });

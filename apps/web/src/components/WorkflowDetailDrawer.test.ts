@@ -13,6 +13,7 @@ const item: WorkflowListItem = {
   systems: [], triggers: [], mcpExposed: false, nodeCount: 2, understood: true, brokenRefCount: 0,
   enrichment: null,
   health: { status: 'failing', failureRate: 1, runsInWindow: 4, failuresInWindow: 4, lastRunAt: '2026-07-05T00:00:00.000Z', lastStatus: 'error', avgDurationMs: 5, windowHours: 336, computedAt: '2026-07-05T00:00:00.000Z', unavailableReason: null },
+  owner: null,
 };
 const detailBody = { workflow: item, facts: null, deepLink: 'http://localhost:5678/workflow/w1' };
 const executionsBody = {
@@ -56,6 +57,15 @@ describe('WorkflowDetailDrawer — execution debug (rule 11)', () => {
     const links = runs.findAll('a');
     expect(links).toHaveLength(2);
     expect(links[0]?.attributes('href')).toBe('http://localhost:5678/workflow/w1/executions/9');
+  });
+
+  it('shows the S4 ownership section with an owner badge + assign control (rule 11)', async () => {
+    const w = mount(WorkflowDetailDrawer, { props: { selected: item } });
+    await flushPromises();
+    const sec = w.find('[data-testid="ownership-section"]');
+    expect(sec.exists()).toBe(true);
+    expect(sec.find('[data-testid="owner-badge"]').exists()).toBe(true);
+    expect(sec.find('[data-testid="ownership-assign-button"]').exists()).toBe(true);
   });
 
   it('degrades honestly when executions are unavailable (no fabricated runs)', async () => {

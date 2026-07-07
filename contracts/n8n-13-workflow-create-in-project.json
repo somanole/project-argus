@@ -1,6 +1,6 @@
 {
   "$probe": "POST /api/v1/workflows with projectId — does the workflow land in the target project?",
-  "capturedAt": "2026-07-06T19:00:26.449Z",
+  "capturedAt": "2026-07-07T13:40:49.950Z",
   "n8nVersion": "2.29.0",
   "request": {
     "method": "POST",
@@ -49,16 +49,16 @@
         }
       },
       "settings": {},
-      "projectId": "Km9X9E83Fuc1bgEb"
+      "projectId": "Kz82z0aY5CZ3OCMb"
     }
   },
   "response": {
     "status": 200,
     "ok": true,
     "body": {
-      "updatedAt": "2026-07-06T19:00:26.440Z",
-      "createdAt": "2026-07-06T19:00:26.440Z",
-      "id": "8OCEfxCVRvuTUpIp",
+      "updatedAt": "2026-07-07T13:40:49.941Z",
+      "createdAt": "2026-07-07T13:40:49.941Z",
+      "id": "VggEtGtulRsdwksX",
       "name": "Argus Probe — Webhook WF",
       "description": null,
       "active": false,
@@ -78,7 +78,7 @@
             0,
             0
           ],
-          "webhookId": "7a8199df-891d-4f8d-9554-b4e4b944e03e"
+          "webhookId": "46eb5555-8c6a-4e28-b09e-6f98ce77f53f"
         },
         {
           "parameters": {},
@@ -110,28 +110,28 @@
       "meta": null,
       "nodeGroups": [],
       "pinData": null,
-      "versionId": "2c9aa4e9-203d-4cbe-a360-3f21cb8cb8d5",
+      "versionId": "32a25127-d50b-4e05-acb7-8f7ad000885c",
       "activeVersionId": null,
       "versionCounter": 1,
       "triggerCount": 0,
       "sourceWorkflowId": null,
       "shared": [
         {
-          "updatedAt": "2026-07-06T19:00:26.441Z",
-          "createdAt": "2026-07-06T19:00:26.441Z",
+          "updatedAt": "2026-07-07T13:40:49.942Z",
+          "createdAt": "2026-07-07T13:40:49.942Z",
           "role": "workflow:owner",
-          "workflowId": "8OCEfxCVRvuTUpIp",
-          "projectId": "Km9X9E83Fuc1bgEb",
+          "workflowId": "VggEtGtulRsdwksX",
+          "projectId": "Kz82z0aY5CZ3OCMb",
           "project": {
-            "updatedAt": "2026-07-06T19:00:26.419Z",
-            "createdAt": "2026-07-06T19:00:26.419Z",
-            "id": "Km9X9E83Fuc1bgEb",
+            "updatedAt": "2026-07-07T13:40:49.914Z",
+            "createdAt": "2026-07-07T13:40:49.914Z",
+            "id": "Kz82z0aY5CZ3OCMb",
             "name": "Argus Probe — Revenue Ops",
             "type": "team",
             "icon": null,
             "description": null,
             "customTelemetryTags": [],
-            "creatorId": "bbfff7c4-3ae8-4d4a-844a-35855f9d3ce3"
+            "creatorId": "8582558e-09a3-4e27-98fd-8682fdbe3f2a"
           }
         }
       ],
@@ -139,5 +139,5 @@
       "activeVersion": null
     }
   },
-  "finding": "LANDED in target project (Km9X9E83Fuc1bgEb)"
+  "finding": "LANDED in target project (Kz82z0aY5CZ3OCMb)"
 }

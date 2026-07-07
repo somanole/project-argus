@@ -6,6 +6,7 @@ import { useConnectionsStore } from '../stores/connections';
 import type { WorkflowListItem } from '@argus/shared';
 import WorkflowHealthBadge from '../components/WorkflowHealthBadge.vue';
 import EnrichmentBadges from '../components/EnrichmentBadges.vue';
+import OwnerBadge from '../components/OwnerBadge.vue';
 import WorkflowDetailDrawer from '../components/WorkflowDetailDrawer.vue';
 import { instanceColor } from '../lib/instanceColor';
 import { relativeTime } from '../lib/time';
@@ -114,12 +115,13 @@ onUnmounted(() => {
         <div class="table-wrap" data-testid="health-failing-list">
           <table class="wf">
             <thead>
-              <tr><th class="c-name">Workflow</th><th class="c-crit">Criticality</th><th class="c-inst">Instance</th><th class="c-health">Health</th><th class="c-rate">Failure rate</th><th class="c-last">Last run</th></tr>
+              <tr><th class="c-name">Workflow</th><th class="c-crit">Criticality</th><th class="c-owner">Owner</th><th class="c-inst">Instance</th><th class="c-health">Health</th><th class="c-rate">Failure rate</th><th class="c-last">Last run</th></tr>
             </thead>
             <tbody>
               <tr v-for="w in failing" :key="w.instanceId + '/' + w.id" class="row" tabindex="0" @click="selected = w" @keydown.enter="selected = w">
                 <td class="c-name" data-label="Workflow">{{ w.name }}</td>
                 <td class="c-crit" data-label="Criticality"><EnrichmentBadges :enrichment="w.enrichment" /><span v-if="!w.enrichment?.criticality" class="muted">—</span></td>
+                <td class="c-owner" data-label="Owner" data-testid="incident-owner"><OwnerBadge :owner="w.owner" /></td>
                 <td class="c-inst" data-label="Instance"><span class="instance"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span></td>
                 <td class="c-health" data-label="Health"><WorkflowHealthBadge :health="w.health" /></td>
                 <td class="c-rate" data-label="Failure rate">{{ pct(w) }} <span class="muted">({{ w.health?.failuresInWindow ?? 0 }}/{{ w.health?.runsInWindow ?? 0 }})</span></td>
@@ -135,12 +137,13 @@ onUnmounted(() => {
         <div class="table-wrap" data-testid="health-degraded-list">
           <table class="wf">
             <thead>
-              <tr><th class="c-name">Workflow</th><th class="c-crit">Criticality</th><th class="c-inst">Instance</th><th class="c-health">Health</th><th class="c-rate">Failure rate</th><th class="c-last">Last run</th></tr>
+              <tr><th class="c-name">Workflow</th><th class="c-crit">Criticality</th><th class="c-owner">Owner</th><th class="c-inst">Instance</th><th class="c-health">Health</th><th class="c-rate">Failure rate</th><th class="c-last">Last run</th></tr>
             </thead>
             <tbody>
               <tr v-for="w in degraded" :key="w.instanceId + '/' + w.id" class="row" tabindex="0" @click="selected = w" @keydown.enter="selected = w">
                 <td class="c-name" data-label="Workflow">{{ w.name }}</td>
                 <td class="c-crit" data-label="Criticality"><EnrichmentBadges :enrichment="w.enrichment" /><span v-if="!w.enrichment?.criticality" class="muted">—</span></td>
+                <td class="c-owner" data-label="Owner"><OwnerBadge :owner="w.owner" /></td>
                 <td class="c-inst" data-label="Instance"><span class="instance"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span></td>
                 <td class="c-health" data-label="Health"><WorkflowHealthBadge :health="w.health" /></td>
                 <td class="c-rate" data-label="Failure rate">{{ pct(w) }} <span class="muted">({{ w.health?.failuresInWindow ?? 0 }}/{{ w.health?.runsInWindow ?? 0 }})</span></td>

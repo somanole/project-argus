@@ -230,6 +230,18 @@ try {
   const hMissing = missing(healthUi);
   add('Health UI ships (catalog badge+facet, failing view, drawer health + runs/failure)', hMissing.length === 0,
     hMissing.length === 0 ? `${healthUi.length} health UI elements present` : `MISSING: ${hMissing.join(', ')}`);
+
+  // S4: ownership chrome — the catalog owner badge, the drawer ownership section +
+  // assign dialog, the Governance view (gaps groups + audit timeline + export), and the
+  // incident owner on the failing surface. Each has a component test; presence counterpart.
+  const ownUi = [
+    'owner-badge', 'ownership-section', 'ownership-assign-button', 'assign-owner-dialog', 'assign-owner-picker', 'assign-owner-suggestion',
+    'governance-view', 'governance-gaps', 'gap-unowned', 'gap-single-owner', 'gap-personal-space', 'gap-no-backup',
+    'governance-audit-timeline', 'governance-audit-export', 'incident-owner',
+  ];
+  const oMissing = missing(ownUi);
+  add('Ownership UI ships (owner badge, assign dialog, Governance gaps + audit timeline, incident owner)', oMissing.length === 0,
+    oMissing.length === 0 ? `${ownUi.length} ownership UI elements present` : `MISSING: ${oMissing.join(', ')}`);
 }
 
 // ---- Responsive (standing rule 10): hero views usable at 375px, both themes ----
@@ -262,6 +274,7 @@ try {
     row('Login usable at 375px — no horizontal overflow', 'Login');
     row('Catalog usable at 375px — no horizontal overflow, no cut-off fields', 'Catalog list');
     row('Health view usable at 375px — no horizontal overflow', 'Health view');
+    row('Governance view usable at 375px — no horizontal overflow', 'Governance view');
     row('Detail drawer usable at 375px — full-width, no overflow', 'Detail drawer');
     row('Settings usable at 375px — no horizontal overflow', 'Settings');
   }
@@ -287,6 +300,12 @@ await s1bChecks();
 // Drives a real Argus server against both live instances; asserts the seeded health
 // scenarios read as planted and the "what's failing" feed is correct + retention-honest.
 await s3Checks();
+
+// ---- S4 checks: ownership & accountability (the two guarantees + gaps, live) ----
+// Hermetic suite for the guarantees + gap logic; then a real Argus server against both
+// live instances to prove inference, audited assignment, resync-safety, and the
+// single-owner-critical cross-instance gap end to end.
+await s4Checks();
 
 // S2 enrichment — all hermetic (built code + JSON + unit suite); no n8n, no LLM spend.
 async function s2Checks() {
@@ -962,6 +981,136 @@ async function s3Checks() {
     add('Redacted execution debug: failing node + error class + per-run deep links',
       !dbg?.unavailable && runOk && failNodeOk,
       dbg ? `node "${dbg.failure?.failedNode}", error ${dbg.failure?.errorType ?? '—'}·${dbg.failure?.errorCode ?? '—'}, ${dbg.runs?.length ?? 0} runs w/ deep links` : 'no debug payload');
+  } finally {
+    try { child.kill(); } catch { /* already gone */ }
+  }
+}
+
+// S4 — ownership & accountability: the guarantees + governance gaps, hermetic then live.
+async function s4Checks() {
+  // Hermetic: the two guarantees (resync-safe, no un-audited change), inference,
+  // and the gap computations (incl. cross-instance single-owner-critical) + routes.
+  try {
+    execSync('pnpm --filter @argus/server exec vitest run src/ownership src/app.test.ts', { cwd: ROOT, stdio: 'pipe' });
+    add('Ownership behaviors green (resync-safe · no un-audited change · gaps · inference)', true, 'ownership repo + inference + api unit suite passed');
+  } catch (e) {
+    const out = (e.stdout?.toString() || e.message || '').slice(-160);
+    add('Ownership behaviors green (resync-safe · no un-audited change · gaps · inference)', false, `suite failed: ${out}`);
+  }
+
+  const up = {};
+  for (const inst of Object.values(INSTANCES)) {
+    const c = createN8nClient(inst.baseUrl);
+    up[inst.name] = (await c.healthy()) && (await c.e2eActive());
+  }
+  if (!up.prod || !up.staging) {
+    add('S4 ownership (live)', false, `instances down (prod=${up.prod ? 'up' : 'down'}, staging=${up.staging ? 'up' : 'down'}) — run \`pnpm seed\``);
+    return;
+  }
+  const serverEntry = join(ROOT, 'apps/server/dist/index.js');
+  if (!existsSync(serverEntry)) { add('S4 ownership (live)', false, 'server build missing'); return; }
+
+  const port = 3214;
+  const base = `http://127.0.0.1:${port}`;
+  const dbPath = join(tmpdir(), `argus-verify-s4-${Date.now()}.sqlite`);
+  const env = {
+    ...process.env,
+    ARGUS_PORT: String(port), ARGUS_HOST: '127.0.0.1', ARGUS_DB_PATH: dbPath,
+    ARGUS_ADMIN_PASSWORD: 'v', ARGUS_SESSION_SECRET: 'v', ARGUS_ENCRYPTION_KEY: 'v', ARGUS_POLL_INTERVAL_MS: '3000',
+  };
+  const child = spawn('node', [serverEntry], { cwd: ROOT, env, stdio: 'ignore' });
+  let cookie = '';
+  const argus = async (path, opts = {}) => {
+    const headers = { accept: 'application/json' };
+    if (opts.body !== undefined) headers['content-type'] = 'application/json';
+    if (cookie) headers.cookie = cookie;
+    const res = await fetch(base + path, { method: opts.method ?? 'GET', headers, body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined });
+    let json; try { json = await res.json(); } catch { /* none */ }
+    return { status: res.status, json, setCookies: res.headers.getSetCookie?.() ?? [] };
+  };
+
+  try {
+    const health = await pollHealth(`${base}/api/health`);
+    if (!health) { add('S4 ownership server boots', false, `no health on :${port}`); return; }
+    const li = await argus('/api/auth/login', { method: 'POST', body: { password: 'v', name: 'Verify Owner', email: 'verify@acme.example' } });
+    cookie = li.setCookies.map((c) => c.split(';')[0]).join('; ');
+    const prodC = await connect(INSTANCES.prod.baseUrl);
+    const stagingC = await connect(INSTANCES.staging.baseUrl);
+    const r1 = await argus('/api/connections', { method: 'POST', body: { label: 'prod', baseUrl: INSTANCES.prod.baseUrl, apiKey: prodC.apiKey } });
+    const r2 = await argus('/api/connections', { method: 'POST', body: { label: 'staging', baseUrl: INSTANCES.staging.baseUrl, apiKey: stagingC.apiKey } });
+    const prodId = r1.json?.connection?.id, stagingId = r2.json?.connection?.id;
+
+    // Wait for inventory + ownership inference (owner present, resolved beyond unowned).
+    let workflows = [];
+    for (let i = 0; i < 60; i++) {
+      workflows = (await argus('/api/workflows')).json?.workflows ?? [];
+      if (workflows.length > 0 && workflows.some((w) => w.owner && w.owner.status === 'inferred')) break;
+      await sleep(500);
+    }
+
+    // Inferred advisory owner present (membership-based) for a Revenue Ops workflow.
+    const revWf = workflows.find((w) => w.project === 'Revenue Ops' && w.instanceId === prodId);
+    const inferredOk = !!revWf && revWf.owner?.status === 'inferred' && !!revWf.owner?.owner;
+    add('Inferred owner shows as advisory (from n8n project membership)', inferredOk,
+      revWf ? `${revWf.name}: ${revWf.owner?.status}${revWf.owner?.owner ? ` → ${revWf.owner.owner.email ?? revWf.owner.owner.name}` : ''} (${revWf.owner?.source ?? '—'})` : 'no Revenue Ops workflow found');
+
+    // Assign an owner → owned + an audit entry with who / before→after / reason.
+    const target = revWf ?? workflows[0];
+    const assignResp = await argus(`/api/ownership/${target.instanceId}/${target.id}/owner`, { method: 'PUT', body: { ownerEmail: 'sam.rivers@acme.example', ownerName: 'Sam Rivers', reason: 'owns revenue ops' } });
+    const assignedOk = assignResp.json?.status === 'assigned' && assignResp.json?.owner?.email === 'sam.rivers@acme.example';
+    const audit = (await argus('/api/ownership/audit')).json ?? {};
+    const entry = (audit.entries ?? []).find((e) => e.action === 'ownership.assign' && e.entityId === `${target.instanceId}/${target.id}`);
+    const auditOk = !!entry && entry.actorEmail === 'verify@acme.example' && entry.detail?.after?.ownerEmail === 'sam.rivers@acme.example' && entry.detail?.before?.ownerEmail === null;
+    add('Assign owner → owned + audit entry (who / before→after / reason)', assignedOk && auditOk,
+      `assigned=${assignedOk}, audit entry ${entry ? 'present' : 'MISSING'} by ${entry?.actorEmail ?? '—'}`);
+
+    // Guarantee (i): a full resync (the poll re-lists) does NOT wipe the assignment.
+    await sleep(4000); // ≥ one poll cycle (3s)
+    const after = (await argus('/api/workflows')).json?.workflows ?? [];
+    const stillAssigned = after.find((w) => w.instanceId === target.instanceId && w.id === target.id)?.owner?.status === 'assigned';
+    add('A full resync does NOT wipe ownership (guarantee)', stillAssigned,
+      stillAssigned ? 'assignment survived a poll/resync cycle' : 'assignment lost after resync');
+
+    // Single-owner-critical (cross-instance, exact-email): inject criticality (verify has
+    // no LLM) for a Revenue Ops workflow in EACH instance, assign Sam to both, assert the gap.
+    let gapOk = false, gapDetail = 'skipped';
+    try {
+      const { createRequire } = await import('node:module');
+      const require = createRequire(import.meta.url);
+      const Database = require(join(ROOT, 'apps/server/node_modules/better-sqlite3'));
+      const db = new Database(dbPath);
+      const enrich = (iid, wid) => db.prepare(
+        `INSERT OR REPLACE INTO workflow_enrichments (instance_id, workflow_id, input_hash, provider, model, prompt_version, schema_version, status, enrichment_json, corrected_json, enriched_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      ).run(iid, wid, 'h', 'verify', 'verify', 'v', 1, 'analyzed', JSON.stringify({ criticality: 'critical', criticalityReason: 'seeded for verify' }), null, new Date().toISOString());
+      const prodRev = after.filter((w) => w.instanceId === prodId && w.project === 'Revenue Ops').slice(0, 1);
+      const stagRev = after.filter((w) => w.instanceId === stagingId && w.project === 'Revenue Ops').slice(0, 1);
+      for (const w of [...prodRev, ...stagRev]) enrich(w.instanceId, w.id);
+      db.close();
+      for (const w of [...prodRev, ...stagRev]) {
+        await argus(`/api/ownership/${w.instanceId}/${w.id}/owner`, { method: 'PUT', body: { ownerEmail: 'sam.rivers@acme.example', ownerName: 'Sam Rivers' } });
+      }
+      const gaps = (await argus('/api/ownership/gaps')).json ?? {};
+      const sam = (gaps.singleOwnerCritical ?? []).find((g) => g.owner.email === 'sam.rivers@acme.example');
+      gapOk = !!sam && sam.workflows.length >= 2 && sam.crossInstance === true;
+      gapDetail = sam ? `Sam solely owns ${sam.workflows.length} critical, crossInstance=${sam.crossInstance}` : `no single-owner gap (${(gaps.singleOwnerCritical ?? []).length} groups)`;
+    } catch (e) {
+      gapDetail = `gap setup failed: ${e.message}`;
+    }
+    add('Single-owner-critical surfaces Sam across BOTH instances (exact-email)', gapOk, gapDetail);
+
+    // The governance-gaps + audit timeline are served, and the audit exports to CSV.
+    const gaps2 = (await argus('/api/ownership/gaps')).json ?? {};
+    const gapsShapeOk = Array.isArray(gaps2.unowned) && Array.isArray(gaps2.singleOwnerCritical) && Array.isArray(gaps2.personalSpaceCritical) && Array.isArray(gaps2.noBackupOwner);
+    let csvOk = false;
+    try {
+      const res = await fetch(`${base}/api/ownership/audit/export.csv`, { headers: { cookie } });
+      const ct = res.headers.get('content-type') ?? '';
+      const text = await res.text();
+      csvOk = ct.includes('text/csv') && text.includes('ownership.assign');
+    } catch { /* fetch failed */ }
+    add('Governance gaps + filterable audit timeline (CSV-exportable) served', gapsShapeOk && csvOk,
+      `gaps shape ${gapsShapeOk ? 'ok' : 'bad'}, CSV export ${csvOk ? 'ok' : 'MISSING'}`);
   } finally {
     try { child.kill(); } catch { /* already gone */ }
   }
