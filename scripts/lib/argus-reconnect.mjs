@@ -56,7 +56,9 @@ export async function reconnectLocalArgus(instances, opts = {}) {
     if (!c.apiKey) { console.log(`  could not mint a key for ${inst.name} — skipping it`); continue; }
     // Remove any existing connection(s) for this instance (audited API delete), then re-register.
     for (const ex of existing.filter((e) => e.baseUrl === inst.baseUrl)) await argus(`/api/connections/${ex.id}`, { method: 'DELETE' });
-    const r = await argus('/api/connections', { method: 'POST', body: { label: inst.name, baseUrl: inst.baseUrl, apiKey: c.apiKey } });
+    // webhookHost = the instance base URL (in dev the public webhook host is the same
+    // origin) so the estate pass can confirm cross-instance webhook edges (S5).
+    const r = await argus('/api/connections', { method: 'POST', body: { label: inst.name, baseUrl: inst.baseUrl, apiKey: c.apiKey, webhookHost: inst.baseUrl } });
     if (r.status === 201) refreshed++;
     else console.log(`  re-register ${inst.name} → ${r.status} ${JSON.stringify(r.json ?? '').slice(0, 120)}`);
   }

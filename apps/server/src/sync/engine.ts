@@ -8,6 +8,7 @@ import { buildEnrichmentInput, hashEnrichmentInput } from '../enrichment/index.j
 import { syncHealth } from '../health/index.js';
 import { inferOwnership, type InferenceReader } from '../ownership/inference.js';
 import { replaceInferredOwners } from '../ownership/repo.js';
+import { recomputeEstateEdges } from '../graph/recompute.js';
 
 /**
  * The freshness engine. Every `pollIntervalMs` it re-lists each connection's
@@ -174,6 +175,9 @@ export function createSyncEngine(
     const live = new Set(rows.map((r) => r.id));
     for (const id of [...health.keys()]) if (!live.has(id)) health.delete(id);
     await Promise.all(rows.map((r) => syncRow(r)));
+    // S5: rebuild the estate-wide dependency graph now that every connection's facts
+    // are in the cache — the only point cross-instance edges can be computed.
+    recomputeEstateEdges(db);
   }
 
   return {
@@ -192,7 +196,12 @@ export function createSyncEngine(
     },
     async syncNow(id: string): Promise<void> {
       const row = getConnectionRow(db, id);
-      if (row) await syncRow(row);
+      if (row) {
+        await syncRow(row);
+        // Rebuild the estate graph so a freshly-registered connection immediately
+        // gets its (cross-instance) edges without waiting for the next poll.
+        recomputeEstateEdges(db);
+      }
     },
     health: currentHealth,
   };

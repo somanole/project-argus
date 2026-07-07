@@ -1,0 +1,229 @@
+{
+  "$probe": "S5 graph: n8n workflow-index dependency oracle (internal REST) + the webhook/HTTP/credential-binding node shapes S5 extraction reads. Non-destructive; reads the seeded estate.",
+  "capturedAt": "2026-07-07T14:49:09.759Z",
+  "n8nVersion": "2.29.0",
+  "oracleRequest": {
+    "method": "POST",
+    "path": "/rest/workflow-dependencies/details",
+    "auth": "cookie (owner login) — INTERNAL REST, dev/demo oracle only",
+    "body": {
+      "resourceIds": [
+        "<workflowId>…"
+      ],
+      "resourceType": "workflow"
+    }
+  },
+  "findings": {
+    "oracle": "POST /rest/workflow-dependencies/details → 200. Send Slack Alert workflowParent count = 5 (expect 5 callers). Dependency types observed: workflowParent, credentialId.",
+    "webhookPathShape": "n8n-nodes-base.webhook stores the path at parameters.path (literal string, e.g. \"order-intake\"); may be an n8n expression → unmatchable.",
+    "httpUrlShape": "n8n-nodes-base.httpRequest stores the target at parameters.url (literal or expression). Cross-instance edge = url host matches another connection webhook_host + path matches a webhook there.",
+    "credentialBindingShape": "node.credentials = { <credentialType>: { id, name } } — the id is the estate-unique credential id used for binds_credential / shared_credential edges (S1b captured only the TYPE)."
+  },
+  "instances": [
+    {
+      "role": "prod",
+      "base": "http://localhost:5678",
+      "workflowCount": 100,
+      "fanInTarget": {
+        "names": [
+          "Send Slack Alert"
+        ],
+        "ids": [
+          "fiUE1rkUdCgHovLP"
+        ]
+      },
+      "oracleDetails": {
+        "status": 200,
+        "body": {
+          "data": {
+            "fiUE1rkUdCgHovLP": {
+              "dependencies": [
+                {
+                  "id": "LavciCM8MZGz7kN2",
+                  "name": "Invoice Dispatch",
+                  "type": "workflowParent"
+                },
+                {
+                  "id": "o8xSH5aF2nyq1zhy",
+                  "name": "Refund Processor",
+                  "type": "workflowParent"
+                },
+                {
+                  "id": "fSyGB8jUlGiqfNoi",
+                  "name": "Escalation Notifier",
+                  "type": "workflowParent"
+                },
+                {
+                  "id": "ENDXL6e9OztHWR0l",
+                  "name": "Data Warehouse Sync",
+                  "type": "workflowParent"
+                },
+                {
+                  "id": "NUW8JoLUWOJhf1PA",
+                  "name": "Newsletter Sender",
+                  "type": "workflowParent"
+                },
+                {
+                  "id": "0GkhMOAPRm4obXGN",
+                  "name": "Slack — Alerts",
+                  "type": "credentialId"
+                }
+              ],
+              "inaccessibleCount": 0
+            }
+          }
+        }
+      },
+      "oracleCounts": {
+        "status": 200,
+        "body": {
+          "data": {
+            "fiUE1rkUdCgHovLP": {
+              "credentialId": 1,
+              "dataTableId": 0,
+              "errorWorkflow": 0,
+              "errorWorkflowParent": 0,
+              "workflowCall": 0,
+              "workflowParent": 5
+            }
+          }
+        }
+      },
+      "webhookNodes": [
+        {
+          "workflow": "Order Intake",
+          "node": "Order Webhook",
+          "type": "n8n-nodes-base.webhook",
+          "parameters": {
+            "path": "order-intake",
+            "httpMethod": "POST",
+            "responseMode": "onReceived",
+            "options": {}
+          }
+        }
+      ],
+      "httpNodes": [],
+      "credentialShapes": [
+        {
+          "workflow": "Salesforce CRM Sync",
+          "node": "Upsert Lead",
+          "type": "n8n-nodes-base.salesforce",
+          "credentials": {
+            "salesforceOAuth2Api": {
+              "id": "WSFvwndLPU3zdbI1",
+              "name": "Salesforce — CRM"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "role": "staging",
+      "base": "http://localhost:5679",
+      "workflowCount": 101,
+      "fanInTarget": {
+        "names": [
+          "Send Slack Alert"
+        ],
+        "ids": [
+          "S9AidjHdXEVlGYI0"
+        ]
+      },
+      "oracleDetails": {
+        "status": 200,
+        "body": {
+          "data": {
+            "S9AidjHdXEVlGYI0": {
+              "dependencies": [
+                {
+                  "id": "hqm5qqieNCDYoNlJ",
+                  "name": "Invoice Dispatch",
+                  "type": "workflowParent"
+                },
+                {
+                  "id": "CfvDjHz7mTeqkwQ3",
+                  "name": "Refund Processor",
+                  "type": "workflowParent"
+                },
+                {
+                  "id": "gbLgIMK7Kjd9TFkE",
+                  "name": "Escalation Notifier",
+                  "type": "workflowParent"
+                },
+                {
+                  "id": "XRXbYirqpaOyImZ6",
+                  "name": "Data Warehouse Sync",
+                  "type": "workflowParent"
+                },
+                {
+                  "id": "ptIXohHC4Jk6GALN",
+                  "name": "Newsletter Sender",
+                  "type": "workflowParent"
+                },
+                {
+                  "id": "VHjzN7czvTMZBweh",
+                  "name": "Slack — Alerts",
+                  "type": "credentialId"
+                }
+              ],
+              "inaccessibleCount": 0
+            }
+          }
+        }
+      },
+      "oracleCounts": {
+        "status": 200,
+        "body": {
+          "data": {
+            "S9AidjHdXEVlGYI0": {
+              "credentialId": 1,
+              "dataTableId": 0,
+              "errorWorkflow": 0,
+              "errorWorkflowParent": 0,
+              "workflowCall": 0,
+              "workflowParent": 5
+            }
+          }
+        }
+      },
+      "webhookNodes": [
+        {
+          "workflow": "Order Intake",
+          "node": "Order Webhook",
+          "type": "n8n-nodes-base.webhook",
+          "parameters": {
+            "path": "order-intake",
+            "httpMethod": "POST",
+            "responseMode": "onReceived",
+            "options": {}
+          }
+        }
+      ],
+      "httpNodes": [
+        {
+          "workflow": "Staging → Prod Order Sync",
+          "node": "Call Prod Order Intake",
+          "type": "n8n-nodes-base.httpRequest",
+          "url": "http://localhost:5678/webhook/order-intake",
+          "parameters": {
+            "url": "http://localhost:5678/webhook/order-intake",
+            "options": {}
+          }
+        }
+      ],
+      "credentialShapes": [
+        {
+          "workflow": "Salesforce CRM Sync",
+          "node": "Upsert Lead",
+          "type": "n8n-nodes-base.salesforce",
+          "credentials": {
+            "salesforceOAuth2Api": {
+              "id": "aDtyl4mxMAzsnCR3",
+              "name": "Salesforce — CRM"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

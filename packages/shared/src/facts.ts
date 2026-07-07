@@ -74,6 +74,51 @@ export const dataTableRefSchema = z.object({
 });
 export type DataTableRef = z.infer<typeof dataTableRefSchema>;
 
+/**
+ * A webhook entry point (n8n-nodes-base.webhook / formTrigger). The `path` is what a
+ * cross-workflow HTTP call matches against. Expression-valued paths are unmatchable
+ * (never guessed — rule 5). Added in S5 for webhook↔HTTP edge detection.
+ */
+export const webhookEndpointSchema = z.object({
+  nodeName: z.string().nullable(),
+  /** The literal webhook path (n8n serves it at /webhook/<path>); null if none/expression. */
+  path: z.string().nullable(),
+  /** True when the path is an n8n expression → unmatchable, never an edge. */
+  isExpression: z.boolean(),
+});
+export type WebhookEndpoint = z.infer<typeof webhookEndpointSchema>;
+
+/**
+ * An outbound HTTP call site (n8n-nodes-base.httpRequest). We parse host + a webhook
+ * path from the URL when it is a literal; expression URLs stay unmatchable. Added in
+ * S5 for webhook↔HTTP and cross-instance edge detection.
+ */
+export const httpCallsiteSchema = z.object({
+  nodeName: z.string().nullable(),
+  rawUrl: z.string().nullable(),
+  /** Parsed host (incl. port) when the URL is literal; null otherwise. */
+  host: z.string().nullable(),
+  /** The webhook path parsed from a /webhook/<path> URL; null when not a webhook-shaped URL. */
+  webhookPath: z.string().nullable(),
+  /** True when the URL is an n8n expression → unmatchable, never an edge. */
+  isExpression: z.boolean(),
+});
+export type HttpCallsite = z.infer<typeof httpCallsiteSchema>;
+
+/**
+ * A credential binding on a node — the estate-unique credential id (S1b captured only
+ * the credential TYPE). Drives the confirmed `binds_credential` edge and the
+ * `shared_credential` SPOF association. Added in S5.
+ */
+export const credentialRefSchema = z.object({
+  nodeName: z.string().nullable(),
+  credentialType: z.string(),
+  /** The credential id; null if n8n stored a binding without one. */
+  credentialId: z.string().nullable(),
+  credentialName: z.string().nullable(),
+});
+export type CredentialRef = z.infer<typeof credentialRefSchema>;
+
 /** Inward-facing caller policy (who may call this workflow). Stored, not shown here (held for S5). */
 export const callerPolicySchema = z.object({
   /** 'workflowsFromSameOwner' | 'workflowsFromAList' | 'any' | 'none' | null. */
@@ -102,7 +147,7 @@ export type CoverageGap = z.infer<typeof coverageGapSchema>;
 /** The full deterministic fact set for one workflow. */
 export const workflowFactsSchema = z.object({
   /** Bump when the fact shape changes — forces recompute on next sync. */
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   analyzedAt: z.string(),
   nodeCount: z.number().int(),
   nodeTypes: z.array(nodeTypeFactSchema),
@@ -116,6 +161,10 @@ export const workflowFactsSchema = z.object({
   dataTableRefs: z.array(dataTableRefSchema),
   mcpExposed: z.boolean(),
   directDeps: z.array(directDepSchema),
+  /** Cross-workflow endpoint facts (S5): webhook entry points, HTTP call sites, credential bindings. */
+  webhookEndpoints: z.array(webhookEndpointSchema),
+  httpCallsites: z.array(httpCallsiteSchema),
+  credentialRefs: z.array(credentialRefSchema),
   /** Inward-facing; captured now, displayed in S5 (not the outbound drawer). */
   callerPolicy: callerPolicySchema,
   coverage: z.object({

@@ -239,6 +239,43 @@ const MIGRATIONS: ((db: Database.Database) => void)[] = [
       );
     `);
   },
+
+  // v8 — S5: the cross-workflow / cross-instance dependency graph. One row per
+  // directed edge (source depends on / calls / uses target). A DISPOSABLE cache:
+  // the estate-wide edge pass wipes and rebuilds the WHOLE table each cycle (edges
+  // span instances, so a per-instance FK would be wrong — the global rebuild after
+  // every poll is the correctness mechanism, and a deleted connection's edges vanish
+  // on the next pass). Nodes are workflows OR shared resources (credential/datatable);
+  // resource labels are denormalized here because Argus stores no credentials table.
+  //
+  // THE TRUST SPINE (rule 5): `confidence` is 'confirmed' (n8n literally wired it) or
+  // 'possible' (inferred). Impact queries filter to confirmed; `possible` is never
+  // counted. That invariant is enforced in the impact query and asserted in verify.
+  (db) => {
+    db.exec(`
+      CREATE TABLE workflow_edges (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        src_instance   TEXT NOT NULL,
+        src_kind       TEXT NOT NULL,          -- workflow | credential | datatable
+        src_id         TEXT NOT NULL,
+        src_label      TEXT,
+        dst_instance   TEXT NOT NULL,
+        dst_kind       TEXT NOT NULL,
+        dst_id         TEXT NOT NULL,
+        dst_label      TEXT,
+        type           TEXT NOT NULL,          -- EdgeType
+        confidence     TEXT NOT NULL,          -- 'confirmed' | 'possible'
+        cross_instance INTEGER NOT NULL,
+        reason         TEXT NOT NULL,
+        computed_at    TEXT NOT NULL
+      );
+      -- reverse traversal ("who depends on this target?") — the blast-radius direction.
+      CREATE INDEX workflow_edges_by_dst ON workflow_edges(dst_kind, dst_instance, dst_id);
+      -- forward traversal ("what does this reach?") — MCP exposure-reach.
+      CREATE INDEX workflow_edges_by_src ON workflow_edges(src_kind, src_instance, src_id);
+      CREATE INDEX workflow_edges_by_type ON workflow_edges(type, confidence);
+    `);
+  },
 ];
 
 export function migrate(db: Database.Database): void {

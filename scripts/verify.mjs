@@ -242,6 +242,17 @@ try {
   const oMissing = missing(ownUi);
   add('Ownership UI ships (owner badge, assign dialog, Governance gaps + audit timeline, incident owner)', oMissing.length === 0,
     oMissing.length === 0 ? `${ownUi.length} ownership UI elements present` : `MISSING: ${oMissing.join(', ')}`);
+
+  // S5: graph chrome — the fleet graph canvas, scope switcher, archived + MCP toggles,
+  // the confidence/cross-instance legend, and the blast-radius impact panel with its
+  // EXPLICIT total. Each has a component test (GraphView.test.ts); presence counterpart.
+  const graphUi = [
+    'graph-view', 'graph-canvas', 'graph-scope-switcher', 'graph-archived-toggle', 'graph-mcp-toggle',
+    'graph-legend', 'graph-impact-panel', 'graph-impact-statement', 'graph-impact-total',
+  ];
+  const gMissing = missing(graphUi);
+  add('Graph UI ships (canvas, scope switcher, archived/MCP toggles, legend, blast-radius panel)', gMissing.length === 0,
+    gMissing.length === 0 ? `${graphUi.length} graph UI elements present` : `MISSING: ${gMissing.join(', ')}`);
 }
 
 // ---- Responsive (standing rule 10): hero views usable at 375px, both themes ----
@@ -274,6 +285,7 @@ try {
     row('Login usable at 375px — no horizontal overflow', 'Login');
     row('Catalog usable at 375px — no horizontal overflow, no cut-off fields', 'Catalog list');
     row('Health view usable at 375px — no horizontal overflow', 'Health view');
+    row('Graph view usable at 375px — no horizontal overflow', 'Graph view');
     row('Governance view usable at 375px — no horizontal overflow', 'Governance view');
     row('Detail drawer usable at 375px — full-width, no overflow', 'Detail drawer');
     row('Settings usable at 375px — no horizontal overflow', 'Settings');
@@ -306,6 +318,13 @@ await s3Checks();
 // live instances to prove inference, audited assignment, resync-safety, and the
 // single-owner-critical cross-instance gap end to end.
 await s4Checks();
+
+// ---- S5 checks: relationships & blast radius (graph), live end-to-end ----
+// Boot a real Argus against both instances, register with webhook hosts, wait for the
+// estate edge pass, and assert the blast-radius core: Send Slack Alert = 5, the
+// cross-instance edge is confirmed, possible edges never count, rotate ≠ failure, and
+// Argus's confirmed edges match n8n's own workflow-index oracle.
+await s5Checks();
 
 // S2 enrichment — all hermetic (built code + JSON + unit suite); no n8n, no LLM spend.
 async function s2Checks() {
@@ -1111,6 +1130,137 @@ async function s4Checks() {
     } catch { /* fetch failed */ }
     add('Governance gaps + filterable audit timeline (CSV-exportable) served', gapsShapeOk && csvOk,
       `gaps shape ${gapsShapeOk ? 'ok' : 'bad'}, CSV export ${csvOk ? 'ok' : 'MISSING'}`);
+  } finally {
+    try { child.kill(); } catch { /* already gone */ }
+  }
+}
+
+// S5 — relationships & blast radius (graph): live end-to-end against both instances.
+async function s5Checks() {
+  const up = {};
+  for (const inst of Object.values(INSTANCES)) {
+    const c = createN8nClient(inst.baseUrl);
+    up[inst.name] = (await c.healthy()) && (await c.e2eActive());
+  }
+  if (!up.prod || !up.staging) {
+    add('S5 graph', false, `instances down (prod=${up.prod ? 'up' : 'down'}, staging=${up.staging ? 'up' : 'down'}) — run \`pnpm seed\``);
+    return;
+  }
+  const serverEntry = join(ROOT, 'apps/server/dist/index.js');
+  if (!existsSync(serverEntry)) { add('S5 graph', false, 'server build missing'); return; }
+
+  const port = 3215;
+  const base = `http://127.0.0.1:${port}`;
+  const dbPath = join(tmpdir(), `argus-verify-s5-${Date.now()}.sqlite`);
+  const env = {
+    ...process.env,
+    ARGUS_PORT: String(port), ARGUS_HOST: '127.0.0.1', ARGUS_DB_PATH: dbPath,
+    ARGUS_ADMIN_PASSWORD: 'v', ARGUS_SESSION_SECRET: 'v', ARGUS_ENCRYPTION_KEY: 'v', ARGUS_POLL_INTERVAL_MS: '3000',
+  };
+  const child = spawn('node', [serverEntry], { cwd: ROOT, env, stdio: 'ignore' });
+  let cookie = '';
+  const argus = async (path, opts = {}) => {
+    const headers = { accept: 'application/json' };
+    if (opts.body !== undefined) headers['content-type'] = 'application/json';
+    if (cookie) headers.cookie = cookie;
+    const res = await fetch(base + path, { method: opts.method ?? 'GET', headers, body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined });
+    let json; try { json = await res.json(); } catch { /* none */ }
+    return { status: res.status, json, setCookies: res.headers.getSetCookie?.() ?? [] };
+  };
+  const setEq = (a, b) => a.length === b.length && new Set(a).size === new Set([...a, ...b]).size;
+
+  try {
+    const health = await pollHealth(`${base}/api/health`);
+    if (!health) { add('S5 graph server boots', false, `no health on :${port}`); return; }
+    const li = await argus('/api/auth/login', { method: 'POST', body: { password: 'v', name: 'V', email: 'v@acme.example' } });
+    cookie = li.setCookies.map((c) => c.split(';')[0]).join('; ');
+    const prodC = await connect(INSTANCES.prod.baseUrl);
+    const stagingC = await connect(INSTANCES.staging.baseUrl);
+    // webhookHost set so the estate pass can CONFIRM the cross-instance webhook edge.
+    await argus('/api/connections', { method: 'POST', body: { label: 'prod', baseUrl: INSTANCES.prod.baseUrl, apiKey: prodC.apiKey, webhookHost: INSTANCES.prod.baseUrl } });
+    await argus('/api/connections', { method: 'POST', body: { label: 'staging', baseUrl: INSTANCES.staging.baseUrl, apiKey: stagingC.apiKey, webhookHost: INSTANCES.staging.baseUrl } });
+
+    // Wait for the estate edge pass to produce edges.
+    let estate = { nodes: [], edges: [] };
+    for (let i = 0; i < 60; i++) {
+      estate = (await argus('/api/graph?scope=estate')).json ?? { nodes: [], edges: [] };
+      if ((estate.edges ?? []).length > 0) break;
+      await sleep(500);
+    }
+    const nodeById = new Map((estate.nodes ?? []).map((n) => [n.id, n]));
+    const conns = (await argus('/api/connections')).json?.connections ?? [];
+    const prodId = conns.find((c) => c.label === 'prod')?.id;
+    const wfs = (await argus('/api/workflows')).json?.workflows ?? [];
+    const prodSlack = wfs.find((w) => w.name === 'Send Slack Alert' && w.instanceId === prodId);
+
+    // 1. Blast radius: "what breaks if Send Slack Alert fails" = exactly 5 callers.
+    let impact = null;
+    if (prodSlack) impact = (await argus(`/api/graph/impact?mode=failure&instanceId=${prodSlack.instanceId}&id=${prodSlack.id}`)).json;
+    const directCallers = (impact?.affected ?? []).filter((a) => a.hops === 1);
+    add('Blast radius: "what breaks if Send Slack Alert fails" = 5 callers',
+      !!impact && directCallers.length === 5,
+      impact ? `${directCallers.length} direct callers; total ${impact.total}; "${impact.statement}"` : 'no impact payload');
+
+    // 2. The cross-instance (prod↔staging) webhook edge is detected + CONFIRMED.
+    const xi = (estate.edges ?? []).find((e) => e.type === 'cross_instance_webhook');
+    const xiSrc = xi ? nodeById.get(xi.source) : null;
+    const xiDst = xi ? nodeById.get(xi.target) : null;
+    add('Cross-instance edge (prod↔staging) detected + CONFIRMED',
+      !!xi && xi.confidence === 'confirmed' && xi.crossInstance === true && xiDst?.label === 'Order Intake',
+      xi ? `${xiSrc?.label} (${xiSrc?.instanceLabel}) → ${xiDst?.label} (${xiDst?.instanceLabel}), ${xi.confidence}` : 'no cross-instance edge');
+
+    // 3. A `possible` edge is tracked-as-excluded, never counted in a blast radius.
+    const possibleEdges = (estate.edges ?? []).filter((e) => e.confidence === 'possible');
+    const peTargetNode = possibleEdges.map((e) => nodeById.get(e.target)).find((n) => n?.kind === 'workflow' && n.workflowId);
+    let possibleOk = false, possibleDetail = `${possibleEdges.length} possible edges in estate`;
+    if (peTargetNode) {
+      const r = (await argus(`/api/graph/impact?mode=failure&instanceId=${peTargetNode.instanceId}&id=${peTargetNode.workflowId}`)).json;
+      // possibleExcluded > 0 proves the possible edge touching this node was seen and left OUT of `total`.
+      possibleOk = !!r && (r.possibleExcluded ?? 0) >= 1;
+      possibleDetail = `${possibleEdges.length} possible; "${peTargetNode.label}" blast radius total ${r?.total} · excluded ${r?.possibleExcluded}`;
+    }
+    add('A `possible` edge is excluded from the blast-radius count (trust spine)', possibleOk, possibleDetail);
+
+    // 4. Rotate-credential is a DIFFERENT answer than what-breaks-if-it-fails.
+    const bc = (estate.edges ?? []).find((e) => e.type === 'binds_credential');
+    const credNode = bc ? nodeById.get(bc.target) : null;
+    const binderNode = bc ? nodeById.get(bc.source) : null;
+    let rotOk = false, rotDetail = 'no binds_credential edge';
+    if (credNode && binderNode) {
+      const rot = (await argus(`/api/graph/impact?mode=credential_rotation&instanceId=${credNode.instanceId}&id=${credNode.resourceId}`)).json;
+      const fail = (await argus(`/api/graph/impact?mode=failure&instanceId=${binderNode.instanceId}&id=${binderNode.workflowId}`)).json;
+      const rotIds = (rot?.affected ?? []).map((a) => a.workflowId);
+      const failIds = (fail?.affected ?? []).map((a) => a.workflowId);
+      rotOk = (rot?.total ?? 0) >= 1 && rot?.edgeTypesTraversed?.[0] === 'binds_credential' && !setEq(rotIds, failIds);
+      rotDetail = `rotate "${credNode.label}" → ${rot?.total} binder(s) via ${rot?.edgeTypesTraversed?.join(',')}; failure of "${binderNode.label}" → ${fail?.total} (different set=${!setEq(rotIds, failIds)})`;
+    }
+    add('Rotate-credential traverses credential edges — a different answer than failure', rotOk, rotDetail);
+
+    // 5. Oracle: Argus's confirmed callers of Send Slack Alert MATCH n8n's own
+    //    workflow-index (independent confirmation on the exact H3-critical edges).
+    let oracleOk = false, oracleDetail = 'oracle not reached';
+    try {
+      const oracle = createN8nClient(INSTANCES.prod.baseUrl);
+      await oracle.login();
+      if (prodSlack && oracle.cookie) {
+        const d = await oracle.http('POST', '/rest/workflow-dependencies/details', { body: { resourceIds: [prodSlack.id], resourceType: 'workflow' } });
+        const deps = d.json?.data?.[prodSlack.id]?.dependencies ?? [];
+        const parentIds = deps.filter((x) => x.type === 'workflowParent').map((x) => x.id);
+        const argusIds = directCallers.map((a) => a.workflowId);
+        oracleOk = parentIds.length === 5 && setEq(parentIds, argusIds);
+        oracleDetail = `n8n workflow-index parents ${parentIds.length}, Argus direct callers ${argusIds.length}, match=${setEq(parentIds, argusIds)}`;
+      }
+    } catch (e) { oracleDetail = `oracle call failed: ${e.message}`; }
+    add('Confirmed edges match n8n workflow-index (independent oracle)', oracleOk, oracleDetail);
+
+    // 6. Scale sanity: the estate graph + a neighborhood query stay responsive.
+    const t0 = Date.now();
+    const nbFocus = prodSlack ? `wf:${prodSlack.instanceId}:${prodSlack.id}` : null;
+    const nb = nbFocus ? (await argus(`/api/graph?scope=neighborhood&focus=${encodeURIComponent(nbFocus)}&hops=2`)).json : null;
+    const ms = Date.now() - t0;
+    add('Graph estate + neighborhood queries responsive at fleet scale',
+      (estate.nodes ?? []).length > 0 && !!nb && ms < 4000,
+      `estate ${estate.nodes?.length ?? 0} nodes / ${estate.edges?.length ?? 0} edges; neighborhood ${nb?.nodes?.length ?? 0} nodes in ${ms}ms`);
   } finally {
     try { child.kill(); } catch { /* already gone */ }
   }

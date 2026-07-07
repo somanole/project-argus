@@ -81,6 +81,16 @@ const auditBody = {
   generatedAt: '2026-07-05T00:00:00.000Z',
 };
 const connectionsBody = { connections: [{ id: 'prod', label: 'prod', baseUrl: 'http://localhost:5678', webhookHost: null, createdAt: '2026-07-05T00:00:00.000Z', updatedAt: '2026-07-05T00:00:00.000Z', health: { status: 'ok', lastSyncedAt: '2026-07-05T00:00:00.000Z', lastError: null, workflowCount: 3 } }] };
+const gNode = (id, kind, label, over = {}) => ({ id, kind, instanceId: 'prod', instanceLabel: 'prod', label, resourceId: id.split(':').pop(), workflowId: kind === 'workflow' ? id.split(':').pop() : null, health: kind === 'workflow' ? 'healthy' : null, active: kind === 'workflow' ? true : null, archived: kind === 'workflow' ? false : null, isAgent: kind === 'workflow' ? false : null, brokenRef: kind === 'workflow' ? false : null, mcpExposed: kind === 'workflow' ? false : null, ...over });
+const graphBody = {
+  scope: 'estate', focus: null, hops: null, truncated: false, nodeTotal: 3, generatedAt: '2026-07-07T00:00:00.000Z',
+  nodes: [gNode('wf:prod:a', 'workflow', 'Order Intake'), gNode('wf:prod:b', 'workflow', 'Send Slack Alert', { health: 'failing' }), gNode('cred:prod:c', 'credential', 'Postgres — Warehouse')],
+  edges: [
+    { id: 'e1', source: 'wf:prod:a', target: 'wf:prod:b', type: 'call', confidence: 'confirmed', crossInstance: false, reason: 'executeWorkflow call' },
+    { id: 'e2', source: 'wf:prod:a', target: 'cred:prod:c', type: 'binds_credential', confidence: 'confirmed', crossInstance: false, reason: 'binds credential' },
+  ],
+};
+const impactBody = { mode: 'failure', focusKind: 'workflow', focusInstanceId: 'prod', focusId: 'b', focusLabel: 'Send Slack Alert', edgeTypesTraversed: ['call'], affected: [{ instanceId: 'prod', instanceLabel: 'prod', workflowId: 'a', name: 'Order Intake', hops: 1 }], total: 1, possibleExcluded: 0, statement: '1 affected, nothing else.', generatedAt: '2026-07-07T00:00:00.000Z' };
 const detailBody = {
   workflow: WORKFLOWS[0],
   facts: {
@@ -123,6 +133,8 @@ function mockApi(route) {
   if (/\/api\/workflows\/[^/]+\/[^/]+$/.test(p)) return send(detailBody);
   if (p.endsWith('/api/workflows')) return send(workflowsBody);
   if (p.endsWith('/api/settings/llm')) return send({ config: { provider: 'openai', model: 'gpt-5-mini', configured: true, enabled: true, envLocked: false } });
+  if (p.endsWith('/api/graph')) return send(graphBody);
+  if (p.endsWith('/api/graph/impact')) return send(impactBody);
   if (p.endsWith('/api/connections')) return send(connectionsBody);
   return send({});
 }
@@ -162,6 +174,10 @@ const VIEWS = [
   { name: 'Login', path: '/login', mock: mockApiUnauth, waitFor: 'form.panel', key: 'form.panel' },
   { name: 'Catalog list', path: '/workflows', mock: mockApi, waitFor: '.wf tbody tr', key: '.filterbar' },
   { name: 'Health view', path: '/health', mock: mockApi, waitFor: '[data-testid="health-failing-list"]', key: '[data-testid="health-summary"]' },
+  // Wait on the view root (instant) rather than the heavy async vue-flow canvas — the
+  // rule-10 gate here is "no horizontal overflow at 375px"; the canvas rendering is
+  // proven by GraphView.test.ts. Key element is the always-present scope switcher.
+  { name: 'Graph view', path: '/graph', mock: mockApi, waitFor: '[data-testid="graph-view"]', key: '[data-testid="graph-scope-switcher"]' },
   { name: 'Governance view', path: '/governance', mock: mockApi, waitFor: '[data-testid="governance-gaps"]', key: '[data-testid="governance-audit-timeline"]' },
   { name: 'Detail drawer', path: '/workflows', mock: mockApi, waitFor: '.wf tbody tr', key: '.drawer',
     action: async (page) => { await page.click('.wf tbody tr'); await page.waitForSelector('.drawer', { timeout: 4000 }); } },

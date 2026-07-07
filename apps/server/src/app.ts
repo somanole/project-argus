@@ -8,6 +8,7 @@ import { connectionsRouter } from './routes/connections.js';
 import { workflowsRouter } from './routes/workflows.js';
 import { ownershipRouter } from './routes/ownership.js';
 import { settingsRouter } from './routes/settings.js';
+import { graphRouter } from './routes/graph.js';
 import type { SyncEngine } from './sync/engine.js';
 import type { EnrichmentWorker } from './enrichment/index.js';
 
@@ -55,6 +56,7 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/workflows', guard, workflowsRouter(db, worker, config.encryptionKey));
   app.use('/api/ownership', guard, ownershipRouter(db, config.encryptionKey));
   app.use('/api/settings', guard, settingsRouter(db, config.encryptionKey, config.enrichmentEnabled, worker));
+  app.use('/api/graph', guard, graphRouter(db));
 
   return app;
 }

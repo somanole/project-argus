@@ -7,6 +7,9 @@ import type {
   SystemFact,
   TriggerFact,
   WorkflowFacts,
+  WebhookEndpoint,
+  HttpCallsite,
+  CredentialRef,
   CoverageGap,
 } from '@argus/shared';
 import type { Manifest } from './manifest.js';
@@ -14,9 +17,10 @@ import { classifyTrigger } from './triggers.js';
 import { systemsForNode, dedupeSystems } from './systems.js';
 import { extractDirectRefs, parseWorkflowId, type RawRef } from './refs.js';
 import { resolveRefs } from './resolve.js';
+import { webhookEndpointsForNode, httpCallsitesForNode, credentialRefsForNode } from './endpoints.js';
 
 /** The fact-shape version; bump when WorkflowFacts changes to force recompute. */
-export const FACTS_SCHEMA_VERSION = 1 as const;
+export const FACTS_SCHEMA_VERSION = 2 as const;
 
 const DATA_TABLE_NODE = 'n8n-nodes-base.dataTable';
 
@@ -37,6 +41,9 @@ export interface Pass1Facts {
   mcpExposed: boolean;
   callerPolicy: CallerPolicy;
   rawRefs: RawRef[];
+  webhookEndpoints: WebhookEndpoint[];
+  httpCallsites: HttpCallsite[];
+  credentialRefs: CredentialRef[];
   // Coverage inputs (finalized in pass 2):
   unknownNodeTypes: string[];
   unknownCredentials: string[];
@@ -52,6 +59,9 @@ export function analyzeWorkflow(wf: N8nWorkflowListItem, manifest: Manifest): Pa
   const systemFacts: SystemFact[] = [];
   const credentialTypeSet = new Set<string>();
   const dataTableRefs: DataTableRef[] = [];
+  const webhookEndpoints: WebhookEndpoint[] = [];
+  const httpCallsites: HttpCallsite[] = [];
+  const credentialRefs: CredentialRef[] = [];
   const unknownNodeTypeSet = new Set<string>();
   const unknownCredentialSet = new Set<string>();
   const parseAnomalies: string[] = [];
@@ -89,6 +99,11 @@ export function analyzeWorkflow(wf: N8nWorkflowListItem, manifest: Manifest): Pa
       }
     }
 
+    // Cross-workflow endpoint facts (S5): webhook entry points, HTTP call sites, credential bindings.
+    webhookEndpoints.push(...webhookEndpointsForNode(node));
+    httpCallsites.push(...httpCallsitesForNode(node));
+    credentialRefs.push(...credentialRefsForNode(node));
+
     // Unknown node type (rule 5: recorded raw in nodeTypes, drives a coverage gap).
     if (!manifest.nodeKnown(type) && !manifest.isTrigger(type)) unknownNodeTypeSet.add(type);
   }
@@ -119,6 +134,9 @@ export function analyzeWorkflow(wf: N8nWorkflowListItem, manifest: Manifest): Pa
     mcpExposed: settings.availableInMCP === true,
     callerPolicy,
     rawRefs: extractDirectRefs(wf),
+    webhookEndpoints,
+    httpCallsites,
+    credentialRefs,
     unknownNodeTypes: [...unknownNodeTypeSet],
     unknownCredentials: [...unknownCredentialSet],
     parseAnomalies,
@@ -166,6 +184,9 @@ export function finalizeFacts(
     dataTableRefs: p.dataTableRefs,
     mcpExposed: p.mcpExposed,
     directDeps,
+    webhookEndpoints: p.webhookEndpoints,
+    httpCallsites: p.httpCallsites,
+    credentialRefs: p.credentialRefs,
     callerPolicy: p.callerPolicy,
     coverage: {
       understood,
