@@ -12,7 +12,7 @@ const CALL_EDGE_TYPES = new Set(['call', 'tool', 'agent_tool', 'error_workflow']
 
 /** Systems/credentials considered sensitive when exposed to external agents. */
 const SENSITIVE_SYSTEMS = new Set(['stripe', 'salesforce', 'postgres', 'postgresql', 'mysql', 'snowflake']);
-function isSensitiveSystem(name: string): boolean {
+export function isSensitiveSystem(name: string): boolean {
   const n = name.toLowerCase();
   return SENSITIVE_SYSTEMS.has(n) || n.includes('postgres') || n.includes('payment') || n.includes('production');
 }

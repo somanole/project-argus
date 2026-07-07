@@ -190,3 +190,19 @@ export {
   type ImpactResult,
   type McpReach,
 } from './edges.js';
+export {
+  scorePillarKeySchema,
+  scorePillarSchema,
+  governanceScoreSchema,
+  unownedByCriticalitySchema,
+  exposureSurfaceSchema,
+  overviewFigureSchema,
+  governanceOverviewResponseSchema,
+  type ScorePillarKey,
+  type ScorePillar,
+  type GovernanceScore,
+  type UnownedByCriticality,
+  type ExposureSurface,
+  type OverviewFigure,
+  type GovernanceOverviewResponse,
+} from './governance.js';

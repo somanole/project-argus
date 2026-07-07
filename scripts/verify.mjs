@@ -253,6 +253,19 @@ try {
   const gMissing = missing(graphUi);
   add('Graph UI ships (canvas, scope switcher, archived/MCP toggles, legend, blast-radius panel)', gMissing.length === 0,
     gMissing.length === 0 ? `${graphUi.length} graph UI elements present` : `MISSING: ${gMissing.join(', ')}`);
+
+  // S6: governance-overview chrome — the score + five-pillar breakdown, every headline
+  // figure (unowned/SPOF/incidents/hygiene/exposure/personal-space/changelog), the export
+  // control, and the uncertainty labels (advisory owner, health-unavailable, possible
+  // excluded). Each has a component test (OverviewView.test.ts); presence counterpart.
+  const overviewUi = [
+    'overview-view', 'overview-score', 'overview-score-breakdown', 'overview-unowned', 'overview-spof',
+    'overview-incidents', 'overview-hygiene', 'overview-exposure', 'overview-personal-space',
+    'overview-changelog', 'overview-export', 'overview-health-unavailable', 'overview-possible-note', 'overview-advisory',
+  ];
+  const ovMissing = missing(overviewUi);
+  add('Governance overview UI ships (score+pillars, every figure, export, uncertainty labels)', ovMissing.length === 0,
+    ovMissing.length === 0 ? `${overviewUi.length} overview UI elements present` : `MISSING: ${ovMissing.join(', ')}`);
 }
 
 // ---- Responsive (standing rule 10): hero views usable at 375px, both themes ----
@@ -283,6 +296,7 @@ try {
       add(label, ok, detail);
     };
     row('Login usable at 375px — no horizontal overflow', 'Login');
+    row('Governance overview usable at 375px — no horizontal overflow', 'Overview');
     row('Catalog usable at 375px — no horizontal overflow, no cut-off fields', 'Catalog list');
     row('Health view usable at 375px — no horizontal overflow', 'Health view');
     row('Graph view usable at 375px — no horizontal overflow', 'Graph view');
@@ -325,6 +339,13 @@ await s4Checks();
 // cross-instance edge is confirmed, possible edges never count, rotate ≠ failure, and
 // Argus's confirmed edges match n8n's own workflow-index oracle.
 await s5Checks();
+
+// ---- S6 checks: governance overview (pure composition, never divergence) ----
+// Drives a real Argus server against both live instances; asserts the composed
+// dashboard equals its source reads (unowned == gaps, failing-with-owner == owned
+// subset of the failing feed), every figure drills to its exact set, the score is a
+// deterministic 0–100, and the export report matches the screen.
+await s6Checks();
 
 // S2 enrichment — all hermetic (built code + JSON + unit suite); no n8n, no LLM spend.
 async function s2Checks() {
@@ -1261,6 +1282,105 @@ async function s5Checks() {
     add('Graph estate + neighborhood queries responsive at fleet scale',
       (estate.nodes ?? []).length > 0 && !!nb && ms < 4000,
       `estate ${estate.nodes?.length ?? 0} nodes / ${estate.edges?.length ?? 0} edges; neighborhood ${nb?.nodes?.length ?? 0} nodes in ${ms}ms`);
+  } finally {
+    try { child.kill(); } catch { /* already gone */ }
+  }
+}
+
+// S6 — governance overview: boot a real Argus server against both live instances,
+// register them, wait for sync, and prove the composed dashboard NEVER diverges from
+// its source reads, every figure drills, the score is deterministic, and export matches.
+async function s6Checks() {
+  const up = {};
+  for (const inst of Object.values(INSTANCES)) {
+    const c = createN8nClient(inst.baseUrl);
+    up[inst.name] = (await c.healthy()) && (await c.e2eActive());
+  }
+  if (!up.prod || !up.staging) {
+    add('S6 governance overview', false, `instances down (prod=${up.prod ? 'up' : 'down'}, staging=${up.staging ? 'up' : 'down'}) — run \`pnpm seed\``);
+    return;
+  }
+  const serverEntry = join(ROOT, 'apps/server/dist/index.js');
+  if (!existsSync(serverEntry)) { add('S6 governance overview', false, 'server build missing'); return; }
+
+  const port = 3216;
+  const base = `http://127.0.0.1:${port}`;
+  const dbPath = join(tmpdir(), `argus-verify-s6-${Date.now()}.sqlite`);
+  const env = {
+    ...process.env,
+    ARGUS_PORT: String(port), ARGUS_HOST: '127.0.0.1', ARGUS_DB_PATH: dbPath,
+    ARGUS_ADMIN_PASSWORD: 'v', ARGUS_SESSION_SECRET: 'v', ARGUS_ENCRYPTION_KEY: 'v', ARGUS_POLL_INTERVAL_MS: '3000',
+  };
+  const child = spawn('node', [serverEntry], { cwd: ROOT, env, stdio: 'ignore' });
+  let cookie = '';
+  const argus = async (path, opts = {}) => {
+    const headers = { accept: 'application/json' };
+    if (opts.body !== undefined) headers['content-type'] = 'application/json';
+    if (cookie) headers.cookie = cookie;
+    const res = await fetch(base + path, { method: opts.method ?? 'GET', headers, body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined });
+    const text = await res.text();
+    let json; try { json = JSON.parse(text); } catch { /* non-JSON (e.g. the markdown export) */ }
+    return { status: res.status, json, text, setCookies: res.headers.getSetCookie?.() ?? [] };
+  };
+
+  try {
+    const health = await pollHealth(`${base}/api/health`);
+    if (!health) { add('S6 overview server boots', false, `no health on :${port}`); return; }
+    const li = await argus('/api/auth/login', { method: 'POST', body: { password: 'v', name: 'V', email: 'v@acme.example' } });
+    cookie = li.setCookies.map((c) => c.split(';')[0]).join('; ');
+    const prodC = await connect(INSTANCES.prod.baseUrl);
+    const stagingC = await connect(INSTANCES.staging.baseUrl);
+    await argus('/api/connections', { method: 'POST', body: { label: 'prod', baseUrl: INSTANCES.prod.baseUrl, apiKey: prodC.apiKey, webhookHost: INSTANCES.prod.baseUrl } });
+    await argus('/api/connections', { method: 'POST', body: { label: 'staging', baseUrl: INSTANCES.staging.baseUrl, apiKey: stagingC.apiKey, webhookHost: INSTANCES.staging.baseUrl } });
+
+    // Wait for the catalog + health sync to settle so the composed figures are populated.
+    let ov = null;
+    for (let i = 0; i < 60; i++) {
+      ov = (await argus('/api/governance/overview')).json;
+      if (ov && ov.unowned && (ov.unowned.total > 0 || (ov.health?.summary?.failing ?? 0) > 0)) break;
+      await sleep(500);
+    }
+    if (!ov) { add('S6 governance overview', false, 'no overview payload'); return; }
+
+    // 1. Non-divergence: overview.unowned == the Governance view's own gaps read.
+    const gaps = (await argus('/api/ownership/gaps')).json ?? { unowned: [] };
+    add('Overview composes, never diverges: unowned == Governance gaps',
+      ov.unowned.total === (gaps.unowned?.length ?? -1) && ov.unowned.total === ov.unowned.workflows.length,
+      `overview ${ov.unowned.total} unowned == gaps ${gaps.unowned?.length}; drills to ${ov.unowned.workflows.length}`);
+
+    // 2. Non-divergence: failing-with-owner == the OWNED subset of the Health feed.
+    const feed = (await argus('/api/workflows/failing')).json ?? { failing: [], degraded: [] };
+    const ownedFailing = [...(feed.failing ?? []), ...(feed.degraded ?? [])].filter((w) => w.owner && w.owner.status === 'assigned');
+    add('Overview composes, never diverges: failing-with-owner == ASSIGNED-owner subset of Health feed',
+      ov.failingWithOwner.count === ownedFailing.length && ov.failingWithOwner.count === ov.failingWithOwner.workflows.length,
+      `${ov.failingWithOwner.count} confirmed-owner incidents == ${ownedFailing.length} from the failing feed; drills to ${ov.failingWithOwner.workflows.length}`);
+
+    // 3. The governance score is a deterministic, explainable 0–100 with five pillars.
+    const s = ov.score;
+    const inRange = s.score === null || (typeof s.score === 'number' && s.score >= 0 && s.score <= 100);
+    const explained = Array.isArray(s.pillars) && s.pillars.length === 5 && s.pillars.every((p) => typeof p.reason === 'string' && p.inputs);
+    add('Governance score is a deterministic, explainable 0–100 (five pillars, no black box)',
+      inRange && explained,
+      `score ${s.score}; pillars ${s.pillars?.map((p) => `${p.label}=${p.scored ? p.score : 'n/a'}`).join(', ')}`);
+
+    // 4. Every headline figure drills to its exact workflow set (count == list length).
+    const drills = [
+      ['unowned', ov.unowned.total, ov.unowned.workflows.length],
+      ['failing-with-owner', ov.failingWithOwner.count, ov.failingWithOwner.workflows.length],
+      ['broken-refs', ov.hygiene.brokenRefs.count, ov.hygiene.brokenRefs.workflows.length],
+      ['active-no-exec', ov.hygiene.activeNoExecutions.count, ov.hygiene.activeNoExecutions.workflows.length],
+      ['mcp-exposed', ov.exposure.mcpExposed, ov.exposure.surfaces.length],
+    ];
+    const mismatched = drills.filter(([, count, len]) => count !== len);
+    add('Every overview figure drills to its exact workflows (count == list)', mismatched.length === 0,
+      mismatched.length === 0 ? `${drills.length} figures drill exactly` : `MISMATCH: ${mismatched.map(([n, c, l]) => `${n} ${c}≠${l}`).join(', ')}`);
+
+    // 5. The export is a structured, readable report that matches the screen.
+    const rep = await argus('/api/governance/export');
+    const md = rep.text ?? '';
+    add('Export produces a structured governance report (matches the screen)',
+      rep.status === 200 && md.includes('# Argus — Governance report') && md.includes('Governance score') && md.includes(String(ov.unowned.total)),
+      rep.status === 200 ? `markdown report, ${md.length} chars, score + ${ov.unowned.total} unowned present` : `export HTTP ${rep.status}`);
   } finally {
     try { child.kill(); } catch { /* already gone */ }
   }

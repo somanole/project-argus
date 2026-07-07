@@ -17,7 +17,7 @@ plain-English reports, and specs. My job is to make that safe.
 
 ---
 
-## The 11 standing rules
+## The 12 standing rules
 
 **1. Contract-verify before building against n8n.** Before building against any
 n8n API or event, hit the **real running n8n** first, save the actual
@@ -93,6 +93,15 @@ rule-3 discipline behaviors get, extended to UI. UI-presence acceptance criteria
 into the subsystem spec (rule 9), not just behavioral ones. A visual/both-theme
 snapshot tripwire may back this on hero views; if so, **updating a baseline gets the
 same scrutiny as changing a test (rule 2)** — never a reflex.
+
+**12. Inferred ownership is advisory, never factual.** Confirming who owns a
+workflow is a **core job of Argus** — so an **inferred** owner (derived from n8n
+project membership) is only ever a **lead to confirm**, never a substitute for a
+human **assignment**. No score, metric, gap count, or "has an owner" figure may
+count an inferred (or unowned) workflow as owned: **factual ownership = an explicitly
+assigned owner**. Inference is still surfaced — as an advisory hint that helps find
+the right person — but it is labeled advisory and excluded from every accountability
+number. (Reinforces the S4 membership-only pin; corrected into a rule at S6.)
 
 ---
 

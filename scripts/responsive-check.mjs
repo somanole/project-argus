@@ -80,6 +80,35 @@ const auditBody = {
   actions: ['connection.register', 'ownership.assign'],
   generatedAt: '2026-07-05T00:00:00.000Z',
 };
+const overviewBody = {
+  score: {
+    score: 63.5,
+    pillars: [
+      { key: 'ownership', label: 'Ownership', weight: 0.3, effectiveWeight: 0.3, score: 70, scored: true, reason: '1 of 3 workflows is unowned.', inputs: { total: 3, unowned: 1 } },
+      { key: 'reliability', label: 'Reliability', weight: 0.25, effectiveWeight: 0.25, score: 55, scored: true, reason: '1 failing, 1 degraded of 3 evaluated.', inputs: { evaluated: 3, failing: 1 } },
+      { key: 'resilience', label: 'Accountability resilience', weight: 0.2, effectiveWeight: 0.2, score: 50, scored: true, reason: '1 of 2 owned critical is a single point of failure.', inputs: { criticalOwned: 2, atRisk: 1 } },
+      { key: 'hygiene', label: 'Hygiene', weight: 0.15, effectiveWeight: 0.15, score: 80, scored: true, reason: '1 of 3 workflows has a hygiene issue.', inputs: { total: 3, issueWorkflows: 1 } },
+      { key: 'exposure', label: 'Exposure', weight: 0.1, effectiveWeight: 0.1, score: 50, scored: true, reason: '1 of 1 MCP-exposed reaches a sensitive system.', inputs: { mcpExposed: 1, reachingSensitive: 1 } },
+    ],
+  },
+  unowned: { total: gapsBody.unowned.length, byCriticality: { critical: 1, high: 0, medium: 0, low: 0, none: 0 }, workflows: gapsBody.unowned },
+  spofOwners: gapsBody.singleOwnerCritical,
+  personalSpaceCritical: gapsBody.personalSpaceCritical,
+  noBackupOwner: gapsBody.noBackupOwner,
+  failingWithOwner: { count: failingBody.failing.length, workflows: failingBody.failing },
+  hygiene: {
+    brokenRefs: { count: 1, workflows: [WORKFLOWS[2]] },
+    staleEnrichment: { count: 0, workflows: [] },
+    activeNoExecutions: { count: 1, workflows: [WORKFLOWS[2]] },
+  },
+  exposure: {
+    mcpExposed: 1, reachingSensitive: 1, reachingSensitiveUnowned: 0,
+    surfaces: [{ instanceId: 'prod', instanceLabel: 'prod', workflowId: 'w1', name: 'Salesforce CRM Sync — nightly enrichment', owned: true, ownerLabel: 'Sam Rivers', reachesSensitive: true, sensitiveSystems: ['Postgres'], reachableWorkflows: 2 }],
+  },
+  changelog: auditBody.entries,
+  health: { summary: failingBody.summary, windows: [{ instanceId: 'prod', instanceLabel: 'prod', windowHours: 336, available: true }, { instanceId: 'staging', instanceLabel: 'staging', windowHours: 336, available: false }] },
+  generatedAt: '2026-07-06T00:00:00.000Z',
+};
 const connectionsBody = { connections: [{ id: 'prod', label: 'prod', baseUrl: 'http://localhost:5678', webhookHost: null, createdAt: '2026-07-05T00:00:00.000Z', updatedAt: '2026-07-05T00:00:00.000Z', health: { status: 'ok', lastSyncedAt: '2026-07-05T00:00:00.000Z', lastError: null, workflowCount: 3 } }] };
 const gNode = (id, kind, label, over = {}) => ({ id, kind, instanceId: 'prod', instanceLabel: 'prod', label, resourceId: id.split(':').pop(), workflowId: kind === 'workflow' ? id.split(':').pop() : null, health: kind === 'workflow' ? 'healthy' : null, active: kind === 'workflow' ? true : null, archived: kind === 'workflow' ? false : null, isAgent: kind === 'workflow' ? false : null, brokenRef: kind === 'workflow' ? false : null, mcpExposed: kind === 'workflow' ? false : null, ...over });
 const graphBody = {
@@ -125,6 +154,7 @@ function mockApi(route) {
   if (p.endsWith('/api/auth/logout')) return send({}, 204);
   if (p.endsWith('/api/workflows/coverage')) return send(coverageBody);
   if (p.endsWith('/api/workflows/enrichment-progress')) return send({ enabled: true, lastEnrichedAt: '2026-07-06T00:00:00.000Z', total: 3, analyzed: 3, stub: 0, stale: 0, pending: 0 });
+  if (p.endsWith('/api/governance/overview')) return send(overviewBody);
   if (p.endsWith('/api/workflows/failing')) return send(failingBody);
   if (p.endsWith('/api/ownership/gaps')) return send(gapsBody);
   if (p.endsWith('/api/ownership/audit')) return send(auditBody);
@@ -172,6 +202,7 @@ async function serveDist() {
 
 const VIEWS = [
   { name: 'Login', path: '/login', mock: mockApiUnauth, waitFor: 'form.panel', key: 'form.panel' },
+  { name: 'Overview', path: '/overview', mock: mockApi, waitFor: '[data-testid="overview-score"]', key: '[data-testid="overview-score-breakdown"]' },
   { name: 'Catalog list', path: '/workflows', mock: mockApi, waitFor: '.wf tbody tr', key: '.filterbar' },
   { name: 'Health view', path: '/health', mock: mockApi, waitFor: '[data-testid="health-failing-list"]', key: '[data-testid="health-summary"]' },
   // Wait on the view root (instant) rather than the heavy async vue-flow canvas — the
