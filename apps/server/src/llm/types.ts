@@ -60,18 +60,45 @@ export interface StructuredResult<T> {
   usage: TokenUsage;
 }
 
-// --- Seam 2: streaming tool loop. Declared for S7; bodies throw not_implemented in S2. ---
+// --- Seam 2: streaming tool loop (S7 chat). One manual loop, both providers. ---
+
+/**
+ * A tool the model may call during the loop. `execute` runs the DETERMINISTIC read and
+ * returns the data fed back to the model — the seam stays domain-agnostic; the caller
+ * (chat) supplies tools that wrap Argus's own reads. `execute` receives schema-VALIDATED
+ * input; a thrown error is surfaced to the model as a tool error (rule 5: "couldn't
+ * analyze"), never as an invented result. `summarize` shapes the chip's result label.
+ */
+export interface LlmTool {
+  name: string;
+  description: string;
+  schema: ZodType<unknown>;
+  execute: (input: unknown, signal?: AbortSignal) => Promise<unknown>;
+  /** Short human phrasing of the result for the tool-call chip; default is generic. */
+  summarize?: (result: unknown) => string;
+}
+
 export interface StreamToolLoopArgs {
   system: string;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
-  tools: Array<{ name: string; description: string; schema: ZodType<unknown> }>;
+  tools: LlmTool[];
+  /** Hard cap on model↔tool round-trips (PLAN: 8). */
   maxIterations: number;
+  /** Output token ceiling per model call. */
+  maxTokens?: number | undefined;
   signal?: AbortSignal | undefined;
 }
+
+/**
+ * A streamed step of the loop. `tool_call`/`tool_result` are paired by `id` and drive
+ * the chips; `text` is answer content (emitted once the model stops calling tools);
+ * `done` ends the turn with accumulated usage.
+ */
 export type ToolLoopEvent =
   | { type: 'text'; text: string }
-  | { type: 'tool_call'; name: string; input: unknown }
-  | { type: 'done' };
+  | { type: 'tool_call'; id: string; name: string; input: unknown }
+  | { type: 'tool_result'; id: string; name: string; ok: boolean; summary: string }
+  | { type: 'done'; usage: TokenUsage };
 
 export interface LlmClient {
   readonly provider: LlmProvider;

@@ -206,3 +206,13 @@ export {
   type OverviewFigure,
   type GovernanceOverviewResponse,
 } from './governance.js';
+export {
+  chatWorkflowRefSchema,
+  chatEventSchema,
+  chatTurnSchema,
+  chatRequestSchema,
+  type ChatWorkflowRef,
+  type ChatEvent,
+  type ChatTurn,
+  type ChatRequest,
+} from './chat.js';

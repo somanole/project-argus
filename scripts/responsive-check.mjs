@@ -213,6 +213,9 @@ const VIEWS = [
   { name: 'Detail drawer', path: '/workflows', mock: mockApi, waitFor: '.wf tbody tr', key: '.drawer',
     action: async (page) => { await page.click('.wf tbody tr'); await page.waitForSelector('.drawer', { timeout: 4000 }); } },
   { name: 'Settings', path: '/settings', mock: mockApi, waitFor: '[data-testid="settings-view"]', key: '.card' },
+  // Chat empty state renders without an /api call (chat only POSTs on send). The rule-10
+  // gate is "no horizontal overflow at 375px"; the composer is the always-present key.
+  { name: 'Chat view', path: '/chat', mock: mockApi, waitFor: '[data-testid="chat-view"]', key: '[data-testid="chat-input"]' },
 ];
 
 export async function runResponsiveCheck() {

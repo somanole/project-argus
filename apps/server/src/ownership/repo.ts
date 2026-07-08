@@ -3,6 +3,7 @@ import type {
   SessionActor,
   OwnerAssignmentInput,
   BackupOwnerInput,
+  OwnerRef,
   WorkflowOwner,
   OwnershipSource,
   GapWorkflow,
@@ -459,4 +460,68 @@ export function governanceGaps(db: Database.Database): Omit<GovernanceGapsRespon
     personalSpaceCritical: personalSpaceCritical(db),
     noBackupOwner: noBackupOwner(db),
   };
+}
+
+// ── S7 chat: "what does X own / what if X leaves" ─────────────────────────────
+
+export interface OwnedWorkflow {
+  instanceId: string;
+  instanceLabel: string;
+  workflowId: string;
+  name: string;
+  criticality: string | null;
+  active: boolean;
+  hasBackup: boolean;
+  /** critical + no backup owner ⇒ this person is a single point of failure for it. */
+  singlePointOfFailure: boolean;
+}
+
+/**
+ * Every workflow with an ASSIGNED owner whose email matches (case-insensitive),
+ * estate-wide — the read behind chat's "what does X own / what if X leaves". Keys on
+ * ASSIGNED ownership ONLY (standing rule 12: inferred ownership is advisory, never
+ * counted as owned) — an inferred-only workflow is never returned here. Computes no new
+ * fact; it re-shapes existing ownership + criticality data.
+ */
+export function workflowsOwnedBy(db: Database.Database, email: string): OwnedWorkflow[] {
+  const rows = db
+    .prepare(
+      `SELECT w.instance_id, c.label AS instance_label, w.id AS workflow_id, w.name, w.active AS active,
+              ${CRIT} AS criticality, ${CRIT_REASON} AS criticality_reason, o.backup_owner_email AS backup_email
+         FROM workflow_ownership o
+         JOIN workflows w ON w.instance_id = o.instance_id AND w.id = o.workflow_id
+         JOIN connections c ON c.id = w.instance_id
+         ${ENRICH_JOIN}
+        WHERE o.owner_email IS NOT NULL AND LOWER(o.owner_email) = LOWER(?)
+        ORDER BY ${CRIT_RANK}, c.label, w.name`,
+    )
+    .all(email) as (GapRow & { active: number; backup_email: string | null })[];
+  return rows.map((r) => {
+    const hasBackup = r.backup_email != null;
+    return {
+      instanceId: r.instance_id,
+      instanceLabel: r.instance_label,
+      workflowId: r.workflow_id,
+      name: r.name,
+      criticality: r.criticality,
+      active: r.active === 1,
+      hasBackup,
+      singlePointOfFailure: r.criticality === 'critical' && !hasBackup,
+    };
+  });
+}
+
+/**
+ * Distinct people who hold an ASSIGNED owner role, estate-wide — lets chat resolve a
+ * name ("Sarah") to the exact owner email(s) before calling `workflowsOwnedBy`. Never
+ * fabricates a person: if a name matches nobody, the caller says so (rule 5).
+ */
+export function listAssignedOwners(db: Database.Database): OwnerRef[] {
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT owner_email AS email, owner_name AS name
+         FROM workflow_ownership WHERE owner_email IS NOT NULL ORDER BY owner_email`,
+    )
+    .all() as { email: string; name: string | null }[];
+  return rows.map((r) => ({ email: r.email, name: r.name }));
 }

@@ -10,6 +10,8 @@ import { ownershipRouter } from './routes/ownership.js';
 import { settingsRouter } from './routes/settings.js';
 import { graphRouter } from './routes/graph.js';
 import { governanceRouter } from './routes/governance.js';
+import { chatRouter } from './routes/chat.js';
+import { createChatSessionStore } from './chat/session.js';
 import type { SyncEngine } from './sync/engine.js';
 import type { EnrichmentWorker } from './enrichment/index.js';
 
@@ -19,7 +21,7 @@ export interface AppDeps {
   db: Database.Database;
   engine: SyncEngine;
   worker: EnrichmentWorker;
-  config: { adminPassword: string; sessionSecret: string; encryptionKey: string; enrichmentEnabled: boolean };
+  config: { adminPassword: string; sessionSecret: string; encryptionKey: string; enrichmentEnabled: boolean; chatEgressEmails: boolean };
 }
 
 /**
@@ -59,6 +61,9 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/settings', guard, settingsRouter(db, config.encryptionKey, config.enrichmentEnabled, worker));
   app.use('/api/graph', guard, graphRouter(db));
   app.use('/api/governance', guard, governanceRouter(db));
+  // Chat history lives here, per process — in-memory, not persisted (Finding 1).
+  const chatSessions = createChatSessionStore();
+  app.use('/api/chat', guard, chatRouter(db, config.encryptionKey, config.chatEgressEmails, chatSessions));
 
   return app;
 }

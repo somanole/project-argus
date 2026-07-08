@@ -9,6 +9,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/health', name: 'health', component: () => import('./views/HealthView.vue') },
   { path: '/graph', name: 'graph', component: () => import('./views/GraphView.vue') },
   { path: '/governance', name: 'governance', component: () => import('./views/GovernanceView.vue') },
+  { path: '/chat', name: 'chat', component: () => import('./views/ChatView.vue') },
   { path: '/connections', name: 'connections', component: () => import('./views/ConnectionsView.vue') },
   { path: '/settings', name: 'settings', component: () => import('./views/SettingsView.vue') },
   { path: '/:pathMatch(.*)*', redirect: '/overview' },

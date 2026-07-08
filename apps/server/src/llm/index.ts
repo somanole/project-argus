@@ -18,4 +18,5 @@ export {
   type StructuredResult,
   type StreamToolLoopArgs,
   type ToolLoopEvent,
+  type LlmTool,
 } from './types.js';

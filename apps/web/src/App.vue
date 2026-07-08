@@ -38,6 +38,7 @@ async function logout(): Promise<void> {
           <router-link to="/health">Health</router-link>
           <router-link to="/graph">Graph</router-link>
           <router-link to="/governance">Governance</router-link>
+          <router-link to="/chat">Chat</router-link>
           <router-link to="/connections">Connections</router-link>
           <router-link to="/settings">Settings</router-link>
         </nav>

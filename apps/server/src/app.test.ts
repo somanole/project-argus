@@ -38,7 +38,7 @@ const { openDb } = await import('./db/index.js');
 const { createSyncEngine } = await import('./sync/engine.js');
 const { createEnrichmentWorker } = await import('./enrichment/index.js');
 
-const config = { adminPassword: 'pw', sessionSecret: 's', encryptionKey: 'e', enrichmentEnabled: true };
+const config = { adminPassword: 'pw', sessionSecret: 's', encryptionKey: 'e', enrichmentEnabled: true, chatEgressEmails: false };
 const SECRET_KEY = 'my-real-n8n-api-key';
 
 function build() {

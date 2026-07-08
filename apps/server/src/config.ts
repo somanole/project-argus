@@ -38,6 +38,9 @@ export interface ArgusConfig {
   enrichmentConcurrency: number;
   /** Per-run token budget; the run stops when reached, leaving the rest PENDING (0 = unlimited). */
   enrichmentSpendCapTokens: number;
+  // S7 chat:
+  /** Opt-in (default off): let chat egress owner/actor emails in tool results (DECISION #29). */
+  chatEgressEmails: boolean;
 }
 
 export function loadConfig(): ArgusConfig {
@@ -51,5 +54,7 @@ export function loadConfig(): ArgusConfig {
     enrichmentEnabled: (process.env.ENRICHMENT_ENABLED ?? 'true').toLowerCase() !== 'false',
     enrichmentConcurrency: Number(process.env.ARGUS_ENRICHMENT_CONCURRENCY ?? 3),
     enrichmentSpendCapTokens: Number(process.env.ARGUS_ENRICHMENT_SPEND_CAP_TOKENS ?? 5_000_000),
+    // PII minimization by default (DECISION #29): emails leave only when explicitly opted in.
+    chatEgressEmails: (process.env.ARGUS_CHAT_EGRESS_EMAILS ?? 'false').toLowerCase() === 'true',
   };
 }

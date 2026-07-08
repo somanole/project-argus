@@ -54,12 +54,91 @@ describe('createLlmClient (OpenAI seam)', () => {
     await expect(client.structuredOutput(args)).rejects.toMatchObject({ kind: 'schema_parse' });
   });
 
-  it('streamToolLoop is not implemented until S7', async () => {
-    vi.stubGlobal('fetch', vi.fn());
+});
+
+// --- Seam 2: the streaming tool loop (S7 chat). ---
+
+const echoTool = {
+  name: 'echo',
+  description: 'echo the query back',
+  schema: z.object({ q: z.string() }),
+  execute: vi.fn(async (input: unknown) => ({ echoed: (input as { q: string }).q })),
+  summarize: () => '1 echo',
+};
+
+function openAiToolCall(id: string, name: string, argsObj: unknown) {
+  return res(200, {
+    choices: [{ message: { content: null, tool_calls: [{ id, type: 'function', function: { name, arguments: JSON.stringify(argsObj) } }] }, finish_reason: 'tool_calls' }],
+    usage: { prompt_tokens: 10, completion_tokens: 5 },
+  });
+}
+function openAiText(text: string) {
+  return res(200, { choices: [{ message: { content: text, tool_calls: [] }, finish_reason: 'stop' }], usage: { prompt_tokens: 8, completion_tokens: 3 } });
+}
+function anthropicToolUse(id: string, name: string, input: unknown) {
+  return res(200, { content: [{ type: 'tool_use', id, name, input }], stop_reason: 'tool_use', usage: { input_tokens: 8, output_tokens: 4 } });
+}
+function anthropicText(text: string) {
+  return res(200, { content: [{ type: 'text', text }], stop_reason: 'end_turn', usage: { input_tokens: 6, output_tokens: 2 } });
+}
+
+async function collect(iter: AsyncIterable<{ type: string }>): Promise<Array<Record<string, unknown>>> {
+  const out: Array<Record<string, unknown>> = [];
+  for await (const e of iter) out.push(e as Record<string, unknown>);
+  return out;
+}
+
+describe('streamToolLoop — OpenAI', () => {
+  afterEach(() => echoTool.execute.mockClear());
+
+  it('calls a tool, feeds the result back, then streams the final answer', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(openAiToolCall('c1', 'echo', { q: 'hi' })).mockResolvedValueOnce(openAiText('the answer'));
+    vi.stubGlobal('fetch', fetchMock);
     const client = createLlmClient({ provider: 'openai', apiKey: 'k', model: 'gpt-5-mini' });
-    await expect(async () => {
-      for await (const _ of client.streamToolLoop({ system: '', messages: [], tools: [], maxIterations: 1 })) void _;
-    }).rejects.toMatchObject({ kind: 'not_implemented' });
+    const events = await collect(client.streamToolLoop({ system: 'sys', messages: [{ role: 'user', content: 'q' }], tools: [echoTool], maxIterations: 8 }));
+
+    expect(events.map((e) => e.type)).toEqual(['tool_call', 'tool_result', 'text', 'done']);
+    expect(events[0]).toMatchObject({ type: 'tool_call', name: 'echo', input: { q: 'hi' } });
+    expect(events[1]).toMatchObject({ type: 'tool_result', name: 'echo', ok: true, summary: '1 echo' });
+    expect(events[2]).toMatchObject({ type: 'text', text: 'the answer' });
+    expect(echoTool.execute).toHaveBeenCalledWith({ q: 'hi' }, undefined);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('surfaces an invalid tool input as a structured error (no crash, no invented result)', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(openAiToolCall('c1', 'echo', { wrong: 'shape' })).mockResolvedValueOnce(openAiText('handled'));
+    vi.stubGlobal('fetch', fetchMock);
+    const client = createLlmClient({ provider: 'openai', apiKey: 'k', model: 'gpt-5-mini' });
+    const events = await collect(client.streamToolLoop({ system: 'sys', messages: [{ role: 'user', content: 'q' }], tools: [echoTool], maxIterations: 8 }));
+    expect(events[1]).toMatchObject({ type: 'tool_result', ok: false });
+    expect(echoTool.execute).not.toHaveBeenCalled();
+  });
+});
+
+describe('streamToolLoop — Anthropic', () => {
+  afterEach(() => echoTool.execute.mockClear());
+
+  it('calls a tool, feeds the result back, then streams the final answer', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(anthropicToolUse('t1', 'echo', { q: 'hi' })).mockResolvedValueOnce(anthropicText('the answer'));
+    vi.stubGlobal('fetch', fetchMock);
+    const client = createLlmClient({ provider: 'anthropic', apiKey: 'k', model: 'claude-haiku-4-5' });
+    const events = await collect(client.streamToolLoop({ system: 'sys', messages: [{ role: 'user', content: 'q' }], tools: [echoTool], maxIterations: 8 }));
+
+    expect(events.map((e) => e.type)).toEqual(['tool_call', 'tool_result', 'text', 'done']);
+    expect(events[0]).toMatchObject({ type: 'tool_call', name: 'echo', input: { q: 'hi' } });
+    expect(events[2]).toMatchObject({ type: 'text', text: 'the answer' });
+    expect(events[3]).toMatchObject({ type: 'done', usage: { totalTokens: 20 } });
+    expect(echoTool.execute).toHaveBeenCalledWith({ q: 'hi' }, undefined);
+  });
+
+  it('stops at the iteration cap with an honest message, never an invented answer', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(anthropicToolUse('t1', 'echo', { q: 'loop' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const client = createLlmClient({ provider: 'anthropic', apiKey: 'k', model: 'claude-haiku-4-5' });
+    const events = await collect(client.streamToolLoop({ system: 'sys', messages: [{ role: 'user', content: 'q' }], tools: [echoTool], maxIterations: 2 }));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(events.at(-2)).toMatchObject({ type: 'text', text: expect.stringContaining('tool-call limit') });
+    expect(events.at(-1)).toMatchObject({ type: 'done' });
   });
 });
 

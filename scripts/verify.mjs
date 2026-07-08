@@ -266,6 +266,14 @@ try {
   const ovMissing = missing(overviewUi);
   add('Governance overview UI ships (score+pillars, every figure, export, uncertainty labels)', ovMissing.length === 0,
     ovMissing.length === 0 ? `${overviewUi.length} overview UI elements present` : `MISSING: ${ovMissing.join(', ')}`);
+
+  // S7: chat chrome — the chat view, message list + composer, streaming indicator,
+  // tool-call chips, and clickable workflow references (built only from tool-surfaced
+  // workflows). Each has a component test (ChatView.test.ts); presence counterpart (rule 11).
+  const chatUi = ['chat-view', 'chat-messages', 'chat-message', 'chat-input', 'chat-send', 'chat-streaming', 'chat-tool-chip', 'chat-workflow-ref'];
+  const cMissing = missing(chatUi);
+  add('Chat UI ships (view, composer, streaming, tool-call chips, clickable workflow refs)', cMissing.length === 0,
+    cMissing.length === 0 ? `${chatUi.length} chat UI elements present` : `MISSING: ${cMissing.join(', ')}`);
 }
 
 // ---- Responsive (standing rule 10): hero views usable at 375px, both themes ----
@@ -303,6 +311,7 @@ try {
     row('Governance view usable at 375px — no horizontal overflow', 'Governance view');
     row('Detail drawer usable at 375px — full-width, no overflow', 'Detail drawer');
     row('Settings usable at 375px — no horizontal overflow', 'Settings');
+    row('Chat view usable at 375px — no horizontal overflow', 'Chat view');
   }
 }
 
@@ -346,6 +355,78 @@ await s5Checks();
 // subset of the failing feed), every figure drills to its exact set, the score is a
 // deterministic 0–100, and the export report matches the screen.
 await s6Checks();
+
+// ---- S7 checks: chat (hermetic — stub LLM, no n8n, no LLM spend) ----
+// The tool loop + scripted persona are proven against a stub client; the live
+// invented-facts=0 gate is `pnpm eval:chat` (run with a key, like `pnpm eval`).
+await s7Checks();
+
+// S7 chat — hermetic: the backend tool loop + scripted persona (stub LLM, no spend)
+// and the faithfulness-eval harness parsing. The live gate is `pnpm eval:chat`.
+async function s7Checks() {
+  // 1. Backend behaviors: streaming tool loop (both providers), scripted not-found /
+  //    out-of-scope persona, and the SSE route — all against a deterministic stub client.
+  try {
+    execSync('pnpm --filter @argus/server exec vitest run src/chat src/llm/client.test.ts', { cwd: ROOT, stdio: 'pipe' });
+    add('Chat backend green (tool loop both providers · scripted not-found · SSE route · no spend)', true,
+      'chat + llm tool-loop unit suite passed against a stub LLM (no network, no spend)');
+  } catch (e) {
+    const out = (e.stdout || e.stderr || e.message || '').toString().slice(-500);
+    add('Chat backend green (tool loop both providers · scripted not-found · SSE route · no spend)', false, `suite failed: ${out}`);
+  }
+
+  // 1b. Egress gate (security review): redaction backstop on EVERY tool · get_workflow_detail
+  //     shaped to an allowlist (no raw host/webhook paths/URLs/expression strings) · owner &
+  //     actor emails names-only by default · ids survive (docs/DATA-FLOW-CHAT.md; #26/#28/#29).
+  try {
+    execSync('pnpm --filter @argus/server exec vitest run src/chat/egress.test.ts', { cwd: ROOT, stdio: 'pipe' });
+    add('Chat egress hardened (all-tools scrub · shaped facts allowlist · names-only default · ids intact)', true,
+      'every tool redacted; no raw host/path/URL/expr in facts; no owner/actor email by default; UUID instanceId preserved');
+  } catch (e) {
+    const out = (e.stdout || e.stderr || e.message || '').toString().slice(-500);
+    add('Chat egress hardened (all-tools scrub · shaped facts allowlist · names-only default · ids intact)', false, `egress gate failed: ${out}`);
+  }
+
+  // 1c. Conversation history is SERVER-SIDE, keyed by the authenticated actor — a client
+  //     cannot seed fabricated "prior tool results" for the model to narrate (Finding 1).
+  try {
+    execSync('pnpm --filter @argus/server exec vitest run src/chat/service.test.ts -t "server-side chat history"', { cwd: ROOT, stdio: 'pipe' });
+    add('Chat history is server-side (client cannot seed context; namespaced per actor)', true,
+      'client history dropped at the wire; turns persisted server-side per (actor, conversationId)');
+  } catch (e) {
+    const out = (e.stdout || e.stderr || e.message || '').toString().slice(-500);
+    add('Chat history is server-side (client cannot seed context; namespaced per actor)', false, `history gate failed: ${out}`);
+  }
+
+  // 1d. Same-named workflows across instances resolve by instance (id, label, or "(prod)"
+  //     suffix) instead of looping on the disambiguation prompt (user-reported bug).
+  try {
+    execSync('pnpm --filter @argus/server exec vitest run src/chat/tools.test.ts', { cwd: ROOT, stdio: 'pipe' });
+    add('Chat resolves same-named workflows across instances (by id / label / suffix)', true,
+      'get_workflow_detail narrows a duplicate name to one when the instance is named');
+  } catch (e) {
+    const out = (e.stdout || e.stderr || e.message || '').toString().slice(-500);
+    add('Chat resolves same-named workflows across instances (by id / label / suffix)', false, `disambiguation gate failed: ${out}`);
+  }
+
+  // 2. The faithfulness eval harness runs offline: the canonical + hostile cases load and
+  //    the invented-facts scorer computes (flags a fabricated fact, passes a grounded one).
+  //    The LIVE gate (real wrapper over the seeded estate, invented facts = 0) is `pnpm eval:chat`.
+  try {
+    const { CANONICAL, HOSTILE } = await import(pathToFileURL(join(ROOT, 'scripts/eval/chat/cases.mjs')).href);
+    const { scoreFaithfulness } = await import(pathToFileURL(join(ROOT, 'scripts/eval/chat/score.mjs')).href);
+    // Grounded answer: every name/number is in the corpus ⇒ 0 invented.
+    const grounded = scoreFaithfulness('Daily Stripe Reconciliation is failing; 3 workflows affected.', 'Daily Stripe Reconciliation ... affected count 3 ...', 3);
+    // Fabricated answer: a workflow + count that never appear in the corpus ⇒ invented > 0.
+    const fabricated = scoreFaithfulness('Quarterly Unicorn Sync owns 99 workflows.', 'Daily Stripe Reconciliation ... affected count 3 ...', 3);
+    const ok = Array.isArray(CANONICAL) && CANONICAL.length === 8 && Array.isArray(HOSTILE) && HOSTILE.length >= 4 && grounded.inventedCount === 0 && fabricated.inventedCount > 0;
+    add('Chat faithfulness eval harness runs (8 canonical + hostile cases; invented-facts scorer computes)', ok,
+      ok ? `${CANONICAL.length} canonical + ${HOSTILE.length} hostile cases; scorer flags fabricated (${fabricated.inventedCount}), passes grounded (0)` : 'cases/scorer did not verify — see `pnpm eval:chat`');
+  } catch (e) {
+    add('Chat faithfulness eval harness runs (8 canonical + hostile cases; invented-facts scorer computes)', false,
+      `eval harness not loadable: ${e.message}`);
+  }
+}
 
 // S2 enrichment — all hermetic (built code + JSON + unit suite); no n8n, no LLM spend.
 async function s2Checks() {
