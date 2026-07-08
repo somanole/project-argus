@@ -409,6 +409,18 @@ async function s7Checks() {
     add('Chat resolves same-named workflows across instances (by id / label / suffix)', false, `disambiguation gate failed: ${out}`);
   }
 
+  // 1e. The egress doc reproduces the ACTUAL system prompt verbatim (rule 9 — the prompt is
+  //     part of what egresses; the doc must not drift from prompt.ts).
+  try {
+    const { CHAT_SYSTEM_PROMPT } = await import(pathToFileURL(join(ROOT, 'apps/server/dist/chat/prompt.js')).href);
+    const doc = readFileSync(join(ROOT, 'docs/DATA-FLOW-CHAT.md'), 'utf8');
+    const inSync = doc.includes(CHAT_SYSTEM_PROMPT);
+    add('Chat egress doc quotes the verbatim system prompt (DATA-FLOW-CHAT.md in sync)', inSync,
+      inSync ? 'DATA-FLOW-CHAT.md contains the current CHAT_SYSTEM_PROMPT' : 'STALE — re-sync the prompt block in DATA-FLOW-CHAT.md with prompt.ts');
+  } catch (e) {
+    add('Chat egress doc quotes the verbatim system prompt (DATA-FLOW-CHAT.md in sync)', false, `could not verify: ${e.message}`);
+  }
+
   // 2. The faithfulness eval harness runs offline: the canonical + hostile cases load and
   //    the invented-facts scorer computes (flags a fabricated fact, passes a grounded one).
   //    The LIVE gate (real wrapper over the seeded estate, invented facts = 0) is `pnpm eval:chat`.
