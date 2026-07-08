@@ -223,7 +223,7 @@ export function buildChatTools(db: Database.Database, recordRefs: RecordRefs, op
         if (res.kind === 'none') return { found: false, reason: `no workflow matches "${a.name || a.id}"` };
         if (res.kind === 'many') {
           surface(res.candidates);
-          return { found: false, ambiguous: true, candidates: res.candidates.map((w) => ({ instanceId: w.instanceId, id: w.id, name: w.name, instance: w.instanceLabel })) };
+          return { found: false, ambiguous: true, candidates: res.candidates.map((w) => ({ name: w.name, instance: w.instanceLabel })) };
         }
         const w = res.workflow;
         surface([w]);
@@ -247,7 +247,7 @@ export function buildChatTools(db: Database.Database, recordRefs: RecordRefs, op
         if (res.kind === 'none') return { found: false, reason: `no workflow matches "${a.name || a.id}"` };
         if (res.kind === 'many') {
           surface(res.candidates);
-          return { found: false, ambiguous: true, candidates: res.candidates.map((w) => ({ instanceId: w.instanceId, id: w.id, name: w.name })) };
+          return { found: false, ambiguous: true, candidates: res.candidates.map((w) => ({ name: w.name, instance: w.instanceLabel })) };
         }
         const w = res.workflow;
         const edges = readAllEdges(db);

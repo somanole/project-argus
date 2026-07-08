@@ -43,6 +43,8 @@ const EDGE_WORDS = new Set([
   'if', 'total', 'both', 'so', 'then', 'based', 'note', 'also', 'plus', 'with', 'for',
   'to', 'of', 'in', 'on', 'is', 'are', 'was', 'were', 'has', 'have', 'will', 'would',
   'there', 'their', 'they', 'we', 'our', 'all', 'any', 'each', 'only', 'just',
+  // number words that begin a sentence ("One MCP-exposed workflow …")
+  'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'short',
 ]);
 
 // Number tokens we never treat as invented: years and clock-like values are almost
@@ -71,7 +73,12 @@ export function extractAnswerNames(answer) {
     // "Quarterly Unicorn Sync.") so it doesn't defeat the corpus substring match.
     const cleaned = String(raw).trim().replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '');
     const span = trimSpan(cleaned);
-    if (span && !isTrivialSpan(span)) names.add(span);
+    // Only ENTITY-LIKE spans count: a workflow/person/system name is Title Case or has a
+    // digit ("Dispatch Expense #12"). An all-lowercase quoted phrase is conversational
+    // scaffolding ("all three", "find by execution", "the prod one"), never an estate fact —
+    // skipping it kills that false-positive class. A lowercase real name, if it exists, is
+    // grounded case-insensitively anyway, so it is never flagged regardless.
+    if (span && !isTrivialSpan(span) && /[A-Z0-9]/.test(span)) names.add(span);
   };
 
   // (a) Quoted spans. UNAMBIGUOUS delimiters only: double quotes (straight + typographic)
@@ -126,8 +133,11 @@ export function extractAnswerNumbers(answer) {
   const nums = new Set();
   // Match decimals as WHOLE tokens ("50.9" is one number, not "50" + "9").
   for (const m of text.matchAll(/\b(\d{1,7}(?:\.\d+)?)\b/g)) {
-    const tok = m[1];
+    let tok = m[1];
     if (YEAR_RE.test(tok)) continue; // a year → timestamp echo, not a governance count
+    // Normalize trailing decimal zeros so a reformatted "20.0" grounds against "20"
+    // (and "50.90" against "50.9"): 20.0 → 20, 50.90 → 50.9.
+    if (tok.includes('.')) tok = tok.replace(/0+$/, '').replace(/\.$/, '');
     nums.add(tok);
   }
   return [...nums];
