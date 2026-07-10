@@ -45,9 +45,13 @@ governance tool that guesses is dead. (A confident wrong answer is fatal; a
 visible "couldn't analyze" is fine.)
 
 **6. One provider-abstracting LLM wrapper; sacred tables.** All LLM calls go through
-**one wrapper** (provider [Anthropic or OpenAI, user-chosen + BYO key], model,
+**one wrapper** (provider [Anthropic, OpenAI, or any **OpenAI-compatible endpoint** —
+self-hosted vLLM/Ollama or a corporate gateway; user-chosen + BYO key], model,
 redaction, spend cap, logging) behind two stable seams — structured output against a
-Zod schema, and a streaming tool loop — so no caller sees provider specifics. The
+Zod schema, and a streaming tool loop — so no caller sees provider specifics. A
+provider's **seam support is capability-probed, never assumed**: an endpoint that can't
+do streaming tool calls degrades explicitly ("chat unavailable on this provider"),
+never silently wrong (rule 5, Principle 7). The
 **ownership**, **identity-merge**, and
 **audit-log** tables are sacred: no code path may bulk-delete or rewrite them, and
 **every mutation writes its audit entry in the same transaction**.
