@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3';
 import type { EnrichmentProgress } from '@argus/shared';
 import { createLlmClient, SpendMeter, type LlmClient, type LlmClientConfig } from '../llm/index.js';
-import { getLlmConfigRow, getDecryptedApiKey, getEnrichmentEnabled } from '../settings/repo.js';
+import { getLlmConfigRow, getDecryptedApiKey, getEnrichmentEnabled, type LlmConfigRow } from '../settings/repo.js';
 import { enrichWorkflow, ENRICHMENT_SCHEMA_VERSION } from './enrich.js';
 import { PROMPT_VERSION } from './prompt.js';
 import type { EnrichmentInput } from './allowlist.js';
@@ -53,28 +53,43 @@ export function createEnrichmentWorker(deps: EnrichmentWorkerDeps): EnrichmentWo
   // Effective on-state: the ops env override AND the persisted in-app master switch.
   const effectiveEnabled = (): boolean => envAllowed && getEnrichmentEnabled(db);
 
+  /**
+   * The freshness-gating tuple. `baseUrl` is part of it because two endpoints can serve
+   * the same model id — repointing at a different one must re-enrich, not silently keep
+   * summaries a different model wrote (DECISION #30).
+   */
+  function tupleOf(cfg: LlmConfigRow): GatingTuple {
+    return {
+      provider: cfg.provider,
+      model: cfg.model,
+      baseUrl: cfg.base_url,
+      promptVersion: PROMPT_VERSION,
+      schemaVersion: ENRICHMENT_SCHEMA_VERSION,
+    };
+  }
+
   function activeTuple(): GatingTuple | null {
     const cfg = getLlmConfigRow(db);
-    if (!cfg) return null;
-    return { provider: cfg.provider, model: cfg.model, promptVersion: PROMPT_VERSION, schemaVersion: ENRICHMENT_SCHEMA_VERSION };
+    return cfg ? tupleOf(cfg) : null;
   }
 
   async function runInstance(instanceId: string): Promise<EnrichmentRunResult> {
     const base: EnrichmentRunResult = { analyzed: 0, stub: 0, pending: 0, tokens: 0 };
     if (!effectiveEnabled()) return { ...base, skipped: 'disabled' };
     const cfg = getLlmConfigRow(db);
+    // `''` is a legal key for a keyless self-hosted endpoint — only `null` is unconfigured.
     const apiKey = cfg ? getDecryptedApiKey(db, encryptionKey) : null;
-    if (!cfg || !apiKey) return { ...base, skipped: 'unconfigured' };
+    if (!cfg || apiKey === null) return { ...base, skipped: 'unconfigured' };
     if (inFlight.has(instanceId)) return { ...base, skipped: 'in-flight' };
 
     inFlight.add(instanceId);
     try {
       pruneOrphans(db, instanceId);
-      const tuple: GatingTuple = { provider: cfg.provider, model: cfg.model, promptVersion: PROMPT_VERSION, schemaVersion: ENRICHMENT_SCHEMA_VERSION };
+      const tuple: GatingTuple = tupleOf(cfg);
       const candidates = listEnrichmentCandidates(db, instanceId, tuple);
       if (candidates.length === 0) return base;
 
-      const client = clientFactory({ provider: cfg.provider, apiKey, model: cfg.model });
+      const client = clientFactory({ provider: cfg.provider, apiKey, model: cfg.model, baseUrl: cfg.base_url ?? undefined });
       const meter = new SpendMeter(cfg.model);
       const result = { ...base };
 

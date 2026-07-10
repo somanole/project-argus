@@ -220,8 +220,15 @@ contracts:
 **Grounding & tool loop (the point of the slice).**
 - [x] `POST /api/chat` runs the manual tool loop (max 8 iterations) over the wrapper's
       streaming-tool-loop seam and streams a final answer over SSE; the seam is
-      implemented for **both providers** (Anthropic + OpenAI) behind the one wrapper
-      (unit-tested against a mocked provider, no live calls).
+      implemented for **all three providers** (Anthropic + OpenAI + any OpenAI-compatible
+      endpoint) behind the one wrapper (unit-tested against a mocked provider, no live
+      calls).
+- [x] **Chat requires tool calls, and Argus checks rather than assumes.** On a custom
+      endpoint the seam is capability-probed; a model that ignores `tools` and answers in
+      prose makes chat degrade explicitly to **"chat unavailable on this provider"** — no
+      model call is made — while enrichment keeps working. `pnpm eval:chat` likewise
+      refuses to score such an endpoint rather than grading ungrounded prose. See
+      [`llm-providers.md`](llm-providers.md) (DECISION #30).
 - [x] Each chat tool returns **exactly** what its underlying S1b–S6 read returns
       (per-tool fidelity test) — the tool re-shapes, it never re-derives; the model
       only ever sees tool output.

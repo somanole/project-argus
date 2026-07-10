@@ -64,10 +64,20 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
-  async function save(provider: LlmProvider, apiKey: string): Promise<boolean> {
+  /**
+   * Save the active provider. The body is a discriminated union server-side: the hosted
+   * providers send a key; `openai_compatible` sends a base URL + model and MAY omit the
+   * key (keyless self-hosted endpoints). Saving that provider capability-probes the
+   * endpoint, so an unreachable URL comes back as a plain-English 400 in `error`.
+   */
+  async function save(provider: LlmProvider, apiKey: string, endpoint?: { baseUrl: string; model: string }): Promise<boolean> {
     state.value = 'saving';
     try {
-      const res = await api('/api/settings/llm', { method: 'PUT', body: { provider, apiKey } }, llmConfigResponseSchema);
+      const body =
+        provider === 'openai_compatible'
+          ? { provider, baseUrl: endpoint?.baseUrl ?? '', model: endpoint?.model ?? '', ...(apiKey ? { apiKey } : {}) }
+          : { provider, apiKey };
+      const res = await api('/api/settings/llm', { method: 'PUT', body }, llmConfigResponseSchema);
       config.value = res.config;
       state.value = 'ok';
       error.value = null;

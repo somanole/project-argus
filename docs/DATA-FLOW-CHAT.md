@@ -19,10 +19,22 @@ must sign off on that difference knowingly.
 one small fixed payload), a chat turn is a **tool loop**: the model is sent the system
 prompt + tool definitions + the conversation so far + your message; it calls tools; each
 **tool result is appended and sent again** on the next iteration (up to 8 iterations).
-The provider is the one **you** chose in Settings (OpenAI **or** Anthropic — the *same*
-one enrichment uses); the payload is identical either way, only the destination host
-differs. Chat is **read-only** against n8n and against Argus's own DB — it egresses data,
-it never writes.
+The provider is the one **you** chose in Settings (OpenAI, Anthropic, **or your own
+OpenAI-compatible endpoint** — the *same* one enrichment uses); the payload is identical
+either way, only the destination host differs. Chat is **read-only** against n8n and
+against Argus's own DB — it egresses data, it never writes.
+
+> ### With a self-hosted endpoint, nothing leaves your network.
+> Point Argus at an in-VPC vLLM / TGI / Ollama / LM Studio instance, or at your own
+> OpenAI-compatible gateway, and everything inventoried below travels **only to that
+> host**. The chat egress surface is wider than enrichment's — which is exactly why this
+> matters most here (DECISION #30).
+>
+> **Chat needs tool calls, and Argus checks rather than assumes.** When you configure a
+> custom endpoint, Argus capability-probes it. If the model behind it cannot emit tool
+> calls, **chat is switched off for that provider and says so** — because a chat that
+> can't call tools would answer governance questions from nothing. Enrichment keeps
+> working. Argus never guesses (standing rule 5).
 
 > ✅ **Headline (read this first).** After the S7 egress security review, chat's egress
 > is hardened on four fronts (all enforced by `pnpm verify` —
@@ -208,14 +220,28 @@ names) — and it still passes the redaction backstop on the way out.
 
 - **OpenAI** — `POST https://api.openai.com/v1/chat/completions` (when OpenAI is active).
 - **Anthropic** — `POST https://api.anthropic.com/v1/messages` (when Anthropic is active).
+- **Your own endpoint** — `POST <your base URL>/chat/completions` (when a custom
+  OpenAI-compatible endpoint is active). The base URL is whatever you configured in
+  Settings — e.g. `http://vllm.internal.acme:8000/v1` — and it is **the only host
+  contacted**. Chat runs there only if the capability probe saw a real tool call;
+  otherwise chat is unavailable on that provider and no request is made at all.
 
 One is active at a time — the same provider/key/model Argus uses for enrichment.
+
+**`http://` means unencrypted.** A self-hosted endpoint may legitimately be plain
+`http://` on a private network, and Argus allows it — but everything inventoried above
+then travels **unencrypted across your internal network**. Chat's payload is the wider
+of the two surfaces (workflow/owner names, governance metadata, your questions), so the
+trade-off is worth stating explicitly rather than assuming. Settings flags it, and the
+audit entry for the config change records `insecureTransport`. Use `https://` if the
+traffic leaves a trusted segment.
 
 ---
 
 **Sign-off:** using chat sends, per turn, the system prompt + tool contracts + your
 conversation (server-held) + the tool-result fields inventoried above to the active
-provider. Every tool result is secret-scrubbed, `get_workflow_detail` facts are shaped to
+provider — which, with a self-hosted endpoint, is a host you operate, so none of it
+leaves your network. Every tool result is secret-scrubbed, `get_workflow_detail` facts are shaped to
 an allowlist, and owner/actor emails are removed by default (all enforced by `pnpm verify`);
 the faithfulness gate (`pnpm eval:chat`) is green. The estate data that leaves by design is
 workflow/owner **names** + governance metadata — no credential values, keys, raw URLs,

@@ -13,9 +13,24 @@ import { withAudit } from '../db/audit.js';
 export interface GatingTuple {
   provider: string;
   model: string;
+  /**
+   * The openai_compatible endpoint, or null for the hosted providers (DECISION #30).
+   * Part of the tuple because two endpoints can serve the same model id: repointing the
+   * base URL must re-enrich rather than keep summaries a different model wrote.
+   */
+  baseUrl: string | null;
   promptVersion: string;
   schemaVersion: number;
 }
+
+/**
+ * NULL-safe freshness predicate. `base_url` is NULL for the hosted providers, and in SQL
+ * `NULL <> 'x'` is NULL (not true) — a bare `<>` would silently never re-enrich on an
+ * endpoint change. IFNULL collapses both sides to a comparable sentinel.
+ */
+const SAME_TUPLE = `e.provider = @provider AND e.model = @model
+     AND IFNULL(e.base_url, '') = IFNULL(@baseUrl, '')
+     AND e.prompt_version = @promptVersion AND e.schema_version = @schemaVersion`;
 
 export interface UpsertEnrichmentParams extends GatingTuple {
   instanceId: string;
@@ -37,12 +52,12 @@ export function upsertEnrichment(db: Database.Database, p: UpsertEnrichmentParam
   // Preserve corrected_json on conflict — an owner correction outlives an auto re-run.
   db.prepare(
     `INSERT INTO workflow_enrichments
-       (instance_id, workflow_id, input_hash, provider, model, prompt_version, schema_version,
+       (instance_id, workflow_id, input_hash, provider, model, base_url, prompt_version, schema_version,
         status, enrichment_json, corrected_json, enriched_at)
-     VALUES (@instanceId, @workflowId, @inputHash, @provider, @model, @promptVersion, @schemaVersion,
+     VALUES (@instanceId, @workflowId, @inputHash, @provider, @model, @baseUrl, @promptVersion, @schemaVersion,
         @status, @enrichmentJson, NULL, @enrichedAt)
      ON CONFLICT(instance_id, workflow_id) DO UPDATE SET
-        input_hash=@inputHash, provider=@provider, model=@model, prompt_version=@promptVersion,
+        input_hash=@inputHash, provider=@provider, model=@model, base_url=@baseUrl, prompt_version=@promptVersion,
         schema_version=@schemaVersion, status=@status, enrichment_json=@enrichmentJson, enriched_at=@enrichedAt`,
   ).run({ ...p, enrichedAt: new Date().toISOString() });
 }
@@ -60,8 +75,7 @@ export function listEnrichmentCandidates(db: Database.Database, instanceId: stri
           AND (
             e.workflow_id IS NULL
             OR e.input_hash <> w.enrichment_input_hash
-            OR e.provider <> @provider OR e.model <> @model
-            OR e.prompt_version <> @promptVersion OR e.schema_version <> @schemaVersion
+            OR NOT (${SAME_TUPLE})
           )
         ORDER BY w.active DESC, w.updated_at DESC`,
     )
@@ -128,8 +142,7 @@ export function lastEnrichedAt(db: Database.Database): string | null {
 
 /** Estate-wide progress for the "enriched X/Y" indicator. `enabled` is set by the caller. */
 export function enrichmentCounts(db: Database.Database, tuple: GatingTuple): Omit<EnrichmentProgress, 'enabled' | 'lastEnrichedAt'> {
-  const fresh = `e.workflow_id IS NOT NULL AND e.input_hash = w.enrichment_input_hash
-     AND e.provider = @provider AND e.model = @model AND e.prompt_version = @promptVersion AND e.schema_version = @schemaVersion`;
+  const fresh = `e.workflow_id IS NOT NULL AND e.input_hash = w.enrichment_input_hash AND ${SAME_TUPLE}`;
   const row = db
     .prepare(
       `SELECT

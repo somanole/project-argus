@@ -22,11 +22,18 @@ export {
   llmConfigInputSchema,
   llmConfigSchema,
   llmConfigResponseSchema,
+  llmCapabilitiesSchema,
   enrichmentToggleSchema,
+  checkBaseUrl,
+  chatSupported,
+  BASE_URL_HINT,
+  HOSTED_PROVIDERS,
   type LlmProvider,
   type LlmConfigInput,
   type LlmConfig,
   type LlmConfigResponse,
+  type LlmCapabilities,
+  type BaseUrlCheck,
   type EnrichmentToggle,
 } from './llm-config.js';
 export {

@@ -4,12 +4,25 @@ import { createPinia, setActivePinia } from 'pinia';
 import SettingsView from './SettingsView.vue';
 
 /** Rule-11 UI-presence: the Settings master switch + provider selection. */
-type Cfg = { provider: string | null; model: string | null; configured: boolean; enabled: boolean; envLocked: boolean };
+type Caps = { structuredOutput: boolean; streamingToolCalls: boolean; probedAt: string; note: string | null };
+type Cfg = {
+  provider: string | null;
+  model: string | null;
+  configured: boolean;
+  enabled: boolean;
+  envLocked: boolean;
+  /** openai_compatible only (DECISION #30); a hosted provider reports neither. */
+  baseUrl?: string | null;
+  capabilities?: Caps | null;
+};
 const PROGRESS = { enabled: true, lastEnrichedAt: '2026-07-06T15:24:00.000Z', total: 3, analyzed: 3, stub: 0, stale: 0, pending: 0 };
 function stub(config: Cfg, onPut?: (body: unknown) => void) {
+  // The response must satisfy llmConfigResponseSchema, so default the endpoint fields to
+  // what a hosted provider actually reports: no base URL, no probed capabilities.
+  const full = { baseUrl: null, capabilities: null, ...config };
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === 'PUT' && onPut) onPut(JSON.parse(String(init.body)));
-    const body = String(url).includes('enrichment-progress') || String(url).includes('enrichment/run') ? PROGRESS : { config };
+    const body = String(url).includes('enrichment-progress') || String(url).includes('enrichment/run') ? PROGRESS : { config: full };
     return { ok: true, status: 200, json: async () => body };
   }));
 }
@@ -92,7 +105,7 @@ describe('SettingsView (rule 11)', () => {
       ({ ok: true, status: 200, json: async () =>
         String(url).includes('enrichment-progress')
           ? { enabled: true, lastEnrichedAt: null, total: 3, analyzed: 0, stub: 0, stale: 0, pending: 3 }
-          : { config: { provider: 'openai', model: 'gpt-5-mini', configured: true, enabled: true, envLocked: false } } })));
+          : { config: { provider: 'openai', model: 'gpt-5-mini', baseUrl: null, capabilities: null, configured: true, enabled: true, envLocked: false } } })));
     const w = await mountView();
     expect(tid(w, 'enrichment-last-ran').text()).toBe('never');
   });
@@ -104,5 +117,112 @@ describe('SettingsView (rule 11)', () => {
     await tid(w, 'enrichment-toggle').trigger('click');
     await flushPromises();
     expect(putBody).toEqual({ enabled: true });
+  });
+});
+
+/** UI-presence for the third provider (rule 11 · DECISION #30). */
+describe('SettingsView — custom OpenAI-compatible endpoint', () => {
+  beforeEach(() => setActivePinia(createPinia()));
+  afterEach(() => vi.unstubAllGlobals());
+
+  const ON: Cfg = { provider: 'openai', model: 'gpt-5-mini', configured: true, enabled: true, envLocked: false };
+  const selectCustom = async (w: ReturnType<typeof mount>) => {
+    await tid(w, 'provider-card-openai_compatible').trigger('click');
+    await flushPromises();
+  };
+
+  it('offers a third provider card, and its endpoint fields appear only when selected', async () => {
+    stub(ON);
+    const w = await mountView();
+    expect(tid(w, 'provider-card-openai_compatible').exists()).toBe(true);
+    // Hidden while a hosted provider is selected…
+    expect(tid(w, 'llm-base-url-input').exists()).toBe(false);
+    await selectCustom(w);
+    // …and present once the custom endpoint is chosen.
+    expect(tid(w, 'llm-base-url-input').exists()).toBe(true);
+    expect(tid(w, 'llm-model-input').exists()).toBe(true);
+    expect(tid(w, 'llm-key-input').exists()).toBe(true);
+  });
+
+  it('marks the API key optional and allows saving a KEYLESS endpoint', async () => {
+    let putBody: unknown;
+    stub(ON, (b) => (putBody = b));
+    const w = await mountView();
+    await selectCustom(w);
+    expect(w.find('label[for="llm-key"]').text()).toMatch(/optional/i);
+
+    await tid(w, 'llm-base-url-input').setValue('http://127.0.0.1:11434/v1');
+    await tid(w, 'llm-model-input').setValue('llama3.1:8b');
+    await flushPromises();
+    expect(tid(w, 'llm-save').attributes('disabled')).toBeUndefined(); // saveable with no key
+    await tid(w, 'llm-save').trigger('click');
+    await flushPromises();
+    expect(putBody).toEqual({ provider: 'openai_compatible', baseUrl: 'http://127.0.0.1:11434/v1', model: 'llama3.1:8b' });
+  });
+
+  it('blocks save and explains why on an invalid base URL', async () => {
+    stub(ON);
+    const w = await mountView();
+    await selectCustom(w);
+    await tid(w, 'llm-base-url-input').setValue('ftp://nope/v1');
+    await tid(w, 'llm-model-input').setValue('m');
+    await flushPromises();
+    expect(tid(w, 'llm-base-url-error').exists()).toBe(true);
+    expect(tid(w, 'llm-save').attributes('disabled')).toBeDefined();
+  });
+
+  it('warns that plain http:// carries estate metadata unencrypted (allowed, never silent)', async () => {
+    stub(ON);
+    const w = await mountView();
+    await selectCustom(w);
+    await tid(w, 'llm-base-url-input').setValue('http://127.0.0.1:11434/v1');
+    await flushPromises();
+    expect(tid(w, 'llm-insecure-warning').text()).toMatch(/unencrypted/i);
+
+    await tid(w, 'llm-base-url-input').setValue('https://gw.acme.example/v1');
+    await flushPromises();
+    expect(tid(w, 'llm-insecure-warning').exists()).toBe(false); // https ⇒ no warning
+  });
+
+  it('shows the probed capabilities, and says chat is unavailable when tools are unsupported', async () => {
+    stub({
+      provider: 'openai_compatible',
+      model: 'phi4-mini:3.8b',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      capabilities: { structuredOutput: true, streamingToolCalls: false, probedAt: '2026-07-10T00:00:00.000Z', note: 'Pick a tool-calling model.' },
+      configured: true,
+      enabled: true,
+      envLocked: false,
+    });
+    const w = await mountView();
+    expect(tid(w, 'llm-capabilities').exists()).toBe(true);
+    expect(tid(w, 'llm-capabilities-endpoint').text()).toContain('http://127.0.0.1:11434/v1');
+    expect(tid(w, 'cap-structured-output').text()).toMatch(/supported/i);
+    expect(tid(w, 'cap-tool-calls').text()).toMatch(/unavailable/i);
+    expect(tid(w, 'llm-chat-unavailable').text()).toMatch(/chat is unavailable/i);
+    expect(tid(w, 'llm-capabilities-note').text()).toContain('tool-calling model');
+    // The status banner still says enrichment is active — the rest of Argus keeps working.
+    expect(tid(w, 'llm-status').text().toLowerCase()).toContain('active');
+  });
+
+  it('hides the chat-unavailable notice when the endpoint DOES support tool calls', async () => {
+    stub({
+      provider: 'openai_compatible',
+      model: 'llama3.1:8b',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      capabilities: { structuredOutput: true, streamingToolCalls: true, probedAt: '2026-07-10T00:00:00.000Z', note: null },
+      configured: true,
+      enabled: true,
+      envLocked: false,
+    });
+    const w = await mountView();
+    expect(tid(w, 'cap-tool-calls').text()).toMatch(/supported/i);
+    expect(tid(w, 'llm-chat-unavailable').exists()).toBe(false);
+  });
+
+  it('shows no capability panel for a hosted provider (both seams are known-good)', async () => {
+    stub(ON);
+    const w = await mountView();
+    expect(tid(w, 'llm-capabilities').exists()).toBe(false);
   });
 });

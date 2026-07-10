@@ -318,6 +318,9 @@ try {
 // ---- S2 checks: enrichment (hermetic — no n8n, no live LLM, no spend) ----
 await s2Checks();
 
+// ---- S8 checks: the OpenAI-compatible third provider (DECISION #30) ----
+await openAiCompatibleChecks();
+
 // ---- Seeder checks (M1): the planted problems are really there ----
 // Read-only, from n8n's own APIs (no Argus analyzer yet). Needs `pnpm seed` first.
 await seederChecks();
@@ -501,6 +504,122 @@ async function s2Checks() {
   } catch (e) {
     const out = (e.stdout?.toString() || e.message || '').slice(-160);
     add('Enrichment behaviors green (0-call re-run · audited correction · kill switch · redaction)', false, `suite failed: ${out}`);
+  }
+}
+
+/**
+ * S8 — the third provider: any OpenAI-compatible endpoint (DECISION #30). Hermetic: a
+ * stubbed fetch stands in for the endpoint, so these rows run with no network and no
+ * spend. The live proof (`pnpm eval --provider openai_compatible`) is separate.
+ */
+async function openAiCompatibleChecks() {
+  // 1. The deployment-mode promise: with a self-hosted endpoint, no request leaves for
+  //    an external host. Asserted at the wrapper by recording every URL it requests.
+  try {
+    const { createLlmClient } = await import(pathToFileURL(join(ROOT, 'apps/server/dist/llm/index.js')).href);
+    const seen = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      seen.push(String(url));
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ok' } }], usage: {} }) };
+    };
+    try {
+      // Drive the tool-loop seam (chat's egress path) — it needs no Zod schema to run.
+      const client = createLlmClient({ provider: 'openai_compatible', apiKey: '', model: 'llama3.1:8b', baseUrl: 'http://127.0.0.1:11434/v1' });
+      for await (const ev of client.streamToolLoop({ system: 's', messages: [{ role: 'user', content: 'q' }], tools: [], maxIterations: 1 })) void ev;
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    const external = seen.filter((u) => !/^http:\/\/127\.0\.0\.1:11434\//.test(u));
+    add(
+      'Self-hosted endpoint: nothing leaves your network (no external host contacted)',
+      seen.length > 0 && external.length === 0,
+      external.length === 0 ? `${seen.length} request(s), all to the configured endpoint` : `LEAKED to: ${external.join(', ')}`,
+    );
+  } catch (e) {
+    add('Self-hosted endpoint: nothing leaves your network (no external host contacted)', false, `could not verify: ${e.message}`);
+  }
+
+  // 2. A user-supplied base URL is SSRF-adjacent: the key goes wherever it points. The
+  //    scheme is validated and embedded credentials refused — but private/loopback hosts
+  //    are deliberately ALLOWED (an in-VPC endpoint is the whole point).
+  try {
+    const { checkBaseUrl } = await import(pathToFileURL(join(ROOT, 'packages/shared/dist/llm-config.js')).href);
+    const rejects = ['file:///etc/passwd', 'ftp://h/v1', 'https://user:pw@h/v1', 'https://h/v1?k=leak', 'nonsense'];
+    const allows = ['http://127.0.0.1:11434/v1', 'http://10.4.2.9:8000/v1', 'https://gw.acme.example/v1'];
+    const ok = rejects.every((u) => !checkBaseUrl(u).ok) && allows.every((u) => checkBaseUrl(u).ok) && checkBaseUrl('http://127.0.0.1:11434/v1').insecure === true;
+    add('Base URL validated (scheme + no embedded credentials; private hosts allowed)', ok, `${rejects.length} rejected, ${allows.length} allowed, http:// flagged insecure`);
+  } catch (e) {
+    add('Base URL validated (scheme + no embedded credentials; private hosts allowed)', false, `could not verify: ${e.message}`);
+  }
+
+  // 3. Seam support is PROBED, never assumed. A model that ignores `tools` and answers in
+  //    prose must disable chat explicitly — the silent-wrongness case (rule 5).
+  try {
+    const { probeCapabilities } = await import(pathToFileURL(join(ROOT, 'apps/server/dist/llm/index.js')).href);
+    const realFetch = globalThis.fetch;
+    const reply = (body) => ({ ok: true, status: 200, json: async () => body });
+    globalThis.fetch = async (_url, init) => {
+      const b = JSON.parse(String(init.body));
+      // The endpoint accepts `tools`, ignores them, and answers in prose (phi4-mini).
+      if (b.tools) return reply({ choices: [{ message: { content: 'There are 4 failing workflows.' }, finish_reason: 'stop' }], usage: {} });
+      return reply({ choices: [{ message: { content: '{"ok":true}' } }], usage: {} });
+    };
+    let caps;
+    try {
+      caps = await probeCapabilities({ provider: 'openai_compatible', apiKey: '', model: 'phi4-mini', baseUrl: 'http://127.0.0.1:11434/v1' });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    const ok = caps.structuredOutput === true && caps.streamingToolCalls === false && /chat is unavailable/i.test(caps.note ?? '');
+    add(
+      'Capability probe catches a model that ignores tools → "chat unavailable", enrichment OK',
+      ok,
+      ok ? 'enrichment supported, chat explicitly disabled (never a silent wrong answer)' : `probe said: ${JSON.stringify(caps)}`,
+    );
+  } catch (e) {
+    add('Capability probe catches a model that ignores tools → "chat unavailable", enrichment OK', false, `could not verify: ${e.message}`);
+  }
+
+  // 4. The wire body matches the REAL captured contract (contracts/llm-openai-compatible.json):
+  //    reasoning_effort is OpenAI-only (Ollama 400s), and max_completion_tokens is silently
+  //    IGNORED there — so the compat path must send max_tokens or the token cap is a lie.
+  try {
+    const c = JSON.parse(readFileSync(join(ROOT, 'contracts/llm-openai-compatible.json'), 'utf8'));
+    const captured =
+      c.reasoning_effort_rejected?.status === 400 &&
+      c.max_completion_tokens_IGNORED?.finish_reason === 'stop' &&
+      c.max_tokens_HONORED?.finish_reason === 'length' &&
+      c.seam2_tool_calls_UNSUPPORTED_phi4mini?.tool_calls == null;
+    add('OpenAI-compatible contract captured from a real endpoint (rule 1)', captured, captured ? `${c.endpoint}` : 'contract file missing the key findings');
+  } catch (e) {
+    add('OpenAI-compatible contract captured from a real endpoint (rule 1)', false, `contract not captured: ${e.message} — run the probe`);
+  }
+
+  // 5. The behaviors, asserted by the unit suites (adapter wire body, probe, degradation,
+  //    audited base-URL change, keyless config, gating tuple).
+  try {
+    execSync('pnpm --filter @argus/server exec vitest run src/llm/openai-compatible.test.ts src/settings/repo.test.ts src/chat/service.test.ts', { cwd: ROOT, stdio: 'pipe' });
+    execSync('pnpm --filter @argus/shared exec vitest run src/llm-config.test.ts', { cwd: ROOT, stdio: 'pipe' });
+    add('Third-provider behaviors green (wire body · probe · degrade · audited base URL · keyless)', true, 'openai-compatible + settings + chat + shared suites passed');
+  } catch (e) {
+    const out = (e.stdout?.toString() || e.message || '').slice(-160);
+    add('Third-provider behaviors green (wire body · probe · degrade · audited base URL · keyless)', false, `suite failed: ${out}`);
+  }
+
+  // 6. The docs promise what the code does (rule 9): both one-pagers + README name the
+  //    self-hosted destination and the http:// caveat.
+  try {
+    const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+    const df = readFileSync(join(ROOT, 'docs/DATA-FLOW.md'), 'utf8');
+    const dfc = readFileSync(join(ROOT, 'docs/DATA-FLOW-CHAT.md'), 'utf8');
+    const promise = /nothing leaves your network/i;
+    const dest = /<your base URL>\/chat\/completions/;
+    const insecure = /unencrypted/i;
+    const ok = promise.test(readme) && promise.test(df) && promise.test(dfc) && dest.test(df) && dest.test(dfc) && insecure.test(df) && insecure.test(dfc);
+    add('Data-flow docs name the self-hosted destination + the http:// caveat', ok, ok ? 'README + both one-pagers in sync' : 'a doc is missing the destination or the unencrypted-transport note');
+  } catch (e) {
+    add('Data-flow docs name the self-hosted destination + the http:// caveat', false, `doc check failed: ${e.message}`);
   }
 }
 

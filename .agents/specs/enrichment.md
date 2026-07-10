@@ -162,8 +162,12 @@ pre-registered H1 numbers is **OpenAI**; Anthropic is measured against the same 
       (both providers, one code path).
 - [ ] The redaction backstop scrubs secrets pasted into **free-text** (workflow name,
       tags, node names).
-- [ ] **Provider switch works:** enrichment runs on both OpenAI and Anthropic with the
-      **same prompt**; switching the active provider re-enriches.
+- [ ] **Provider switch works:** enrichment runs on OpenAI, Anthropic, **and any
+      OpenAI-compatible endpoint** with the **same prompt**; switching the active provider
+      — or repointing a custom endpoint's base URL — re-enriches. With a self-hosted
+      endpoint the payload never leaves your network, and enrichment keeps working even
+      when that endpoint can't do chat. See [`llm-providers.md`](llm-providers.md)
+      (DECISION #30); quality on a customer-chosen model is measured, never pre-certified.
 - [ ] **Re-run on an unchanged fleet makes 0 API calls** (hash-gated; hit/miss counts
       reported).
 - [ ] A **rename-only** edit (no `versionId` bump) re-enriches; a settings-only edit that

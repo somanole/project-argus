@@ -1,11 +1,15 @@
 /**
  * The S7 chat faithfulness eval harness (H4 gate: invented facts = 0). Mirrors the
- * enrichment eval (scripts/eval/run.ts): reads the provider key from .env, takes
- * `--provider anthropic|openai`, prints a plain-English scorecard, and exits non-zero
- * if the pre-registered bar fails.
+ * enrichment eval (scripts/eval/run.ts): reads the provider config from .env, takes
+ * `--provider anthropic|openai|openai_compatible`, prints a plain-English scorecard, and
+ * exits non-zero if the pre-registered bar fails.
  *
- *   pnpm eval:chat                 # OpenAI (reference)
+ *   pnpm eval:chat                                # OpenAI (reference)
  *   pnpm eval:chat --provider anthropic
+ *   pnpm eval:chat --provider openai_compatible   # your endpoint + model
+ *
+ * A custom endpoint is capability-probed first: an endpoint that cannot emit tool calls
+ * is REFUSED rather than scored, because its answers would not be grounded (DECISION #30).
  *
  * For each case it seeds a FRESH grounded estate (estate.ts), runs the REAL runChat over
  * the REAL chat tools + prompt (so it tests what ships), reconstructs the answer/tool
@@ -16,7 +20,8 @@
  */
 import type Database from 'better-sqlite3';
 import type { ChatEvent } from '@argus/shared';
-import { DEFAULT_MODELS, type LlmProvider } from '../../../apps/server/src/llm/index.js';
+import { probeCapabilities, EndpointUnreachableError } from '../../../apps/server/src/llm/index.js';
+import { resolveEvalProvider, evalClientConfig, h1Caveat } from '../provider.js';
 import { buildChatTools } from '../../../apps/server/src/chat/tools.js';
 import { CHAT_SYSTEM_PROMPT } from '../../../apps/server/src/chat/prompt.js';
 import { invokeTool } from '../../../apps/server/src/llm/tool-loop.js';
@@ -32,16 +37,7 @@ process.loadEnvFile();
 
 const ENCRYPTION_KEY = 'eval-encryption-key-0123456789abcdef';
 
-const providerArg = process.argv.indexOf('--provider');
-const provider: LlmProvider =
-  providerArg >= 0 && process.argv[providerArg + 1] === 'anthropic' ? 'anthropic' : 'openai';
-const apiKey = provider === 'openai' ? process.env.OPENAI_API_KEY : process.env.ANTHROPIC_API_KEY;
-if (!apiKey) {
-  console.error(
-    `No ${provider === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY'} in .env — cannot run the chat eval for ${provider}.`,
-  );
-  process.exit(1);
-}
+const evalProvider = resolveEvalProvider(process.argv);
 
 // ── One turn, captured ───────────────────────────────────────────────────────────
 
@@ -116,8 +112,8 @@ async function buildGroundingCorpus(
   const jsonParts: string[] = [CHAT_SYSTEM_PROMPT];
   let enumeratedMax = 0;
 
-  if (cfg && key) {
-    const client = createLlmClient({ provider: cfg.provider, apiKey: key, model: cfg.model, retryDelayMs: 1000 });
+  if (cfg && key !== null) {
+    const client = createLlmClient({ provider: cfg.provider, apiKey: key, model: cfg.model, baseUrl: cfg.base_url ?? undefined, retryDelayMs: 1000 });
     // A recording tool wrapper: same execute, but capture the validated input's raw form.
     const recording = tools.map((t) => ({
       ...t,
@@ -218,7 +214,7 @@ interface CaseResult {
 }
 
 async function runCanonical(c: CanonicalCase): Promise<CaseResult> {
-  const db = seedEvalEstate(ENCRYPTION_KEY, provider, apiKey!);
+  const db = seedEvalEstate(ENCRYPTION_KEY, evalProvider);
   const turn = await runTurn(db, c.question);
   const toolOk = c.expectedTools.some((t) => turn.toolsCalled.includes(t));
   const { corpus, enumeratedMax } = await buildGroundingCorpus(db, c.question, turn.refNames);
@@ -238,7 +234,7 @@ async function runCanonical(c: CanonicalCase): Promise<CaseResult> {
 }
 
 async function runHostile(c: HostileCase): Promise<CaseResult> {
-  const db = seedEvalEstate(ENCRYPTION_KEY, provider, apiKey!);
+  const db = seedEvalEstate(ENCRYPTION_KEY, evalProvider);
   const turn = await runTurn(db, c.question);
   const { corpus, enumeratedMax } = await buildGroundingCorpus(db, c.question, turn.refNames);
   const f = scoreFaithfulness(turn.answer, corpus, enumeratedMax);
@@ -256,8 +252,27 @@ async function runHostile(c: HostileCase): Promise<CaseResult> {
 
 async function main(): Promise<void> {
   console.log(
-    `\nChat faithfulness eval (H4) — provider=${provider} model=${DEFAULT_MODELS[provider]} — ${CANONICAL.length} canonical + ${HOSTILE.length} hostile`,
+    `\nChat faithfulness eval (H4) — ${evalProvider.label} — ${CANONICAL.length} canonical + ${HOSTILE.length} hostile`,
   );
+
+  // A custom endpoint must PROVE it can emit tool calls before we score its answers.
+  // Scoring a model that ignores `tools` would grade prose invented from nothing, and a
+  // faithfulness number off that run would be meaningless (DECISION #30, rule 5).
+  if (evalProvider.provider === 'openai_compatible') {
+    try {
+      const caps = await probeCapabilities(evalClientConfig(evalProvider));
+      if (!caps.streamingToolCalls) {
+        console.error(`\n  Chat is unavailable on this provider — "${evalProvider.model}" did not emit a tool call.`);
+        if (caps.note) console.error(`  ${caps.note}`);
+        console.error('  Refusing to score faithfulness on an endpoint that cannot ground its answers.\n');
+        process.exit(1);
+      }
+    } catch (err) {
+      const why = err instanceof EndpointUnreachableError ? err.message : (err as Error).message;
+      console.error(`\n  Cannot reach the endpoint: ${why}\n`);
+      process.exit(1);
+    }
+  }
 
   const results: CaseResult[] = [];
   // Sequential: each case spends on the provider; keep it simple + rate-limit-friendly.
@@ -273,6 +288,8 @@ async function main(): Promise<void> {
   console.log('  ────────────────────────────────────────────────────────────');
   const verdict = verdictAgainstH4(s);
   console.log(`  ${verdict}\n`);
+  const caveat = h1Caveat(evalProvider);
+  if (caveat) console.log(`  ${caveat.replace('H1', 'H4')}\n`);
 
   if (verdict !== 'MEETS H4') process.exit(1);
 }

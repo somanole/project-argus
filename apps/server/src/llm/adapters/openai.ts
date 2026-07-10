@@ -13,33 +13,76 @@ import {
 } from '../types.js';
 
 /**
- * OpenAI adapter — the structured-output seam via `response_format: json_schema`
- * (strict), coded to the wire shape captured in contracts/llm-openai-structured.json
- * (standing rule 1). Enrichment pins reasoning_effort='minimal' (probe-tuned: 3x faster
- * / ~2.6x cheaper than default, identical category/criticality).
+ * The OpenAI-wire adapter — serves BOTH the hosted `openai` provider and the
+ * `openai_compatible` provider (vLLM / TGI / Ollama / LM Studio / a corporate gateway),
+ * which is the same wire format against a configurable base URL (DECISION #30). There is
+ * deliberately no Ollama adapter: Ollama already speaks this format on `/v1`.
+ *
+ * Seam 1 (structured output) via `response_format: json_schema` (strict), coded to the
+ * wire shape captured in contracts/llm-openai-structured.json (standing rule 1).
+ * Enrichment pins reasoning_effort='minimal' on hosted OpenAI (probe-tuned: 3x faster /
+ * ~2.6x cheaper than default, identical category/criticality).
+ *
+ * Three things differ for `openai_compatible`, each captured from a REAL endpoint in
+ * contracts/llm-openai-compatible.json rather than assumed:
+ *   1. `reasoning_effort` is an OpenAI-only field — Ollama returns HTTP 400 on
+ *      'minimal'. We never send it off-OpenAI.
+ *   2. `max_completion_tokens` is SILENTLY IGNORED by Ollama (a cap of 5 produced 152
+ *      tokens, finish_reason 'stop'); the legacy `max_tokens` IS honored. Sending the
+ *      OpenAI field would leave generation — and the spend cap — unbounded, which is
+ *      exactly the kind of silent wrongness rule 5 forbids. So compat sends `max_tokens`.
+ *   3. The API key is OPTIONAL; with none we omit the Authorization header entirely.
  */
+
+const OPENAI_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
+
+/** The single place a request URL is chosen — nothing else in the adapter knows a host. */
+function endpointOf(config: LlmClientConfig): string {
+  if (config.provider !== 'openai_compatible') return OPENAI_ENDPOINT;
+  if (!config.baseUrl) throw new LlmError('unknown', 'openai_compatible requires a base URL', false);
+  return `${config.baseUrl.replace(/\/+$/, '')}/chat/completions`;
+}
+
+function authOf(config: LlmClientConfig): Record<string, string> {
+  // Keyless self-hosted endpoints: send no Authorization header at all.
+  return config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {};
+}
+
+/**
+ * The output-token ceiling + tuning knobs, per the captured contract. Hosted OpenAI keeps
+ * its exact previous body; a compatible endpoint gets the field it actually honors.
+ */
+function tuningOf(config: LlmClientConfig, maxTokens: number): Record<string, unknown> {
+  if (config.provider === 'openai_compatible') return { max_tokens: maxTokens };
+  return { reasoning_effort: config.reasoningEffort ?? 'minimal', max_completion_tokens: maxTokens };
+}
+
 export function createOpenAiAdapter(config: LlmClientConfig): LlmClient {
   const timeoutMs = config.timeoutMs ?? 30_000;
+  const endpoint = endpointOf(config);
+  const headers = authOf(config);
+  // The label used in error messages / http mapping — names the destination honestly.
+  const label = config.provider;
+
   return {
-    provider: 'openai',
+    provider: config.provider,
     model: config.model,
 
     async structuredOutput<T>(args: StructuredOutputArgs<T>): Promise<StructuredResult<T>> {
       const jsonSchema = zodToStrictJsonSchema(args.schema);
       const body = {
         model: config.model,
-        reasoning_effort: config.reasoningEffort ?? 'minimal',
-        max_completion_tokens: args.maxTokens,
+        ...tuningOf(config, args.maxTokens),
         messages: [
           { role: 'system', content: args.system },
           { role: 'user', content: args.user },
         ],
         response_format: { type: 'json_schema', json_schema: { name: args.schemaName, strict: true, schema: jsonSchema } },
       };
-      const { json } = await postJson('https://api.openai.com/v1/chat/completions', { authorization: `Bearer ${config.apiKey}` }, body, {
+      const { json } = await postJson(endpoint, headers, body, {
         timeoutMs,
         signal: args.signal,
-        provider: 'openai',
+        provider: label,
       });
 
       const j = json as {
@@ -48,16 +91,16 @@ export function createOpenAiAdapter(config: LlmClientConfig): LlmClient {
       };
       const choice = j.choices?.[0];
       if (choice?.message?.refusal) {
-        throw new LlmError('schema_parse', `openai refused: ${choice.message.refusal}`, false);
+        throw new LlmError('schema_parse', `${label} refused: ${choice.message.refusal}`, false);
       }
       const content = choice?.message?.content;
-      if (!content) throw new LlmError('schema_parse', 'openai returned no content', false);
+      if (!content) throw new LlmError('schema_parse', `${label} returned no content`, false);
 
       let value: T;
       try {
         value = args.schema.parse(JSON.parse(content));
       } catch (err) {
-        throw new LlmError('schema_parse', `openai output failed schema validation: ${(err as Error).message}`, false);
+        throw new LlmError('schema_parse', `${label} output failed schema validation: ${(err as Error).message}`, false);
       }
       const u = j.usage ?? {};
       return {
@@ -77,6 +120,10 @@ export function createOpenAiAdapter(config: LlmClientConfig): LlmClient {
      * and, once the model stops calling tools, the answer text. Tool dispatch goes
      * through `invokeTool` (validate → execute → structured error), identical to
      * Anthropic.
+     *
+     * On `openai_compatible` the caller only reaches here when the capability probe saw
+     * a real tool call (see probe.ts) — an endpoint that ignores `tools` would otherwise
+     * answer from nothing, confidently and wrongly.
      */
     async *streamToolLoop(args: StreamToolLoopArgs): AsyncIterable<ToolLoopEvent> {
       const tools = args.tools.map((t) => ({
@@ -93,16 +140,15 @@ export function createOpenAiAdapter(config: LlmClientConfig): LlmClient {
       for (let iter = 0; iter < args.maxIterations; iter++) {
         const body = {
           model: config.model,
-          reasoning_effort: config.reasoningEffort ?? 'minimal',
-          max_completion_tokens: args.maxTokens ?? 1500,
+          ...tuningOf(config, args.maxTokens ?? 1500),
           messages,
           tools,
           tool_choice: 'auto',
         };
-        const { json } = await postJson('https://api.openai.com/v1/chat/completions', { authorization: `Bearer ${config.apiKey}` }, body, {
+        const { json } = await postJson(endpoint, headers, body, {
           timeoutMs,
           signal: args.signal,
-          provider: 'openai',
+          provider: label,
         });
         const j = json as {
           choices?: Array<{

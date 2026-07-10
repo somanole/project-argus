@@ -1,0 +1,132 @@
+{
+  "endpoint": "http://127.0.0.1:11434/v1/chat/completions (Ollama 0.16.3, OpenAI-compatible /v1)",
+  "captured_at": "2026-07-10",
+  "why": "DECISION #30 \u2014 openai_compatible provider. Coded against THIS captured shape, not memory (standing rule 1).",
+  "reasoning_effort_rejected": {
+    "status": 400,
+    "response": {
+      "error": {
+        "message": "invalid reasoning value: 'minimal' (must be \"high\", \"medium\", \"low\", or \"none\")",
+        "type": "invalid_request_error",
+        "param": null,
+        "code": null
+      }
+    },
+    "finding": "OpenAI-only field. Ollama 400s on reasoning_effort='minimal'. The openai_compatible adapter MUST NOT send it."
+  },
+  "max_completion_tokens_IGNORED": {
+    "status": 200,
+    "finish_reason": "stop",
+    "completion_tokens": 152,
+    "finding": "Cap of 5 produced 152 tokens, finish_reason 'stop'. NOT honored -> unbounded output."
+  },
+  "max_tokens_HONORED": {
+    "status": 200,
+    "finish_reason": "length",
+    "completion_tokens": 5,
+    "finding": "Honored: finish_reason 'length'. openai_compatible MUST send max_tokens, not max_completion_tokens."
+  },
+  "seam1_structured_output": {
+    "status": 200,
+    "response": {
+      "id": "chatcmpl-7",
+      "object": "chat.completion",
+      "created": 1783689475,
+      "model": "llama3.2:3b",
+      "system_fingerprint": "fp_ollama",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "{\"category\": \"data-eng\", \"criticality\": \"medium\"}"
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 51,
+        "completion_tokens": 15,
+        "total_tokens": 66
+      }
+    },
+    "finding": "SUPPORTED. Same wire shape as OpenAI: choices[0].message.content + usage.prompt_tokens/completion_tokens."
+  },
+  "seam2_tool_calls_SUPPORTED_llama32": {
+    "status": 200,
+    "response": {
+      "id": "chatcmpl-119",
+      "object": "chat.completion",
+      "created": 1783689476,
+      "model": "llama3.2:3b",
+      "system_fingerprint": "fp_ollama",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+              {
+                "id": "call_bxlx5pyb",
+                "index": 0,
+                "type": "function",
+                "function": {
+                  "name": "get_probe_token",
+                  "arguments": "{}"
+                }
+              }
+            ]
+          },
+          "finish_reason": "tool_calls"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 160,
+        "completion_tokens": 14,
+        "total_tokens": 174
+      }
+    },
+    "finding": "tool_calls present, finish_reason 'tool_calls' -> chat available."
+  },
+  "seam2_tool_calls_UNSUPPORTED_phi4mini": {
+    "status": 200,
+    "finish_reason": "length",
+    "tool_calls": null,
+    "content_head": "The \"probe token\" referred to in your request seems like a specific identifier or key used within an API, service, or system that requires authentication for ce",
+    "finding": "SILENTLY ignores tools: finish_reason 'stop', no tool_calls, confident prose instead. THE failure mode -> chat must degrade explicitly."
+  },
+  "tool_choice_required_UNRELIABLE": {
+    "status": 200,
+    "finish_reason": "tool_calls",
+    "tool_calls": [
+      {
+        "id": "call_dg8nosyy",
+        "index": 0,
+        "type": "function",
+        "function": {
+          "name": "get_probe_token",
+          "arguments": "{\"object\":\"\\u003cnil\\u003e\"}"
+        }
+      }
+    ],
+    "content": "",
+    "finding": "tool_choice:'required' NOT honored - the tool-CAPABLE model degraded to hallucinating a call as text. Probe must use tool_choice:'auto', matching production."
+  },
+  "unknown_model": {
+    "status": 404,
+    "response": {
+      "error": {
+        "message": "model 'does-not-exist' not found",
+        "type": "api_error",
+        "param": null,
+        "code": null
+      }
+    },
+    "finding": "404 + error.message. Probe surfaces this as a plain-English 'model not found at this endpoint'."
+  },
+  "keyless_no_auth_header": {
+    "status": 200,
+    "finding": "200 without any Authorization header -> API key is optional; omit the header entirely when absent."
+  }
+}

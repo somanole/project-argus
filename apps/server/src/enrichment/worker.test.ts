@@ -55,7 +55,7 @@ describe('enrichment worker', () => {
 
   it('does nothing when the kill switch is off (0 calls)', async () => {
     const fake = fakeClient();
-    setLlmConfig(db, ACTOR, 'openai', 'sk-test', ENC);
+    setLlmConfig(db, ACTOR, { provider: 'openai', apiKey: 'sk-test' }, ENC);
     const worker = createEnrichmentWorker({ db, encryptionKey: ENC, envAllowed: false, concurrency: 3, spendCapTokens: 0, clientFactory: fake.factory });
     expect(await worker.runInstance(instanceId)).toMatchObject({ skipped: 'disabled' });
     expect(fake.calls()).toBe(0);
@@ -64,7 +64,7 @@ describe('enrichment worker', () => {
 
   it('does nothing when the in-app master switch is turned off (even if configured)', async () => {
     const fake = fakeClient();
-    setLlmConfig(db, ACTOR, 'openai', 'sk-test', ENC);
+    setLlmConfig(db, ACTOR, { provider: 'openai', apiKey: 'sk-test' }, ENC);
     setEnrichmentEnabled(db, ACTOR, false); // owner flipped the master switch off
     const worker = createEnrichmentWorker({ db, encryptionKey: ENC, envAllowed: true, concurrency: 3, spendCapTokens: 0, clientFactory: fake.factory });
     expect(await worker.runInstance(instanceId)).toMatchObject({ skipped: 'disabled' });
@@ -81,7 +81,7 @@ describe('enrichment worker', () => {
 
   it('enriches all misses, then makes 0 calls on a re-run (hash-gated)', async () => {
     const fake = fakeClient();
-    setLlmConfig(db, ACTOR, 'openai', 'sk-test', ENC);
+    setLlmConfig(db, ACTOR, { provider: 'openai', apiKey: 'sk-test' }, ENC);
     const worker = createEnrichmentWorker({ db, encryptionKey: ENC, envAllowed: true, concurrency: 2, spendCapTokens: 0, clientFactory: fake.factory });
 
     const first = await worker.runInstance(instanceId);
@@ -97,7 +97,7 @@ describe('enrichment worker', () => {
 
   it('stops at the spend cap, leaving the rest PENDING (not stub)', async () => {
     const fake = fakeClient(100); // 100 tokens/call
-    setLlmConfig(db, ACTOR, 'openai', 'sk-test', ENC);
+    setLlmConfig(db, ACTOR, { provider: 'openai', apiKey: 'sk-test' }, ENC);
     // Cap allows ~1 call (>=100 tokens after the first stops the loop before the 2nd).
     const worker = createEnrichmentWorker({ db, encryptionKey: ENC, envAllowed: true, concurrency: 1, spendCapTokens: 100, clientFactory: fake.factory });
     const r = await worker.runInstance(instanceId);

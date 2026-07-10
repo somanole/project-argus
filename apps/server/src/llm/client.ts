@@ -7,9 +7,14 @@ import { LlmError, type LlmClient, type LlmClientConfig, type StructuredOutputAr
  * structured-output seam with a single retry on RETRYABLE failures (rate_limit /
  * overloaded / timeout). Non-retryable errors (auth, schema_parse) surface immediately;
  * the caller (enrich.ts) turns a final failure into a labelled STUB, never a guess.
+ *
+ * `openai` and `openai_compatible` share the OpenAI-wire adapter (DECISION #30); the
+ * adapter reads `provider` to decide destination, auth header, and token-cap field.
+ * An exhaustive switch — never a ternary that would silently route a new provider to
+ * the wrong adapter.
  */
 export function createLlmClient(config: LlmClientConfig): LlmClient {
-  const base = config.provider === 'openai' ? createOpenAiAdapter(config) : createAnthropicAdapter(config);
+  const base = adapterFor(config);
   const retryDelayMs = config.retryDelayMs ?? 0;
 
   return {
@@ -30,4 +35,19 @@ export function createLlmClient(config: LlmClientConfig): LlmClient {
 
     streamToolLoop: base.streamToolLoop.bind(base),
   };
+}
+
+function adapterFor(config: LlmClientConfig): LlmClient {
+  switch (config.provider) {
+    case 'openai':
+    case 'openai_compatible':
+      return createOpenAiAdapter(config);
+    case 'anthropic':
+      return createAnthropicAdapter(config);
+    default: {
+      // Exhaustiveness: a new provider must claim an adapter here, not inherit one.
+      const never: never = config.provider;
+      throw new LlmError('unknown', `no adapter for provider "${String(never)}"`, false);
+    }
+  }
 }

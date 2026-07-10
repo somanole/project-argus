@@ -38,7 +38,7 @@ function seedDb(configured = true): Database.Database {
   db.prepare('INSERT INTO connections (id,label,base_url,api_key_cipher,created_at,updated_at) VALUES (?,?,?,?,?,?)').run('prod', 'prod', 'http://localhost/prod', 'x', ISO, ISO);
   replaceInstanceWorkflows(db, 'prod', [wf('a', 'Daily Stripe Reconciliation'), wf('b', 'Zendesk Sync')], ISO);
   assignOwner(db, ACTOR, 'prod', 'a', { ownerEmail: 'sarah@corp.io', ownerName: 'Sarah' });
-  if (configured) setLlmConfig(db, ACTOR, 'openai', 'sk-test', KEY);
+  if (configured) setLlmConfig(db, ACTOR, { provider: 'openai', apiKey: 'sk-test' }, KEY);
   return db;
 }
 
@@ -112,6 +112,85 @@ describe('runChat', () => {
     expect(out[0]!.type).toBe('text');
     expect(out[0]!.type === 'text' && out[0]!.text).toContain('Settings');
     expect(out.at(-1)!.type).toBe('done');
+  });
+
+  /**
+   * DECISION #30. A custom endpoint whose model ignores `tools` would answer governance
+   * questions from nothing — the exact silent-wrongness rule 5 forbids. When the
+   * capability probe saw no tool call, chat must refuse OUT LOUD and never call the model.
+   */
+  it('degrades explicitly when the endpoint cannot do tool calls — and never calls the model', async () => {
+    const db = seedDb(false);
+    setLlmConfig(
+      db,
+      ACTOR,
+      {
+        provider: 'openai_compatible',
+        apiKey: '',
+        baseUrl: 'http://127.0.0.1:11434/v1',
+        model: 'phi4-mini:3.8b',
+        capabilities: { structuredOutput: true, streamingToolCalls: false, note: 'no tool call' },
+      },
+      KEY,
+    );
+    let modelCalled = false;
+    const out: ChatEvent[] = [];
+    const deps = {
+      db,
+      encryptionKey: KEY,
+      clientFactory: () => {
+        modelCalled = true;
+        return stubClient([{ text: 'There are 4 failing workflows.' }]);
+      },
+    };
+    for await (const ev of runChat(deps, { message: 'how many workflows are failing?' })) out.push(ev);
+
+    expect(modelCalled).toBe(false); // no request left the process at all
+    expect(out[0]!.type === 'text' && out[0]!.text).toMatch(/chat is unavailable on this provider/i);
+    expect(out[0]!.type === 'text' && out[0]!.text).toContain('phi4-mini:3.8b');
+    // It must not have answered the question, from the model or from anywhere.
+    expect(out.some((e) => e.type === 'text' && /4 failing/.test(e.text))).toBe(false);
+    expect(out.at(-1)!.type).toBe('done');
+  });
+
+  it('runs normally on a custom endpoint whose probe DID see a tool call', async () => {
+    const db = seedDb(false);
+    setLlmConfig(
+      db,
+      ACTOR,
+      {
+        provider: 'openai_compatible',
+        apiKey: '',
+        baseUrl: 'http://127.0.0.1:11434/v1',
+        model: 'llama3.1:8b',
+        capabilities: { structuredOutput: true, streamingToolCalls: true, note: null },
+      },
+      KEY,
+    );
+    const out: ChatEvent[] = [];
+    const script: Script = [{ text: 'Two workflows are in the estate.' }];
+    for await (const ev of runChat({ db, encryptionKey: KEY, clientFactory: () => stubClient(script) }, { message: 'hi' })) out.push(ev);
+    expect(out.some((e) => e.type === 'text' && e.text.includes('Two workflows'))).toBe(true);
+  });
+
+  /** A keyless self-hosted endpoint is CONFIGURED, not unconfigured (empty key ≠ no key). */
+  it('treats a keyless custom endpoint as configured', async () => {
+    const db = seedDb(false);
+    setLlmConfig(
+      db,
+      ACTOR,
+      {
+        provider: 'openai_compatible',
+        apiKey: '',
+        baseUrl: 'http://127.0.0.1:11434/v1',
+        model: 'llama3.1:8b',
+        capabilities: { structuredOutput: true, streamingToolCalls: true, note: null },
+      },
+      KEY,
+    );
+    const out: ChatEvent[] = [];
+    for await (const ev of runChat({ db, encryptionKey: KEY, clientFactory: () => stubClient([{ text: 'ok' }]) }, { message: 'hi' })) out.push(ev);
+    expect(out[0]!.type === 'text' && out[0]!.text).not.toContain('Settings');
   });
 });
 

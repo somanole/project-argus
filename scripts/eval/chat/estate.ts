@@ -9,7 +9,8 @@
  * DETERMINISTIC: fixed ISO timestamps, no Math.random/Date.now (mirrors the unit tests).
  */
 import Database from 'better-sqlite3';
-import type { SessionActor, WorkflowFacts, LlmProvider } from '@argus/shared';
+import type { SessionActor, WorkflowFacts } from '@argus/shared';
+import type { EvalProvider } from '../provider.js';
 import { migrate } from '../../../apps/server/src/db/migrate.js';
 import { replaceInstanceWorkflows, type CacheWorkflow } from '../../../apps/server/src/workflows/repo.js';
 import { assignOwner, setBackupOwner } from '../../../apps/server/src/ownership/repo.js';
@@ -176,9 +177,11 @@ function callEdge(instanceId: string, srcId: string, srcName: string, dstId: str
 
 /**
  * Build the whole fixture estate. Returns a fresh in-memory DB with the LLM provider
- * configured to the eval's chosen provider+key (so `runChat` uses the real wrapper).
+ * configured to the eval's chosen provider (so `runChat` uses the real wrapper). For
+ * `openai_compatible` that includes the endpoint + model and a capabilities record —
+ * without it `chatSupported` would (correctly) refuse to run chat at all.
  */
-export function seedEvalEstate(encryptionKey: string, provider: LlmProvider, apiKey: string): Database.Database {
+export function seedEvalEstate(encryptionKey: string, p: EvalProvider): Database.Database {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
   migrate(db);
@@ -289,7 +292,19 @@ export function seedEvalEstate(encryptionKey: string, provider: LlmProvider, api
   );
 
   // ── LLM provider (so runChat drives the real wrapper for the chosen provider) ──
-  setLlmConfig(db, ACTOR, provider, apiKey, encryptionKey);
+  // The chat eval only runs once seam 2 is confirmed, so record it as probed-supported.
+  setLlmConfig(
+    db,
+    ACTOR,
+    {
+      provider: p.provider,
+      apiKey: p.apiKey,
+      baseUrl: p.baseUrl,
+      model: p.model,
+      capabilities: p.provider === 'openai_compatible' ? { structuredOutput: true, streamingToolCalls: true, note: null } : null,
+    },
+    encryptionKey,
+  );
 
   return db;
 }

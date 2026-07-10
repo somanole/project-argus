@@ -136,6 +136,73 @@ demo estate above.
 
 ---
 
+<!-- LLM_PROVIDERS_SECTION — kept in sync with docs/DATA-FLOW*.md (rule 9). -->
+
+## Choose your LLM provider (or run inference inside your own network)
+
+Argus uses an LLM for two things: **enrichment** (a summary, category, and criticality
+per workflow) and **chat** (natural-language questions answered from real tool results).
+Everything else — the catalog, health, ownership, the dependency graph — is fully
+deterministic and works with no LLM at all.
+
+You bring your own provider and key, chosen in **Settings**:
+
+| Provider | What you supply | Model |
+|---|---|---|
+| **OpenAI** | API key | `gpt-5-mini` (pinned) |
+| **Anthropic** | API key | `claude-haiku-4-5` (pinned) |
+| **Custom endpoint** | Base URL + model id, **API key optional** | yours to choose |
+
+### With a self-hosted endpoint, nothing leaves your network
+
+"Custom endpoint" is any **OpenAI-compatible** API: **vLLM**, **TGI**, **Ollama**,
+**LM Studio**, or a corporate LLM gateway. Point Argus at one running inside your own
+network and **no estate metadata leaves it** — no workflow names, no owner names, no
+governance metadata reach OpenAI, Anthropic, or any other third party. For a governance
+tool that inventories your automations, that is often the difference between
+"interesting" and "deployable".
+
+```bash
+# Local dev, end to end, with nothing leaving the machine:
+ollama serve
+ollama pull llama3.1:8b
+# then in Argus → Settings → Custom endpoint:
+#   Base URL  http://127.0.0.1:11434/v1
+#   Model     llama3.1:8b
+#   API key   (leave blank — Ollama is keyless)
+```
+
+Two honest caveats, both enforced in code rather than left to hope:
+
+- **Chat needs a model that can call tools.** Argus **capability-probes** your endpoint
+  when you save it. If the model can't emit tool calls, chat says **"chat unavailable on
+  this provider"** and enrichment carries on — Argus never answers a governance question
+  from a guess. (Tool-calling models: Llama 3.1+, Qwen, Mistral. On vLLM, start it with
+  `--enable-auto-tool-choice`.)
+- **Answer quality depends on the model you pick.** Our quality bar (H1) is
+  pre-registered against the reference provider; a customer-chosen open-weight model is
+  measured against that same bar and reported separately — never certified in advance.
+  Measure yours with `pnpm eval --provider openai_compatible`.
+
+A base URL is a destination for your data, so Argus validates its scheme, refuses
+credentials embedded in the URL, and **audit-logs every change**. A plain `http://`
+endpoint is allowed — it's normal on a private network — but it means metadata travels
+unencrypted there, which Settings and the data-flow docs state rather than assume. See
+[`docs/DATA-FLOW.md`](docs/DATA-FLOW.md) and
+[`docs/DATA-FLOW-CHAT.md`](docs/DATA-FLOW-CHAT.md) for exactly what is sent.
+
+> **Hosted OpenAI-compatible routers (OpenRouter, Together, Groq…) work too** — they speak
+> the same wire format, so they need no extra support: paste the router's base URL, model id,
+> and key. But understand what you're choosing: a router is a **third-party proxy**, so your
+> estate metadata transits **one more data processor** than going direct to OpenAI or
+> Anthropic — the opposite of the self-hosted case above, and usually a *harder* enterprise
+> review, not an easier one. Prompt logging and retention vary by upstream provider and by
+> your account settings. Genuinely useful for evaluating many models cheaply
+> (`pnpm eval --provider openai_compatible`); think twice before making one the production
+> destination for a governance tool (DECISION #31).
+
+---
+
 ## Everyday commands
 
 | Command | What it does |

@@ -276,6 +276,26 @@ const MIGRATIONS: ((db: Database.Database) => void)[] = [
       CREATE INDEX workflow_edges_by_type ON workflow_edges(type, confidence);
     `);
   },
+
+  // v9 — DECISION #30: the `openai_compatible` provider. The endpoint is user-supplied,
+  // so we persist it alongside the CAPABILITY-PROBE result for the two wrapper seams —
+  // an endpoint that can't emit tool calls disables chat explicitly rather than letting
+  // it answer from nothing (rule 5). All columns are nullable: they are meaningless for
+  // the two hosted providers, whose seams are known-good and contract-tested.
+  //
+  // `workflow_enrichments.base_url` joins the freshness gating tuple: two different
+  // endpoints can serve the same model ID, so repointing the base URL must re-enrich
+  // rather than silently keep summaries produced by a different model.
+  (db) => {
+    db.exec(`
+      ALTER TABLE llm_config ADD COLUMN base_url TEXT;
+      ALTER TABLE llm_config ADD COLUMN caps_structured_output INTEGER;
+      ALTER TABLE llm_config ADD COLUMN caps_streaming_tool_calls INTEGER;
+      ALTER TABLE llm_config ADD COLUMN caps_note TEXT;
+      ALTER TABLE llm_config ADD COLUMN caps_probed_at TEXT;
+      ALTER TABLE workflow_enrichments ADD COLUMN base_url TEXT;
+    `);
+  },
 ];
 
 export function migrate(db: Database.Database): void {

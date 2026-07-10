@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3';
-import type { ChatEvent, ChatTurn, ChatWorkflowRef } from '@argus/shared';
+import { chatSupported, type ChatEvent, type ChatTurn, type ChatWorkflowRef } from '@argus/shared';
 import { createLlmClient, LlmError, type LlmClient, type LlmClientConfig } from '../llm/index.js';
-import { getLlmConfigRow, getDecryptedApiKey } from '../settings/repo.js';
+import { getLlmConfigRow, getDecryptedApiKey, getCapabilities } from '../settings/repo.js';
 import { buildChatTools } from './tools.js';
 import { CHAT_SYSTEM_PROMPT } from './prompt.js';
 
@@ -33,11 +33,27 @@ const MAX_ITERATIONS = 8;
 export async function* runChat(deps: ChatDeps, input: ChatTurnInput, signal?: AbortSignal): AsyncIterable<ChatEvent> {
   const { db, encryptionKey } = deps;
   const cfg = getLlmConfigRow(db);
+  // `''` is a legal key for a keyless self-hosted endpoint — only `null` means unconfigured.
   const apiKey = cfg ? getDecryptedApiKey(db, encryptionKey) : null;
-  if (!cfg || !apiKey) {
+  if (!cfg || apiKey === null) {
     yield {
       type: 'text',
       text: 'Chat needs an LLM provider configured. Add one in Settings — the same provider and key Argus uses for enrichment. Everything else in Argus works without it.',
+    };
+    yield { type: 'done' };
+    return;
+  }
+
+  // Chat needs seam 2 (tool calls). On a custom endpoint that seam is capability-probed,
+  // never assumed (DECISION #30). A model that ignores `tools` would answer governance
+  // questions from nothing — so we refuse, out loud, instead of guessing (rule 5).
+  if (!chatSupported({ provider: cfg.provider, capabilities: getCapabilities(cfg) })) {
+    yield {
+      type: 'text',
+      text:
+        `Chat is unavailable on this provider. The configured endpoint (model "${cfg.model}") did not emit a tool call when probed, ` +
+        `and chat can only answer from real tool results — never from guesses. Enrichment and the rest of Argus keep working. ` +
+        `To enable chat, point the endpoint at a tool-calling model (Llama 3.1+, Qwen, Mistral); on vLLM, start it with --enable-auto-tool-choice.`,
     };
     yield { type: 'done' };
     return;
@@ -60,7 +76,7 @@ export async function* runChat(deps: ChatDeps, input: ChatTurnInput, signal?: Ab
   // Chat calls are per-iteration tool-selection turns over a large tool set — allow more
   // headroom than a single enrichment call (default 30s) before we time out honestly.
   const factory = deps.clientFactory ?? ((c) => createLlmClient({ ...c, timeoutMs: 90_000, retryDelayMs: 1000 }));
-  const client = factory({ provider: cfg.provider, apiKey, model: cfg.model });
+  const client = factory({ provider: cfg.provider, apiKey, model: cfg.model, baseUrl: cfg.base_url ?? undefined });
   // History is server-held; roles are ours (user/assistant), never client-asserted.
   const messages = [...(input.history ?? []), { role: 'user' as const, content: input.message }];
 

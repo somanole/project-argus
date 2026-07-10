@@ -9,9 +9,16 @@ changes, this page changes in the same session (standing rule 9).
 -->
 
 **One workflow → one small JSON payload → one provider.** Enrichment sends the LLM a
-strict, built-by-inclusion allowlist. The provider is the one **you** chose (OpenAI
-**or** Anthropic); the **payload is identical either way** — only the destination host
-differs. Argus is read-only against n8n and never sends anything to n8n.
+strict, built-by-inclusion allowlist. The provider is the one **you** chose (OpenAI,
+Anthropic, **or any OpenAI-compatible endpoint you run**); the **payload is identical
+either way** — only the destination host differs. Argus is read-only against n8n and
+never sends anything to n8n.
+
+> ### With a self-hosted endpoint, nothing leaves your network.
+> Point Argus at an in-VPC vLLM / TGI / Ollama / LM Studio instance, or at your own
+> OpenAI-compatible gateway, and the payload below travels **only to that host**. No
+> estate metadata reaches OpenAI, Anthropic, or any other third party. This is the
+> complete answer to *"you send our workflow metadata to an AI vendor?"* (DECISION #30).
 
 ## What leaves the building — the complete list
 
@@ -65,10 +72,29 @@ For each workflow, and **nothing else**:
 
 - **OpenAI** — `POST https://api.openai.com/v1/chat/completions` (when OpenAI is active).
 - **Anthropic** — `POST https://api.anthropic.com/v1/messages` (when Anthropic is active).
+- **Your own endpoint** — `POST <your base URL>/chat/completions` (when a custom
+  OpenAI-compatible endpoint is active). The base URL is whatever you configured in
+  Settings — e.g. `http://vllm.internal.acme:8000/v1` — and it is **the only host
+  contacted**. It is shown in Settings and recorded in the audit log on every change.
 
 One is active at a time. Same payload, same redaction, same allowlist either way.
+
+**`http://` means unencrypted.** A self-hosted endpoint may legitimately be plain
+`http://` on a private network, and Argus allows it — but the workflow metadata above
+then travels **unencrypted across your internal network**. That is a deliberate,
+stated trade-off, not an oversight: Settings flags it, and the audit entry for the
+config change records `insecureTransport`. Use `https://` if the traffic leaves a
+trusted segment.
+
+**A user-supplied base URL is a destination change.** Argus validates the scheme
+(`http`/`https` only) and rejects credentials embedded in the URL. It deliberately does
+**not** block private or loopback addresses — reaching an in-VPC endpoint is the point.
+Because the configured API key is sent to whatever host is configured, **every base-URL
+change is an audit-logged config mutation** (actor, timestamp, endpoint, whether the
+endpoint is keyless, whether transport is insecure, and the probed seam support).
 
 ---
 
 **Sign-off:** enabling live enrichment sends the payload above to the active provider.
-The gate test is green. Awaiting owner approval to wire the live path (worker + DB).
+The gate test is green. With a self-hosted endpoint the active provider is a host you
+operate, and nothing in this payload leaves your network.

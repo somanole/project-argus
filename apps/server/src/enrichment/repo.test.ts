@@ -9,7 +9,7 @@ import { upsertEnrichment, listEnrichmentCandidates, pruneOrphans, correctLabel,
 
 const ACTOR = { name: 'Sam', email: 'sam@acme.example' };
 const ENC = 'test-key';
-const TUPLE: GatingTuple = { provider: 'openai', model: 'gpt-5-mini', promptVersion: 'v1', schemaVersion: 1 };
+const TUPLE: GatingTuple = { provider: 'openai', model: 'gpt-5-mini', baseUrl: null, promptVersion: 'v1', schemaVersion: 1 };
 
 const input: EnrichmentInput = {
   name: 'Stripe Dunning', project: 'Revenue Ops', tags: ['billing'], triggerTypes: [],
@@ -65,6 +65,40 @@ describe('workflow_enrichments — durable across the cache rebuild', () => {
     upsertEnrichment(db, { ...TUPLE, instanceId, workflowId: 'w1', inputHash: 'hash-A', status: 'analyzed', enrichmentJson: JSON.stringify(output) });
     const switched: GatingTuple = { ...TUPLE, provider: 'anthropic', model: 'claude-haiku-4-5' };
     expect(listEnrichmentCandidates(db, instanceId, switched)).toHaveLength(1);
+  });
+
+  /**
+   * DECISION #30: two endpoints can serve the same model id, so the base URL is part of
+   * the gating tuple. Repointing must re-enrich rather than silently keep summaries a
+   * different model wrote. (`base_url` is NULL for hosted providers, so this also guards
+   * the NULL-safe comparison — a bare `<>` would never fire.)
+   */
+  it('repointing a custom endpoint invalidates freshness, even with the same model id', () => {
+    const local: GatingTuple = { ...TUPLE, provider: 'openai_compatible', model: 'llama3.1:8b', baseUrl: 'http://127.0.0.1:11434/v1' };
+    upsertEnrichment(db, { ...local, instanceId, workflowId: 'w1', inputHash: 'hash-A', status: 'analyzed', enrichmentJson: JSON.stringify(output) });
+    expect(listEnrichmentCandidates(db, instanceId, local)).toHaveLength(0); // fresh on the same endpoint
+
+    const repointed: GatingTuple = { ...local, baseUrl: 'http://10.0.0.7:8000/v1' };
+    expect(listEnrichmentCandidates(db, instanceId, repointed)).toHaveLength(1);
+  });
+
+  /**
+   * The NULL path, isolated. A hosted provider stores base_url = NULL and gates with
+   * baseUrl = null, and in SQL `NULL = NULL` is NULL — not true. Without the IFNULL guard
+   * the freshness predicate goes NULL for every hosted row, so progress reports 0
+   * analyzed forever while the catalog visibly shows summaries. Holding provider+model
+   * constant is what makes this test see the bug.
+   */
+  it('a hosted provider (base_url NULL on both sides) counts as ANALYZED, not invisible', () => {
+    expect(TUPLE.baseUrl).toBeNull();
+    upsertEnrichment(db, { ...TUPLE, instanceId, workflowId: 'w1', inputHash: 'hash-A', status: 'analyzed', enrichmentJson: JSON.stringify(output) });
+    expect(enrichmentCounts(db, TUPLE)).toMatchObject({ analyzed: 1, stale: 0, pending: 0 });
+  });
+
+  it('switching from a hosted provider to a custom endpoint invalidates freshness', () => {
+    upsertEnrichment(db, { ...TUPLE, instanceId, workflowId: 'w1', inputHash: 'hash-A', status: 'analyzed', enrichmentJson: JSON.stringify(output) });
+    const custom: GatingTuple = { ...TUPLE, provider: 'openai_compatible', baseUrl: 'http://127.0.0.1:11434/v1' };
+    expect(listEnrichmentCandidates(db, instanceId, custom)).toHaveLength(1);
   });
 
   it('a stub is honest: no fabricated category, and it is not a candidate while fresh', () => {

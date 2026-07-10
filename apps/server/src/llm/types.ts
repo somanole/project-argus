@@ -1,10 +1,10 @@
 import type { ZodType } from 'zod';
-import type { LlmProvider } from '@argus/shared';
+import { HOSTED_PROVIDERS, type LlmProvider } from '@argus/shared';
 
 /**
- * The one provider-abstracting LLM wrapper's shared types (standing rule 6, DECISION
- * #25). Every LLM call in Argus goes through the `LlmClient` interface, which hides
- * OpenAI vs Anthropic behind two stable seams:
+ * The one provider-abstracting LLM wrapper's shared types (standing rule 6, DECISIONS
+ * #25 + #30). Every LLM call in Argus goes through the `LlmClient` interface, which hides
+ * OpenAI vs Anthropic vs any OpenAI-compatible endpoint behind two stable seams:
  *   1. structuredOutput — a Zod-validated object (used by S2 enrichment).
  *   2. streamToolLoop   — a streaming tool loop (declared now, built in S7 chat).
  * Callers never see provider specifics.
@@ -109,9 +109,19 @@ export interface LlmClient {
 
 export interface LlmClientConfig {
   provider: LlmProvider;
+  /**
+   * The provider key. EMPTY STRING is legal for `openai_compatible` only — self-hosted
+   * endpoints are commonly keyless, and we then omit the Authorization header entirely
+   * (contracts/llm-openai-compatible.json → keyless_no_auth_header).
+   */
   apiKey: string;
-  /** Pinned model id for this provider. */
+  /** Model id. Pinned by us for the hosted providers; user-chosen for openai_compatible. */
   model: string;
+  /**
+   * REQUIRED for `openai_compatible`: the OpenAI-shaped API root, already validated +
+   * normalized by `checkBaseUrl` (e.g. `http://127.0.0.1:11434/v1`). Ignored otherwise.
+   */
+  baseUrl?: string | undefined;
   /** Per-request timeout (ms). */
   timeoutMs?: number;
   /** OpenAI gpt-5 family only: reasoning effort. Enrichment pins 'minimal' (probe-tuned). */
@@ -120,8 +130,19 @@ export interface LlmClientConfig {
   retryDelayMs?: number;
 }
 
-/** Model pinned per provider — the fast/cheap tier (probe-confirmed). */
-export const DEFAULT_MODELS: Record<LlmProvider, string> = {
+/**
+ * Model pinned per provider — the fast/cheap tier (probe-confirmed). `openai_compatible`
+ * is absent BY DESIGN: its model is customer-chosen, so we have no default to offer and
+ * must never invent one (rule 5).
+ */
+export const DEFAULT_MODELS: Record<(typeof HOSTED_PROVIDERS)[number], string> = {
   openai: 'gpt-5-mini',
   anthropic: 'claude-haiku-4-5',
 };
+
+/** Result of capability-probing the two seams against a configured endpoint. */
+export interface CapabilityProbeResult {
+  structuredOutput: boolean;
+  streamingToolCalls: boolean;
+  note: string | null;
+}

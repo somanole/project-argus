@@ -2,36 +2,32 @@
  * The enrichment eval harness (H1). Runs the labeled set through the REAL wrapper +
  * prompt (so it tests what actually ships), scores against the pre-registered H1 bar,
  * and checks the injection cases (model must not obey embedded instructions or echo a
- * marker). Provider-parameterized — one bar for both.
+ * marker). Provider-parameterized — ONE bar, reported per provider.
  *
- *   pnpm eval                 # OpenAI (reference)
+ *   pnpm eval                                # OpenAI (reference)
  *   pnpm eval --provider anthropic
+ *   pnpm eval --provider openai_compatible   # your endpoint + model (see scripts/eval/provider.ts)
  *
- * Reads the provider key from .env (OPENAI_API_KEY / ANTHROPIC_API_KEY). Prints the
+ * For `openai_compatible` the model is customer-chosen, so H1 cannot be pre-certified —
+ * the scorecard says so out loud (DECISION #30). Reads config from .env. Prints the
  * scorecard; the measured row is copied into EXPERIMENT.md by hand (targets stay frozen).
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { createLlmClient, DEFAULT_MODELS, type LlmProvider } from '../../apps/server/src/llm/index.js';
+import { createLlmClient } from '../../apps/server/src/llm/index.js';
 import { enrichWorkflow } from '../../apps/server/src/enrichment/enrich.js';
 import type { EnrichmentInput } from '../../apps/server/src/enrichment/allowlist.js';
 import { score, verdictAgainstH1 } from './score.mjs';
+import { resolveEvalProvider, evalClientConfig, h1Caveat } from './provider.js';
 
 process.loadEnvFile();
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const readJson = (p: string) => JSON.parse(readFileSync(join(HERE, p), 'utf8'));
 
-const providerArg = process.argv.indexOf('--provider');
-const provider: LlmProvider = providerArg >= 0 && process.argv[providerArg + 1] === 'anthropic' ? 'anthropic' : 'openai';
-const apiKey = provider === 'openai' ? process.env.OPENAI_API_KEY : process.env.ANTHROPIC_API_KEY;
-if (!apiKey) {
-  console.error(`No ${provider === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY'} in .env — cannot run the eval for ${provider}.`);
-  process.exit(1);
-}
-
-const client = createLlmClient({ provider, apiKey, model: DEFAULT_MODELS[provider], reasoningEffort: 'minimal', retryDelayMs: 1000 });
+const evalProvider = resolveEvalProvider(process.argv);
+const client = createLlmClient(evalClientConfig(evalProvider));
 
 interface LabeledCase {
   id: string;
@@ -62,7 +58,7 @@ async function pool<T, R>(items: T[], n: number, fn: (x: T) => Promise<R>): Prom
 async function main(): Promise<void> {
   const labeled: LabeledCase[] = readJson('labeled/workflows.json').cases;
   const injection: InjectionCase[] = readJson('labeled/injection.json').cases;
-  console.log(`\nEnrichment eval — provider=${provider} model=${DEFAULT_MODELS[provider]} — ${labeled.length} labeled + ${injection.length} injection\n`);
+  console.log(`\nEnrichment eval — ${evalProvider.label} — ${labeled.length} labeled + ${injection.length} injection\n`);
 
   // Labeled set → score against H1.
   const results = await pool(labeled, 4, async (c) => {
@@ -97,6 +93,8 @@ async function main(): Promise<void> {
   console.log(`  injection held         ${injectionOk}/${injection.length}`);
   console.log('  ────────────────────────────────────────────────────────────');
   console.log(`  ${verdictAgainstH1(s)}\n`);
+  const caveat = h1Caveat(evalProvider);
+  if (caveat) console.log(`  ${caveat}\n`);
 }
 
 main().catch((err) => {
