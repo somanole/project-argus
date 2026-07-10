@@ -117,4 +117,53 @@ describe('sync engine — reconciliation is the source of truth', () => {
     expect(listWorkflows(db).map((w) => w.name)).toEqual(['Created while down']);
     expect(engine2.health(connId).status).toBe('ok');
   });
+
+  // S6.1 — analyzer-freshness drift rides the poll and lands on connection health.
+  it('flags core-drift when workflows use an unrecognized CORE node type (coverage may have dropped)', async () => {
+    state.workflows = [
+      wf({ id: 'w1', name: 'Uses a post-2.29 core node', nodes: [{ type: 'n8n-nodes-base.__futureNode', name: 'Future' }] }),
+      wf({ id: 'w2', name: 'Ordinary', nodes: [{ type: 'n8n-nodes-base.set', name: 'Set' }] }),
+    ];
+    const engine = createSyncEngine(db, ENC, 999_999, factory);
+    await engine.syncNow(connId);
+    const drift = engine.health(connId).analyzerDrift;
+    expect(drift?.status).toBe('core-drift');
+    expect(drift?.coreUnknown).toMatchObject({ types: 1, workflows: 1 });
+    expect(drift?.manifestN8nVersion).toBeTruthy();
+    // Nothing else degrades: the full inventory is still listed (drift is advisory, not a filter).
+    expect(listWorkflows(db)).toHaveLength(2);
+    expect(listWorkflows(db).map((w) => w.id).sort()).toEqual(['w1', 'w2']);
+  });
+
+  it('labels an unrecognized COMMUNITY node type community-only (no regenerate case)', async () => {
+    state.workflows = [wf({ id: 'w1', name: 'Uses a community node', nodes: [{ type: 'n8n-nodes-acme.customThing', name: 'Acme' }] })];
+    const engine = createSyncEngine(db, ENC, 999_999, factory);
+    await engine.syncNow(connId);
+    const drift = engine.health(connId).analyzerDrift;
+    expect(drift?.status).toBe('community-only');
+    expect(drift?.communityUnknown.types).toBe(1);
+    expect(drift?.coreUnknown.types).toBe(0);
+  });
+
+  it('reports no drift when every node type is recognized (current)', async () => {
+    state.workflows = [wf({ id: 'w1', name: 'All recognized', nodes: [
+      { type: 'n8n-nodes-base.manualTrigger', name: 'Manual' },
+      { type: 'n8n-nodes-base.set', name: 'Set' },
+    ] })];
+    const engine = createSyncEngine(db, ENC, 999_999, factory);
+    await engine.syncNow(connId);
+    expect(engine.health(connId).analyzerDrift?.status).toBe('current');
+  });
+
+  it('keeps the last-known drift across a transient sync error (never fabricated)', async () => {
+    state.workflows = [wf({ id: 'w1', name: 'Drifting', nodes: [{ type: 'n8n-nodes-base.__futureNode', name: 'Future' }] })];
+    const engine = createSyncEngine(db, ENC, 999_999, factory);
+    await engine.syncNow(connId);
+    expect(engine.health(connId).analyzerDrift?.status).toBe('core-drift');
+    state.throw = new Error('connect ECONNREFUSED');
+    await engine.syncNow(connId);
+    // Unhealthy now, but the advisory drift from the last good sync is preserved, not reset.
+    expect(engine.health(connId).status).toBe('unreachable');
+    expect(engine.health(connId).analyzerDrift?.status).toBe('core-drift');
+  });
 });

@@ -93,7 +93,7 @@ describe('Health view — UI-presence (rule 11)', () => {
     stubFetch(failingBody, [
       { id: 'b', label: 'staging', baseUrl: 'http://localhost:5679', webhookHost: null,
         createdAt: '2026-07-05T00:00:00.000Z', updatedAt: '2026-07-05T00:00:00.000Z',
-        health: { status: 'unauthorized', lastSyncedAt: null, lastError: 'n8n rejected the API key (HTTP 401)', workflowCount: 0 } },
+        health: { status: 'unauthorized', lastSyncedAt: null, lastError: 'n8n rejected the API key (HTTP 401)', workflowCount: 0, analyzerDrift: null } },
     ]);
     const w = mountView();
     await flushPromises();

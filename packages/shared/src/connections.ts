@@ -27,6 +27,45 @@ export type ConnectionInput = z.infer<typeof connectionInputSchema>;
 export const connectionStatusSchema = z.enum(['ok', 'unauthorized', 'unreachable', 'pending']);
 export type ConnectionStatus = z.infer<typeof connectionStatusSchema>;
 
+/**
+ * Analyzer-freshness drift (S6.1). Advisory only — a **coverage nudge**, never a
+ * correctness alarm (rule 5): a stale manifest makes the analyzer *incomplete, not
+ * wrong*. Anchored on the one signal Argus can verify — node types in real workflows
+ * the pinned manifest doesn't recognize — never on an n8n version (unreachable with a
+ * read-only API key; see contracts/n8n-21). NEVER counts against any accountability metric.
+ */
+export const analyzerDriftStatusSchema = z.enum(['current', 'core-drift', 'community-only']);
+export type AnalyzerDriftStatus = z.infer<typeof analyzerDriftStatusSchema>;
+
+const driftBucketSchema = z.object({
+  /** Distinct unrecognized node types in this bucket. */
+  types: z.number().int().nonnegative(),
+  /** Workflows on this connection that use ≥1 type in this bucket. */
+  workflows: z.number().int().nonnegative(),
+});
+
+export const analyzerDriftSchema = z.object({
+  /** The n8n version the vendored manifest was built for — the only version Argus knows for certain. */
+  manifestN8nVersion: z.string(),
+  /**
+   * - `current` — no unrecognized node types on this instance.
+   * - `core-drift` — ≥1 unrecognized CORE type (n8n-nodes-base.* / @n8n/n8n-nodes-langchain.*):
+   *   the instance likely runs a newer n8n than the manifest → regenerate.
+   * - `community-only` — unrecognized types exist but are ALL community/custom → a rebuild
+   *   won't add them (not a regenerate case). `core-drift` wins when both are present.
+   */
+  status: analyzerDriftStatusSchema,
+  /** Unrecognized CORE node types — the stale-manifest signal. */
+  coreUnknown: driftBucketSchema,
+  /** Unrecognized community/custom node types — a manifest rebuild won't add them. */
+  communityUnknown: driftBucketSchema,
+  /** The ACTUAL unrecognized CORE type names (capped for display; `coreUnknown.types` is the total). */
+  coreExamples: z.array(z.string()),
+  /** The ACTUAL unrecognized community/custom type names (capped; `communityUnknown.types` is the total). */
+  communityExamples: z.array(z.string()),
+});
+export type AnalyzerDrift = z.infer<typeof analyzerDriftSchema>;
+
 export const connectionHealthSchema = z.object({
   status: connectionStatusSchema,
   /** ISO time of the last successful sync, or null if it has never synced. */
@@ -35,6 +74,8 @@ export const connectionHealthSchema = z.object({
   lastError: z.string().nullable(),
   /** Workflows currently cached for this connection. */
   workflowCount: z.number().int().nonnegative(),
+  /** Analyzer-freshness drift (S6.1); null until the first successful sync. Advisory. */
+  analyzerDrift: analyzerDriftSchema.nullable(),
 });
 export type ConnectionHealth = z.infer<typeof connectionHealthSchema>;
 

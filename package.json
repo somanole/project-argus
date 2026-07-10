@@ -20,6 +20,7 @@
     "probe:n8n": "node scripts/probe-n8n.mjs",
     "probe:catalog": "node scripts/probe-catalog.mjs",
     "probe:llm": "node --env-file=.env scripts/probe-llm.mjs",
+    "probe:freshness": "node scripts/probe-freshness.mjs",
     "eval": "tsx scripts/eval/run.ts",
     "eval:chat": "tsx scripts/eval/chat/run.ts",
     "n8n:up": "node scripts/n8n-up.mjs",

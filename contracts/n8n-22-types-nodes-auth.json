@@ -1,0 +1,48 @@
+{
+  "$probe": "Decision #23 gating probe Q2: is node/credential-type metadata reachable with a read API key or cookie-only? Non-destructive.",
+  "capturedAt": "2026-07-10T18:11:56.809Z",
+  "n8nVersion": "2.29.0",
+  "base": "http://localhost:5678",
+  "finding": "NO — cookie-only. /types/nodes.json is 401 with an API key, 200 with a session cookie.",
+  "detail": {
+    "question": "Is node/credential-type metadata reachable with a read API key, or cookie-only?",
+    "answer": "NO — cookie-only. /types/nodes.json is 401 with an API key, 200 with a session cookie.",
+    "typesNodes_apiKeyOnly": {
+      "request": {
+        "method": "GET",
+        "path": "/types/nodes.json",
+        "auth": "X-N8N-API-KEY only (no cookie)",
+        "headers": "«redacted»"
+      },
+      "status": 401
+    },
+    "typesNodes_cookie": {
+      "request": {
+        "method": "GET",
+        "path": "/types/nodes.json",
+        "auth": "session cookie",
+        "headers": "«redacted»"
+      },
+      "status": 200,
+      "nodeTypeCount": 898
+    },
+    "typesCredentials_apiKeyOnly": {
+      "request": {
+        "method": "GET",
+        "path": "/types/credentials.json",
+        "auth": "X-N8N-API-KEY only",
+        "headers": "«redacted»"
+      },
+      "status": 401
+    },
+    "restNodeTypes_apiKeyOnly": {
+      "request": {
+        "method": "POST",
+        "path": "/rest/node-types",
+        "auth": "X-N8N-API-KEY only",
+        "headers": "«redacted»"
+      },
+      "status": 401
+    }
+  }
+}

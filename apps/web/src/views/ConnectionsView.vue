@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useConnectionsStore } from '../stores/connections';
 import { ApiError } from '../lib/api';
 import HealthBadge from '../components/HealthBadge.vue';
+import AnalyzerDriftNotice from '../components/AnalyzerDriftNotice.vue';
 import { instanceColor } from '../lib/instanceColor';
 import { relativeTime } from '../lib/time';
 
@@ -113,6 +114,7 @@ onUnmounted(() => {
             <div><dt>Last synced</dt><dd>{{ relativeTime(c.health.lastSyncedAt) }}</dd></div>
           </dl>
           <p v-if="c.health.lastError" class="err small">{{ c.health.lastError }}</p>
+          <AnalyzerDriftNotice :drift="c.health.analyzerDrift" data-testid="analyzer-drift" />
           <div class="conn-actions">
             <button class="btn btn--danger btn--sm" :disabled="removingId === c.id" @click="remove(c.id, c.label)">
               {{ removingId === c.id ? 'Removing…' : 'Remove' }}

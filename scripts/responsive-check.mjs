@@ -109,7 +109,7 @@ const overviewBody = {
   health: { summary: failingBody.summary, windows: [{ instanceId: 'prod', instanceLabel: 'prod', windowHours: 336, available: true }, { instanceId: 'staging', instanceLabel: 'staging', windowHours: 336, available: false }] },
   generatedAt: '2026-07-06T00:00:00.000Z',
 };
-const connectionsBody = { connections: [{ id: 'prod', label: 'prod', baseUrl: 'http://localhost:5678', webhookHost: null, createdAt: '2026-07-05T00:00:00.000Z', updatedAt: '2026-07-05T00:00:00.000Z', health: { status: 'ok', lastSyncedAt: '2026-07-05T00:00:00.000Z', lastError: null, workflowCount: 3 } }] };
+const connectionsBody = { connections: [{ id: 'prod', label: 'prod', baseUrl: 'http://localhost:5678', webhookHost: null, createdAt: '2026-07-05T00:00:00.000Z', updatedAt: '2026-07-05T00:00:00.000Z', health: { status: 'ok', lastSyncedAt: '2026-07-05T00:00:00.000Z', lastError: null, workflowCount: 3, analyzerDrift: { manifestN8nVersion: '2.29.0', status: 'core-drift', coreUnknown: { types: 3, workflows: 2 }, communityUnknown: { types: 1, workflows: 1 }, coreExamples: ['n8n-nodes-base.__futureNode', '@n8n/n8n-nodes-langchain.__newAgent'], communityExamples: ['n8n-nodes-acme.thing'] } } }] };
 const gNode = (id, kind, label, over = {}) => ({ id, kind, instanceId: 'prod', instanceLabel: 'prod', label, resourceId: id.split(':').pop(), workflowId: kind === 'workflow' ? id.split(':').pop() : null, health: kind === 'workflow' ? 'healthy' : null, active: kind === 'workflow' ? true : null, archived: kind === 'workflow' ? false : null, isAgent: kind === 'workflow' ? false : null, brokenRef: kind === 'workflow' ? false : null, mcpExposed: kind === 'workflow' ? false : null, ...over });
 const graphBody = {
   scope: 'estate', focus: null, hops: null, truncated: false, nodeTotal: 3, generatedAt: '2026-07-07T00:00:00.000Z',
@@ -216,6 +216,10 @@ const VIEWS = [
   // Chat empty state renders without an /api call (chat only POSTs on send). The rule-10
   // gate is "no horizontal overflow at 375px"; the composer is the always-present key.
   { name: 'Chat view', path: '/chat', mock: mockApi, waitFor: '[data-testid="chat-view"]', key: '[data-testid="chat-input"]' },
+  // S6.1: the mock connection is in core-drift, so the analyzer-drift notice renders — the
+  // rule-10 gate is "no horizontal overflow at 375px" with the notice (and its example
+  // types / rebuild disclosure) present.
+  { name: 'Connections', path: '/connections', mock: mockApi, waitFor: '[data-testid="analyzer-drift"]', key: '[data-testid="analyzer-drift"]' },
 ];
 
 export async function runResponsiveCheck() {

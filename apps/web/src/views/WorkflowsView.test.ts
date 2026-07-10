@@ -33,11 +33,11 @@ const coverageBody = {
 const okConnection = {
   id: 'a', label: 'prod', baseUrl: 'http://localhost:5678', webhookHost: null,
   createdAt: '2026-07-05T00:00:00.000Z', updatedAt: '2026-07-05T00:00:00.000Z',
-  health: { status: 'ok', lastSyncedAt: '2026-07-05T00:00:00.000Z', lastError: null, workflowCount: 1 },
+  health: { status: 'ok', lastSyncedAt: '2026-07-05T00:00:00.000Z', lastError: null, workflowCount: 1, analyzerDrift: null },
 };
 const rejectedConnection = {
   ...okConnection, id: 'b', label: 'staging', baseUrl: 'http://localhost:5679',
-  health: { status: 'unauthorized', lastSyncedAt: null, lastError: 'n8n rejected the API key (HTTP 401)', workflowCount: 0 },
+  health: { status: 'unauthorized', lastSyncedAt: null, lastError: 'n8n rejected the API key (HTTP 401)', workflowCount: 0, analyzerDrift: null },
 };
 
 function stubFetch(connections: unknown[] = []) {

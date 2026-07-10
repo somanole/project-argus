@@ -18,6 +18,7 @@ export {
   type Pass1Facts,
 } from './facts.js';
 export { coverageOf, type CoverageEntry } from './coverage.js';
+export { computeAnalyzerDrift, isCoreNodeType, CORE_NODE_PREFIXES } from './drift.js';
 export { createManifest, manifest, type Manifest, type ManifestData } from './manifest.js';
 export { extractDirectRefs, parseWorkflowId, isExpression, type RawRef } from './refs.js';
 export { resolveRef, resolveRefs } from './resolve.js';

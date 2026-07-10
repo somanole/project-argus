@@ -1,0 +1,156 @@
+{
+  "$probe": "Decision #23 gating probe Q1: does an API-key caller learn the running n8n version? Non-destructive.",
+  "capturedAt": "2026-07-10T18:11:56.808Z",
+  "n8nVersion": "2.29.0",
+  "base": "http://localhost:5678",
+  "finding": "NO — an API-key caller gets no version. versionCli is cookie-session only.",
+  "detail": {
+    "question": "Is the running n8n version reachable to an API-key caller?",
+    "answer": "NO — an API-key caller gets no version. versionCli is cookie-session only.",
+    "restSettings_apiKeyOnly": {
+      "request": {
+        "method": "GET",
+        "path": "/rest/settings",
+        "auth": "X-N8N-API-KEY only (no cookie)",
+        "headers": "«redacted»"
+      },
+      "status": 200,
+      "topKeys": [
+        "authCookie",
+        "communityNodesEnabled",
+        "defaultLocale",
+        "enterprise",
+        "previewMode",
+        "settingsMode",
+        "sso",
+        "userManagement"
+      ],
+      "versionKeys": []
+    },
+    "restSettings_cookie": {
+      "request": {
+        "method": "GET",
+        "path": "/rest/settings",
+        "auth": "session cookie",
+        "headers": "«redacted»"
+      },
+      "status": 200,
+      "topKeys": [
+        "activeModules",
+        "ai",
+        "aiAssistant",
+        "aiBuilder",
+        "aiCredits",
+        "allowedModules",
+        "askAi",
+        "authCookie",
+        "banners",
+        "binaryDataMode",
+        "canvasOnly",
+        "chatTrigger",
+        "collaboration",
+        "communityNodesEnabled",
+        "communityNodesManagedByEnv",
+        "concurrency",
+        "dataTables",
+        "databaseType",
+        "defaultLocale",
+        "deployment",
+        "dynamicBanners",
+        "easyAIWorkflowOnboarded",
+        "endpointForm",
+        "endpointFormTest",
+        "endpointFormWaiting",
+        "endpointHealth",
+        "endpointMcp",
+        "endpointMcpTest",
+        "endpointWebhook",
+        "endpointWebhookTest",
+        "endpointWebhookWaiting",
+        "enterprise",
+        "envFeatureFlags",
+        "evaluation",
+        "evaluationConcurrencyLimit",
+        "executionMode",
+        "executionTimeout",
+        "folders",
+        "hideUsagePage",
+        "hiringBannerEnabled",
+        "inE2ETests",
+        "instanceId",
+        "isDocker",
+        "isMultiMain",
+        "jwksUri",
+        "license",
+        "logLevel",
+        "logStreaming",
+        "maxExecutionTimeout",
+        "mfa",
+        "missingPackages",
+        "nodeJsVersion",
+        "oauthCallbackUrls",
+        "personalizationSurveyEnabled",
+        "posthog",
+        "previewMode",
+        "pruning",
+        "publicApi",
+        "pushBackend",
+        "releaseChannel",
+        "saveDataErrorExecution",
+        "saveDataSuccessExecution",
+        "saveExecutionProgress",
+        "saveManualExecutions",
+        "security",
+        "settingsMode",
+        "sso",
+        "telemetry",
+        "templates",
+        "timezone",
+        "unverifiedCommunityNodesEnabled",
+        "urlBaseEditor",
+        "urlBaseWebhook",
+        "urlBaseWebhookTest",
+        "useWorkflowPublicationService",
+        "userManagement",
+        "variables",
+        "versionCli",
+        "versionNotifications",
+        "workflowCallerPolicyDefaultOption",
+        "workflowHistory",
+        "workflowTagsDisabled",
+        "workflowsAutosaveDisabled"
+      ],
+      "versionKeys": [
+        {
+          "key": "nodeJsVersion",
+          "value": "22.22.0"
+        },
+        {
+          "key": "versionCli",
+          "value": "2.29.0"
+        },
+        {
+          "key": "versionNotifications",
+          "value": "[object]"
+        },
+        {
+          "key": "publicApi.latestVersion",
+          "value": 1
+        },
+        {
+          "key": "enterprise.namedVersions",
+          "value": false
+        }
+      ]
+    },
+    "apiV1Version": {
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/version",
+        "auth": "X-N8N-API-KEY only",
+        "headers": "«redacted»"
+      },
+      "status": 404
+    }
+  }
+}

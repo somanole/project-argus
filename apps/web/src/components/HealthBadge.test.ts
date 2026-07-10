@@ -4,7 +4,7 @@ import HealthBadge from './HealthBadge.vue';
 import type { ConnectionHealth } from '@argus/shared';
 
 const health = (status: ConnectionHealth['status']): ConnectionHealth => ({
-  status, lastSyncedAt: null, lastError: null, workflowCount: 0,
+  status, lastSyncedAt: null, lastError: null, workflowCount: 0, analyzerDrift: null,
 });
 
 describe('HealthBadge', () => {

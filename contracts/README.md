@@ -28,6 +28,8 @@ cookies, passwords) are redacted before writing.** Never commit an un-redacted k
 | `n8n-05-workflow-shared-shape.json` | `GET /api/v1/workflows/{id}` incl. the `shared` array |
 | `n8n-06-folders-visibility.json` | M0 discovery: folders in the public API |
 | `n8n-07-agents-v2-visibility.json` | M0 discovery: agents-v2 in the public API |
+| `n8n-21-version-unreachable.json` | S6.1/Decision #23 gate Q1: an API-key caller gets **no** n8n version (`versionCli` is cookie-session only; no `/api/v1/version`). `pnpm probe:freshness` |
+| `n8n-22-types-nodes-auth.json` | S6.1/Decision #23 gate Q2: node/credential-type metadata is **cookie-only** (`/types/nodes.json` → 401 with an API key, 200 with a cookie). `pnpm probe:freshness` |
 | `n8n-probe-summary.json` | machine-readable pass/fail roll-up |
 
 See `DISCOVERY.md` for the plain-English M0 discovery findings.

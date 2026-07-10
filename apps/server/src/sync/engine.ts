@@ -3,7 +3,7 @@ import type { ConnectionHealth, N8nWorkflowListItem, N8nProject, N8nProjectMembe
 import { listConnectionRows, getConnectionRow, decryptApiKey, type ConnectionRow } from '../connections/repo.js';
 import { replaceInstanceWorkflows, countByInstance, type CacheWorkflow } from '../workflows/repo.js';
 import { createN8nClient, statusForError, reason, HttpError, DEFAULT_HEALTH_WINDOW_HOURS } from '../n8n/client.js';
-import { analyzeInstance } from '../analyzer/index.js';
+import { analyzeInstance, computeAnalyzerDrift } from '../analyzer/index.js';
 import { buildEnrichmentInput, hashEnrichmentInput } from '../enrichment/index.js';
 import { syncHealth } from '../health/index.js';
 import { inferOwnership, type InferenceReader } from '../ownership/inference.js';
@@ -64,7 +64,7 @@ export function createSyncEngine(
   function currentHealth(id: string): ConnectionHealth {
     const existing = health.get(id);
     if (existing) return existing;
-    return { status: 'pending', lastSyncedAt: null, lastError: null, workflowCount: countByInstance(db, id) };
+    return { status: 'pending', lastSyncedAt: null, lastError: null, workflowCount: countByInstance(db, id), analyzerDrift: null };
   }
 
   function normalize(workflows: N8nWorkflowListItem[], projects: N8nProject[]): CacheWorkflow[] {
@@ -120,6 +120,8 @@ export function createSyncEngine(
         lastSyncedAt: new Date().toISOString(),
         lastError: null,
         workflowCount: normalized.length,
+        // S6.1: advisory analyzer-freshness drift, recomputed from this tick's facts.
+        analyzerDrift: computeAnalyzerDrift(normalized.map((w) => w.facts)),
       });
       // S3 health: recompute per-workflow execution health on the SAME tick (poll-fresh).
       // syncHealth never throws — a fetch failure degrades those workflows to `unknown`
@@ -162,6 +164,8 @@ export function createSyncEngine(
         lastSyncedAt: prev?.lastSyncedAt ?? null,
         lastError: reason(err),
         workflowCount: countByInstance(db, row.id),
+        // No re-sync happened — keep the last-known drift (advisory), don't fabricate.
+        analyzerDrift: prev?.analyzerDrift ?? null,
       });
       console.warn(`[argus] sync failed for "${row.label}" (${row.base_url}): ${reason(err)}`);
     } finally {

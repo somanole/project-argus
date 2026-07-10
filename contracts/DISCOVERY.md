@@ -177,3 +177,29 @@ ports** but moves each instance's broker off them via
 `N8N_RUNNERS_BROKER_PORT` (prod `6779`, staging `6780`) so the two instances (and
 their brokers) never collide. Isolation is by `N8N_USER_FOLDER` per instance (own
 SQLite DB + encryption key + settings); no `../n8n` edits.
+
+## S6.1 analyzer-freshness gate (21–22) — captured live 2026-07-10
+
+Decision #23 gated "runtime one-click refresh from the live instance" on two rule-1
+questions. `pnpm probe:freshness` (non-destructive) settled both against the running
+instance, cross-checked against n8n source — and **both are "No"** for a caller holding
+only a read-only public API key (Argus's model; it has no browser session cookie):
+
+1. **n8n version → unreachable via API key.** `/rest/settings` serves `versionCli` only to a
+   **session cookie** (`req.user` branch of `frontend.service.ts`); an API-key caller gets the
+   reduced public payload with no version field. There is no `/api/v1/version` and no version
+   header on `/healthz`. So Argus has **no version anchor** to detect an upgrade with.
+2. **Node-type metadata → cookie-only.** `/types/nodes.json` is **401 with a valid API key**,
+   **200 (898 node types) with a cookie**; `/rest/node-types` is cookie-gated too. So Argus
+   **cannot refresh the manifest from the live instance** at runtime.
+
+**Consequence (Decision #32):** regeneration stays a build/ops step and the UI action degrades
+to upgrade guidance. Detection still ships — anchored not on a version Argus can't read but on
+the one signal it can **verify**: unrecognized node types in the workflows it already syncs,
+split by namespace (core `n8n-nodes-base.*` / `@n8n/n8n-nodes-langchain.*` → likely a newer n8n
+→ regenerate; anything else → community/custom, which a rebuild won't fix).
+
+(Rule-1 note: in this E2E build the *cookie* `/rest/settings` also omitted `versionCli` — the
+owner login didn't satisfy the stricter `allowSkipMFA:false` gate that `/rest/settings` uses,
+whereas `/types/*` uses `allowSkipMFA:true`. Immaterial to the design: Argus never holds a
+cookie, so the API-key "No" is what governs.)

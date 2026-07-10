@@ -211,6 +211,11 @@ try {
   add('Connections screen shows the connection-health indicator', has('connection-health'),
     has('connection-health') ? 'connection-health present' : 'connection-health MISSING');
 
+  // S6.1: analyzer-freshness drift notice (core-drift + community-only variants; nothing
+  // when current). Component test asserts each variant's text/state; this is the presence row.
+  add('Connections screen shows the analyzer-freshness drift notice (S6.1)', has('analyzer-drift'),
+    has('analyzer-drift') ? 'analyzer-drift present' : 'analyzer-drift MISSING');
+
   // S2: enrichment chrome — catalog badges, drawer section (summary + criticality
   // reason + risk flags + correction), the "enriched X/Y" indicator, and the Settings
   // provider/key screen. Each has a component test asserting its state; this is the
@@ -312,6 +317,7 @@ try {
     row('Detail drawer usable at 375px — full-width, no overflow', 'Detail drawer');
     row('Settings usable at 375px — no horizontal overflow', 'Settings');
     row('Chat view usable at 375px — no horizontal overflow', 'Chat view');
+    row('Connections (with drift notice) usable at 375px — no horizontal overflow', 'Connections');
   }
 }
 
@@ -333,6 +339,9 @@ await s1aChecks();
 // Corpus robustness (offline), the analyzer over the live seed, the API filters,
 // and the scale smoke-test.
 await s1bChecks();
+
+// ---- S6.1 checks: analyzer freshness (drift detection over the live estate) ----
+await s61Checks();
 
 // ---- S3 checks: health (per-workflow status from executions, the failing view) ----
 // Drives a real Argus server against both live instances; asserts the seeded health
@@ -903,6 +912,61 @@ async function s1aChecks() {
   } finally {
     try { child.kill(); } catch { /* already gone */ }
   }
+}
+
+// S6.1 — analyzer freshness: detect when a connected instance has drifted past the
+// pinned manifest. Anchored on verifiable unrecognized node types (never a version
+// Argus can't read), split core vs community/custom. Detection + alert only — refresh
+// is a build/ops step (Decision #32; contracts n8n-21/22).
+async function s61Checks() {
+  const { analyzeInstance, computeAnalyzerDrift } = await import('../apps/server/dist/analyzer/index.js');
+
+  // Regression: the core/community split + status precedence, the poll→health wiring,
+  // and the UI variants (core-drift / community-only / nothing-when-current).
+  try {
+    execSync('pnpm --filter @argus/server exec vitest run src/analyzer/drift.test.ts src/sync/engine.test.ts', { cwd: ROOT, stdio: 'pipe' });
+    execSync('pnpm --filter @argus/web exec vitest run src/components/AnalyzerDriftNotice.test.ts src/views/ConnectionsView.test.ts', { cwd: ROOT, stdio: 'pipe' });
+    add('Analyzer-freshness drift is detected and split core vs community/custom', true,
+      'drift unit + poll→health wiring + UI-variant tests pass');
+  } catch (e) {
+    const out = (e.stdout?.toString() || e.message || '').slice(-200);
+    add('Analyzer-freshness drift is detected and split core vs community/custom', false, out);
+  }
+
+  // Positive sanity (deterministic, in-process): a synthetic post-manifest CORE node type
+  // flags core-drift ("coverage may have dropped"); a community/custom one is community-only
+  // (a rebuild won't add it — not a regenerate case).
+  const f = (types) => ({ coverage: { understood: types.length === 0, unknownNodeTypes: types, unresolvedRefs: 0, reasons: [] } });
+  const coreD = computeAnalyzerDrift([f(['n8n-nodes-base.__futureNode']), f(['@n8n/n8n-nodes-langchain.__x'])]);
+  const commD = computeAnalyzerDrift([f(['n8n-nodes-acme.thing'])]);
+  add('A post-manifest CORE node flags core-drift; community/custom is labeled (not regenerate)',
+    coreD.status === 'core-drift' && commD.status === 'community-only',
+    `synthetic core → ${coreD.status} (${coreD.coreUnknown.types} core types, ${coreD.coreUnknown.workflows} wfs); community → ${commD.status}`);
+
+  // Baseline sanity (live): the in-sync seeded estate (n8n = manifest pin) has 0 core-drift.
+  const up = {};
+  for (const inst of Object.values(INSTANCES)) {
+    const c = createN8nClient(inst.baseUrl);
+    up[inst.name] = (await c.healthy()) && (await c.e2eActive());
+  }
+  if (!up.prod || !up.staging) {
+    add('Baseline: in-sync seeded estate shows 0 core-drift connections', false,
+      `instances down (prod=${up.prod ? 'up' : 'down'}, staging=${up.staging ? 'up' : 'down'}) — run \`pnpm seed\``);
+    return;
+  }
+  const at = new Date().toISOString();
+  const results = [];
+  for (const inst of Object.values(INSTANCES)) {
+    const c = await connect(inst.baseUrl);
+    const items = await allWorkflows(c);
+    const facts = analyzeInstance(items, true, at);
+    results.push({ name: inst.name, drift: computeAnalyzerDrift([...facts.values()]) });
+  }
+  const anyCore = results.some((r) => r.drift.status === 'core-drift');
+  const manifestV = results[0]?.drift.manifestN8nVersion ?? '?';
+  add('Baseline: in-sync seeded estate shows 0 core-drift connections (analyzer honest, rule 5)',
+    !anyCore,
+    `analyzer built for n8n ${manifestV}; ${results.map((r) => `${r.name}=${r.drift.status} (core ${r.drift.coreUnknown.types}/comm ${r.drift.communityUnknown.types})`).join(', ')}`);
 }
 
 // S1b — the catalog: deterministic facts, filters, coverage. Proves the analyzer

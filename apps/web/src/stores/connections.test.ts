@@ -6,7 +6,7 @@ function conn(id: string, label: string) {
   return {
     id, label, baseUrl: 'http://localhost:5678', webhookHost: null,
     createdAt: '2026-07-05T00:00:00.000Z', updatedAt: '2026-07-05T00:00:00.000Z',
-    health: { status: 'ok', lastSyncedAt: null, lastError: null, workflowCount: 3 },
+    health: { status: 'ok', lastSyncedAt: null, lastError: null, workflowCount: 3, analyzerDrift: null },
   };
 }
 const json = (status: number, body: unknown) => async () => ({ ok: status < 400, status, json: async () => body });
