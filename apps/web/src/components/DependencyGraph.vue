@@ -13,6 +13,9 @@ const props = defineProps<{
   archivedHidden: boolean;
   mcpHighlight: boolean;
   reachIds: Set<string>;
+  // Lens emphasis (optional): when set, these nodes stay lit and the rest dim — e.g.
+  // the Health lens lights up failing/degraded nodes. Empty/undefined = no emphasis.
+  emphasisIds?: Set<string>;
 }>();
 const emit = defineEmits<{ (e: 'select', node: GraphNode): void }>();
 
@@ -47,19 +50,22 @@ const visibleEdges = computed<GraphEdge[]>(() =>
 
 const positioned = computed(() => layoutGraph(visibleNodes.value, visibleEdges.value));
 
-const hasHighlight = computed(() => props.impactedIds.size > 0 || (props.mcpHighlight && props.reachIds.size > 0));
+const hasHighlight = computed(
+  () => props.impactedIds.size > 0 || (props.mcpHighlight && props.reachIds.size > 0) || (props.emphasisIds?.size ?? 0) > 0,
+);
 
 const flowNodes = computed(() =>
   positioned.value.map((n) => {
     const impacted = props.impactedIds.has(n.id);
     const reach = props.mcpHighlight && props.reachIds.has(n.id);
+    const emphasized = props.emphasisIds?.has(n.id) ?? false;
     const selected = n.id === props.selectedId;
-    const dimmed = hasHighlight.value && !impacted && !reach && !selected;
+    const dimmed = hasHighlight.value && !impacted && !reach && !emphasized && !selected;
     return {
       id: n.id,
       type: 'argus',
       position: { x: n.x, y: n.y },
-      data: { node: n, impacted, reach, selected, dimmed },
+      data: { node: n, impacted, reach, emphasized, selected, dimmed },
       draggable: false,
     };
   }),

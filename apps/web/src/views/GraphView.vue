@@ -12,10 +12,31 @@ import WorkflowDetailDrawer from '../components/WorkflowDetailDrawer.vue';
  * edges are prominent, `possible` edges are dashed, and clicking a node shows the
  * edge-type-aware impact answer with an explicit total (rule 5 — no invented numbers).
  */
+// Rendered standalone at /graph OR embedded as the Estate's "graph" representation. When
+// embedded the Estate's lens tabs are the header (so the h1 is hidden) and the current
+// lens can emphasize a subset of nodes.
+const props = withDefaults(defineProps<{ embedded?: boolean; lens?: 'explore' | 'health' | 'ownership' }>(), {
+  embedded: false,
+  lens: 'explore',
+});
+
 const graph = useGraphStore();
 
 const archivedHidden = ref(true);
 const mcpHighlight = ref(false);
+
+// Lens emphasis: the Health lens lights up failing/degraded nodes ("blast radius of what's
+// broken") and dims the rest; other lenses show the full map. (Ownership emphasis would
+// need owner data on the graph nodes — a follow-up.)
+const emphasisIds = computed(() => {
+  const s = new Set<string>();
+  if (props.lens === 'health' && graph.graph) {
+    for (const n of graph.graph.nodes) {
+      if (n.kind === 'workflow' && (n.health === 'failing' || n.health === 'degraded')) s.add(n.id);
+    }
+  }
+  return s;
+});
 
 const instanceOptions = ref<{ id: string; label: string }[]>([]);
 const systemOptions = ref<string[]>([]);
@@ -93,9 +114,9 @@ const sel = computed(() => graph.selectedNode);
 </script>
 
 <template>
-  <section class="graph-view" data-testid="graph-view">
+  <section class="graph-view" :class="{ embedded }" data-testid="graph-view">
     <header class="head">
-      <div class="titles">
+      <div v-if="!embedded" class="titles">
         <h1>Relationships &amp; blast radius</h1>
       </div>
       <div v-if="graph.graph" class="counts">
@@ -168,6 +189,7 @@ const sel = computed(() => graph.selectedNode);
           :archived-hidden="archivedHidden"
           :mcp-highlight="mcpHighlight"
           :reach-ids="reachIds"
+          :emphasis-ids="emphasisIds"
           @select="onSelect"
         />
       </div>
@@ -229,6 +251,9 @@ const sel = computed(() => graph.selectedNode);
 
 <style scoped>
 .graph-view { display: flex; flex-direction: column; gap: var(--spacing--2xs); padding: var(--spacing--md); height: calc(100vh - 56px); box-sizing: border-box; }
+/* Embedded as the Estate's graph representation: the Estate owns the outer chrome, so
+   drop the standalone page padding and fit under the lens tabs + view toggle. */
+.graph-view.embedded { padding: 0; height: calc(100vh - 13rem); min-height: 28rem; }
 .head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--spacing--md); flex-wrap: wrap; }
 .titles h1 { font-size: var(--font-size--lg); font-weight: var(--font-weight--bold); margin: 0; }
 .counts { font-size: var(--font-size--2xs); display: flex; gap: var(--spacing--3xs); white-space: nowrap; }
@@ -296,7 +321,7 @@ const sel = computed(() => graph.selectedNode);
 .reach--danger { color: var(--color--danger); font-weight: var(--font-weight--medium); }
 
 @media (max-width: 900px) {
-  .graph-view { height: auto; }
+  .graph-view, .graph-view.embedded { height: auto; }
   .stage { flex-direction: column; }
   .canvas-wrap { min-height: 60vh; }
   .panel { flex: 1 1 auto; }

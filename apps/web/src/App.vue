@@ -25,6 +25,12 @@ watch(() => route.fullPath, () => { drawerOpen.value = false; });
 
 const initial = computed(() => (auth.actor?.name ?? auth.actor?.email ?? '?').trim().charAt(0).toUpperCase());
 
+// Estate home (Explore, list) and the Graph representation both resolve to the `estate`
+// route — they differ only by ?view=graph, which router-link's active matching ignores —
+// so we compute those two active states by hand.
+const isEstateHome = computed(() => route.name === 'estate' && route.query.view !== 'graph');
+const isGraphView = computed(() => route.name === 'estate' && route.query.view === 'graph');
+
 async function logout(): Promise<void> {
   await auth.logout();
   await router.replace({ name: 'login' });
@@ -57,7 +63,7 @@ async function logout(): Promise<void> {
           <router-link class="nav-item" to="/overview" :title="collapsed ? 'Overview' : undefined">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5" /><path d="M5.5 10v9.5h13V10" /></svg><span class="lbl">Overview</span>
           </router-link>
-          <router-link class="nav-item" to="/estate" :title="collapsed ? 'Estate' : undefined">
+          <router-link class="nav-item" :class="{ 'is-active': isEstateHome }" active-class="" exact-active-class="" to="/estate" :title="collapsed ? 'Estate' : undefined">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4.5" width="18" height="4" rx="1" /><rect x="3" y="10" width="18" height="4" rx="1" /><rect x="3" y="15.5" width="18" height="4" rx="1" /></svg><span class="lbl">Estate</span>
           </router-link>
           <div class="nav-children">
@@ -67,7 +73,7 @@ async function logout(): Promise<void> {
             <router-link class="nav-item nav-child" to="/estate/ownership" :title="collapsed ? 'Ownership' : undefined">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.6-3 7.6-7 9-4-1.4-7-4.4-7-9V6z" /></svg><span class="lbl">Ownership</span>
             </router-link>
-            <router-link class="nav-item nav-child" to="/graph" :title="collapsed ? 'Graph' : undefined">
+            <router-link class="nav-item nav-child" :class="{ 'is-active': isGraphView }" active-class="" exact-active-class="" :to="{ path: '/estate', query: { view: 'graph' } }" :title="collapsed ? 'Graph' : undefined">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="7" r="2.2" /><circle cx="18" cy="9" r="2.2" /><circle cx="9" cy="18" r="2.2" /><path d="M8 7.7l8 1M8.6 9 8.4 15.8" /></svg><span class="lbl">Graph</span>
             </router-link>
           </div>
@@ -161,8 +167,10 @@ async function logout(): Promise<void> {
 .nav-item svg { width: 1.1rem; height: 1.1rem; flex: none; }
 .nav-item:hover { background: var(--background--subtle); opacity: 1; }
 /* Exact-active so the parent "Estate" link doesn't stay lit on its lens sub-routes —
-   only the leaf (the current lens) highlights. */
-.nav-item.router-link-exact-active { color: var(--background--brand); background: var(--background--subtle); opacity: 1; }
+   only the leaf (the current lens) highlights. `.is-active` is the hand-computed variant
+   for the Estate-home vs Graph links, which share a route and differ only by ?view. */
+.nav-item.router-link-exact-active,
+.nav-item.is-active { color: var(--background--brand); background: var(--background--subtle); opacity: 1; }
 
 /* Estate's lens shortcuts, grouped + indented beneath it so the relationship reads. */
 .nav-children { display: flex; flex-direction: column; gap: 1px; margin: 1px 0 1px var(--spacing--md); border-left: 1px solid var(--border-color--subtle); padding-left: var(--spacing--3xs); }
@@ -234,7 +242,7 @@ async function logout(): Promise<void> {
 .backdrop { display: none; }
 
 /* ---------- content ---------- */
-.content { flex: 1 1 auto; min-width: 0; padding: var(--spacing--lg) var(--spacing--xl) var(--spacing--3xl); }
+.content { flex: 1 1 auto; min-width: 0; padding: var(--spacing--lg) var(--spacing--lg) var(--spacing--3xl); }
 .bare { display: block; }
 
 /* ---------- mobile: off-canvas drawer ---------- */

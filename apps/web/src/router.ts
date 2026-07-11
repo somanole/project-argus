@@ -17,14 +17,14 @@ const routes: RouteRecordRaw[] = [
       { path: 'ownership', name: 'estate-ownership', component: () => import('./views/GovernanceView.vue') },
     ],
   },
-  { path: '/graph', name: 'graph', component: () => import('./views/GraphView.vue') },
   { path: '/chat', name: 'chat', component: () => import('./views/ChatView.vue') },
   { path: '/connections', name: 'connections', component: () => import('./views/ConnectionsView.vue') },
   { path: '/settings', name: 'settings', component: () => import('./views/SettingsView.vue') },
-  // Back-compat: the old top-level pages now live as Estate lenses.
+  // Back-compat: the old top-level pages now live as Estate lenses / the graph view.
   { path: '/workflows', redirect: '/estate' },
   { path: '/health', redirect: '/estate/health' },
   { path: '/governance', redirect: '/estate/ownership' },
+  { path: '/graph', redirect: { path: '/estate', query: { view: 'graph' } } },
   { path: '/:pathMatch(.*)*', redirect: '/overview' },
 ];
 

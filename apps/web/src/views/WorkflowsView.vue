@@ -462,10 +462,10 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
   text-align: left; font-size: var(--font-size--3xs); font-weight: var(--font-weight--medium);
   text-transform: uppercase; letter-spacing: var(--letter-spacing--wide);
   color: var(--color--text--shade-1); opacity: 0.6;
-  padding: var(--spacing--2xs) var(--spacing--sm); background: var(--background--subtle);
+  padding: var(--spacing--2xs) var(--spacing--xs); background: var(--background--subtle);
   border-bottom: 1px solid var(--border-color--subtle); white-space: nowrap;
 }
-.wf tbody td { padding: var(--spacing--2xs) var(--spacing--sm); border-bottom: 1px solid var(--border-color--subtle); vertical-align: middle; }
+.wf tbody td { padding: var(--spacing--2xs) var(--spacing--xs); border-bottom: 1px solid var(--border-color--subtle); vertical-align: middle; }
 .wf tbody tr:last-child td { border-bottom: 0; }
 .row { cursor: pointer; }
 .row:hover td, .row:focus-visible td { background: var(--background--hover, var(--background--subtle)); }
