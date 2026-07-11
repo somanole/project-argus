@@ -88,12 +88,28 @@ external caller can touch through it — via forward BFS. Surfaced as the graph'
 **Graph views (scale-designed).** The graph endpoint serves **scoped** views so the
 client never renders thousands of raw nodes: a workflow's N-hop **neighborhood**, a
 single **instance**, a **system cluster**, and the **estate** (all instances,
-clustered by instance). Instance is a first-class dimension. Nodes are colored by
+clustered by instance). Instance is a first-class dimension. The **UI scope switcher
+surfaces instance / system / estate** — the neighborhood view was removed from the UI
+(it wasn't pulling its weight); the endpoint still supports it. Nodes are colored by
 **health** (reusing S3's mapping) and badged (AI-agent / broken-ref / archived /
-MCP-exposed). Edges are styled by **type and confidence** — `possible` visibly
-distinct, **cross-instance edges visually prominent**, archived dimmed and hidden by
-default. Clicking a node highlights its blast radius (edge-type-aware) with the
-impact answer + explicit total shown in plain English.
+MCP-exposed). **Node kinds read apart at a glance:** a workflow shows its health color on
+the left accent; a **credential is distinct — a purple (secondary) accent + a key icon**;
+a data table carries a database icon. Edges are styled by **type and confidence** —
+`possible` visibly distinct, **cross-instance edges visually prominent**, archived dimmed
+and hidden by default. Clicking a node highlights its blast radius (edge-type-aware) with the
+impact answer + explicit total shown in plain English; the selected workflow and every
+workflow in its blast radius are **clickable into the shared workflow detail drawer**,
+and the blast-radius list grows with the panel (which scrolls) rather than clipping.
+
+**Estate layout reads as a constellation, not a column.** A fleet is fan-out heavy —
+a few shared utilities/credentials called by many workflows, and many workflows that
+reference nothing. The estate view lays connected dependency clusters out in 2D (a
+deterministic force-directed pass) with the reference-nothing workflows packed into a
+tidy grid beside them, so the graph **fills the canvas** (width *and* height) and every
+node stays a real, legible, clickable size — never a centred hairline. A **zoom / pan
+affordance** (scroll + drag, plus explicit +/−/Fit buttons) lets the user navigate a
+dense estate and always recover the full view. The layout is deterministic: the same
+graph payload always frames identically.
 
 **Independent oracle (dev/demo).** Argus's `confirmed` call/error edges are
 cross-checked against n8n's own `workflow-index` dependency index
@@ -172,15 +188,24 @@ confirmation on exactly the edges where a wrong answer kills H3.
 Each element carries a stable `data-testid`, a fast component test asserting it
 renders with its key text/state, and a `pnpm verify` row.
 - [x] The **/graph view** renders with health-colored workflow nodes.
+- [x] **Workflows and credentials are visually differentiated**: credential nodes carry a
+      purple accent + key icon (and a legend entry), never mistaken for a workflow.
 - [x] **Cross-instance edges are visually prominent** (animated accent) and distinct
       from intra-instance edges.
 - [x] **`possible` edges are visually distinct** from `confirmed` (dashed/muted) and
       never render as part of a highlighted blast radius.
 - [x] **Click-to-highlight blast radius** shows the impact answer with an **explicit
       total** in plain English (`graph-impact-total`).
+- [x] The selected workflow (`graph-panel-open-detail`) and every workflow in the
+      blast-radius list (`graph-affected-list`) are **clickable into the workflow detail
+      drawer**; the list grows with the panel and scrolls (never clipped to a few rows).
 - [x] Archived nodes render **dimmed** and are hidden behind a toggle by default.
-- [x] A **scope switcher** (neighborhood / instance / system / estate) renders.
+- [x] A **scope switcher** (instance / system / estate) renders. (Neighborhood was
+      removed from the UI.)
 - [x] The **MCP-exposure highlight** mode renders and traces reach from exposed nodes.
+- [x] The estate graph **fills the canvas** as a 2D constellation (not a centred
+      hairline), and a **zoom/pan control** (`graph-zoom-controls`: +/−/Fit) renders for
+      navigating a dense estate.
 
 **Responsive (standing rule 10 — both themes AND both widths).** The graph view is
 rendered in a real browser at 375px + desktop, in light AND dark, asserted no

@@ -253,10 +253,11 @@ try {
   // EXPLICIT total. Each has a component test (GraphView.test.ts); presence counterpart.
   const graphUi = [
     'graph-view', 'graph-canvas', 'graph-scope-switcher', 'graph-archived-toggle', 'graph-mcp-toggle',
-    'graph-legend', 'graph-impact-panel', 'graph-impact-statement', 'graph-impact-total',
+    'graph-legend', 'graph-impact-panel', 'graph-impact-statement', 'graph-impact-total', 'graph-zoom-controls',
+    'graph-affected-list', 'graph-panel-open-detail',
   ];
   const gMissing = missing(graphUi);
-  add('Graph UI ships (canvas, scope switcher, archived/MCP toggles, legend, blast-radius panel)', gMissing.length === 0,
+  add('Graph UI ships (canvas, scope switcher, archived/MCP toggles, legend, zoom controls, blast-radius panel + drawer links)', gMissing.length === 0,
     gMissing.length === 0 ? `${graphUi.length} graph UI elements present` : `MISSING: ${gMissing.join(', ')}`);
 
   // S6: governance-overview chrome — the score + five-pillar breakdown, every headline

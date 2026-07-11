@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { VueFlow, Handle, Position, MarkerType, type NodeMouseEvent } from '@vue-flow/core';
+import { computed, shallowRef, markRaw, watch, nextTick } from 'vue';
+import { VueFlow, Handle, Position, MarkerType, type NodeMouseEvent, type VueFlowStore } from '@vue-flow/core';
 import '@vue-flow/core/dist/style.css';
 import type { DependencyGraph, GraphNode, GraphEdge } from '@argus/shared';
 import { instanceColor } from '../lib/instanceColor';
@@ -24,6 +24,17 @@ function healthToken(health: string | null): string {
     case 'healthy': return 'var(--color--success)';
     default: return 'var(--border-color--strong)'; // idle / unknown / resource
   }
+}
+
+/**
+ * The node's left accent tells its kind apart at a glance: a workflow shows its health
+ * color, a credential shows the secondary (purple) accent, a data table stays neutral.
+ * The kind icons (key / database) reinforce it up close.
+ */
+function accentColor(node: GraphNode): string {
+  if (node.kind === 'credential') return 'var(--color--secondary)';
+  if (node.kind !== 'workflow') return 'var(--border-color--strong)';
+  return healthToken(node.health);
 }
 
 const visibleNodes = computed<GraphNode[]>(() =>
@@ -86,6 +97,44 @@ function onNodeClick(evt: NodeMouseEvent): void {
   const gn = (evt.node.data as { node: GraphNode } | undefined)?.node;
   if (gn) emit('select', gn);
 }
+
+// Zoom / pan affordance — a dense estate needs navigating. Scroll-to-zoom and
+// drag-to-pan are native to vue-flow; these buttons make it discoverable and give a
+// one-click "fit everything back in view" escape hatch. We capture the live flow
+// instance from `pane-ready` so the buttons drive the SAME store vue-flow renders with.
+// It MUST be held raw (shallowRef + markRaw): a reactive proxy over the store breaks
+// d3-zoom's internal transform, silently no-op'ing zoomIn/zoomOut.
+const flow = shallowRef<VueFlowStore | null>(null);
+
+/** The exact bounding box of the laid-out graph — computed, not DOM-measured. */
+const graphBounds = computed(() => {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const n of positioned.value) {
+    minX = Math.min(minX, n.x);
+    minY = Math.min(minY, n.y);
+    maxX = Math.max(maxX, n.x + NODE_WIDTH);
+    maxY = Math.max(maxY, n.y + NODE_HEIGHT);
+  }
+  if (!Number.isFinite(minX)) return null;
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+});
+
+// Custom nodes report their DOM size only after first paint, so vue-flow's
+// `fit-view-on-init` races that measurement and sometimes lands at scale 1. We instead
+// frame the graph by its *computed* bounds — deterministic, no measurement race — on
+// first render and whenever a new scope loads.
+function fitAll(): void {
+  const b = graphBounds.value;
+  if (b && flow.value) flow.value.fitBounds(b, { padding: 0.12 });
+}
+function onPaneReady(instance: VueFlowStore): void { flow.value = markRaw(instance); nextTick(fitAll); }
+watch(() => props.graph, () => nextTick(fitAll));
+
+// Zoom instantly (no transition): a timed d3-zoom transition on a dense graph stalls
+// mid-flight and the zoom never lands, so a click would silently do nothing.
+function onZoomIn(): void { flow.value?.zoomIn(); }
+function onZoomOut(): void { flow.value?.zoomOut(); }
+function onFit(): void { fitAll(); }
 </script>
 
 <template>
@@ -95,9 +144,9 @@ function onNodeClick(evt: NodeMouseEvent): void {
       :edges="flowEdges"
       :min-zoom="0.05"
       :max-zoom="2"
-      fit-view-on-init
       :nodes-draggable="false"
       @node-click="onNodeClick"
+      @pane-ready="onPaneReady"
     >
       <template #node-argus="{ data }">
         <div
@@ -117,9 +166,17 @@ function onNodeClick(evt: NodeMouseEvent): void {
           :title="`${data.node.label} · ${data.node.instanceLabel}`"
         >
           <Handle type="target" :position="Position.Left" class="wf-handle" />
-          <span class="wf-accent" :style="{ background: data.node.kind === 'workflow' ? healthToken(data.node.health) : 'var(--border-color--strong)' }" />
+          <span class="wf-accent" :style="{ background: accentColor(data.node) }" />
           <span class="wf-body">
-            <span class="wf-label">{{ data.node.label }}</span>
+            <span class="wf-label">
+              <svg v-if="data.node.kind === 'credential'" class="wf-kind-ic wf-kind-ic--cred" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="7.5" cy="15.5" r="5.5" /><path d="m21 2-9.6 9.6" /><path d="m15.5 7.5 3 3" />
+              </svg>
+              <svg v-else-if="data.node.kind === 'datatable'" class="wf-kind-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14a9 3 0 0 0 18 0V5" /><path d="M3 12a9 3 0 0 0 18 0" />
+              </svg>
+              <span class="wf-label-text">{{ data.node.label }}</span>
+            </span>
             <span class="wf-meta">
               <span class="wf-inst-dot" :style="{ background: instanceColor(data.node.instanceId) }" />
               <span class="wf-inst">{{ data.node.instanceLabel }}</span>
@@ -135,11 +192,18 @@ function onNodeClick(evt: NodeMouseEvent): void {
         </div>
       </template>
     </VueFlow>
+
+    <div class="graph-controls" role="group" aria-label="Zoom and pan" data-testid="graph-zoom-controls">
+      <button type="button" class="gc-btn" aria-label="Zoom in" title="Zoom in" @click="onZoomIn">+</button>
+      <button type="button" class="gc-btn" aria-label="Zoom out" title="Zoom out" @click="onZoomOut">&minus;</button>
+      <button type="button" class="gc-btn gc-btn--fit" aria-label="Fit graph to view" title="Fit to view" @click="onFit">Fit</button>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .graph-canvas {
+  position: relative;
   width: 100%;
   height: 100%;
   /* A definite floor so the canvas never collapses to 0 when an ancestor is height:auto
@@ -148,6 +212,37 @@ function onNodeClick(evt: NodeMouseEvent): void {
   background: var(--background--subtle);
   border-radius: var(--radius--md);
 }
+
+/* Zoom/pan controls — overlaid, token-styled, out of the way bottom-left. */
+.graph-controls {
+  position: absolute;
+  left: var(--spacing--2xs);
+  bottom: var(--spacing--2xs);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing--5xs);
+}
+.gc-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  background: var(--background--surface);
+  color: var(--color--text--shade-1);
+  border-radius: var(--radius--md);
+  box-shadow: var(--shadow);
+  font-size: var(--font-size--sm);
+  font-weight: var(--font-weight--bold);
+  line-height: 1;
+  cursor: pointer;
+}
+.gc-btn:hover { background: var(--background--hover); }
+.gc-btn--fit { font-size: var(--font-size--3xs); font-weight: var(--font-weight--medium); }
 
 /* vue-flow fills the canvas box; structural CSS is imported, colors overridden by tokens. */
 :deep(.vue-flow) { width: 100%; height: 100%; min-height: 420px; }
@@ -180,13 +275,17 @@ function onNodeClick(evt: NodeMouseEvent): void {
 .wf-accent { width: 5px; flex: 0 0 auto; }
 .wf-body { display: flex; flex-direction: column; gap: 2px; padding: var(--spacing--4xs) var(--spacing--2xs); min-width: 0; justify-content: center; }
 .wf-label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing--5xs);
+  min-width: 0;
   font-weight: var(--font-weight--medium);
   color: var(--color--text--shade-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 150px;
 }
+.wf-label-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Kind marker: a key for credentials, a database for data tables — instantly not-a-flow. */
+.wf-kind-ic { width: 13px; height: 13px; flex: 0 0 auto; color: var(--color--text--shade-2, var(--color--text--shade-1)); }
+.wf-kind-ic--cred { color: var(--color--secondary); }
 .wf-meta { display: flex; align-items: center; gap: var(--spacing--4xs); flex-wrap: wrap; }
 .wf-inst-dot { width: 7px; height: 7px; border-radius: var(--radius--full); flex: 0 0 auto; }
 .wf-inst { color: var(--color--text--shade-2, var(--color--text--shade-1)); opacity: 0.75; }

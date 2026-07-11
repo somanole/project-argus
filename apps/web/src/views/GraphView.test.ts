@@ -37,13 +37,15 @@ describe('Graph view chrome — UI-presence (rule 11)', () => {
   beforeEach(() => { setActivePinia(createPinia()); stubFetch(); });
   afterEach(() => { vi.unstubAllGlobals(); });
 
-  it('renders the scope switcher with all four scopes', async () => {
+  it('renders the scope switcher with estate / instance / system', async () => {
     const w = mountView();
     await flushPromises();
     expect(tid(w, 'graph-scope-switcher').exists()).toBe(true);
-    for (const s of ['estate', 'instance', 'system', 'neighborhood']) {
+    for (const s of ['estate', 'instance', 'system']) {
       expect(tid(w, `graph-scope-${s}`).exists()).toBe(true);
     }
+    // Neighborhood was removed from the UI.
+    expect(tid(w, 'graph-scope-neighborhood').exists()).toBe(false);
   });
 
   it('renders the archived + MCP-exposure toggles and the legend', async () => {
@@ -74,5 +76,33 @@ describe('Graph view chrome — UI-presence (rule 11)', () => {
     expect(tid(w, 'graph-impact-panel').exists()).toBe(true);
     expect(tid(w, 'graph-impact-total').text()).toBe('5');
     expect(tid(w, 'graph-impact-statement').text()).toContain('If this fails');
+  });
+
+  it('the selected workflow and each blast-radius workflow are clickable into the detail drawer', async () => {
+    const w = mountView();
+    await flushPromises();
+    const store = useGraphStore();
+    store.selectedNode = {
+      id: 'wf:a:slack', kind: 'workflow', instanceId: 'a', instanceLabel: 'prod', label: 'Send Slack Alert',
+      resourceId: 'slack', workflowId: 'slack', health: 'idle', active: true, archived: false, isAgent: false, brokenRef: false, mcpExposed: false,
+    };
+    store.impact = {
+      mode: 'failure', focusKind: 'workflow', focusInstanceId: 'a', focusId: 'slack', focusLabel: 'Send Slack Alert',
+      edgeTypesTraversed: ['call'],
+      affected: [{ instanceId: 'a', instanceLabel: 'prod', workflowId: 'c1', name: 'Caller One', hops: 1 }],
+      total: 1, possibleExcluded: 0, statement: '1 affected, nothing else.', generatedAt: '2026-07-07T00:00:00.000Z',
+    };
+    store.impactState = 'ok';
+    await nextTick();
+    // The selected workflow's name is a button that opens its details.
+    const title = tid(w, 'graph-panel-open-detail');
+    expect(title.exists()).toBe(true);
+    expect(title.element.tagName).toBe('BUTTON');
+    // Every workflow in the blast radius is a clickable row.
+    const list = tid(w, 'graph-affected-list');
+    expect(list.exists()).toBe(true);
+    const rows = list.findAll('button.affected-item');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.text()).toContain('Caller One');
   });
 });
