@@ -6,11 +6,20 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useSettingsStore } from '../stores/settings';
+import { useThemeStore, type ThemePreference } from '../stores/theme';
 import { relativeTime } from '../lib/time';
 import { checkBaseUrl, type LlmProvider } from '@argus/shared';
 
 const store = useSettingsStore();
 const { config, progress, state, error } = storeToRefs(store);
+
+// Appearance: light / dark / match-system (moved here from the sidebar).
+const theme = useThemeStore();
+const themeOptions: { value: ThemePreference; label: string }[] = [
+  { value: 'system', label: 'Auto' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+];
 
 // `model: null` ⇒ the model is customer-chosen, not pinned by us (DECISION #30).
 const PROVIDERS: { value: LlmProvider; label: string; model: string | null; blurb: string }[] = [
@@ -157,15 +166,39 @@ async function save(): Promise<void> {
   <section class="settings" data-testid="settings-view">
     <header>
       <h1>Settings</h1>
-      <p class="muted sub">Enrichment provider. Only the workflow metadata allow-list is ever sent — never secrets or URLs.</p>
+      <p class="muted sub">Appearance and the AI enrichment provider.</p>
     </header>
+
+    <!-- Appearance -->
+    <div class="card">
+      <div class="switch-row">
+        <div class="switch-label">
+          <h2>Appearance</h2>
+          <p class="muted">Choose a light or dark theme, or match your system.</p>
+        </div>
+        <div class="theme-seg" role="group" aria-label="Theme" data-testid="theme-control">
+          <button
+            v-for="opt in themeOptions"
+            :key="opt.value"
+            type="button"
+            class="theme-seg-btn"
+            :class="{ 'is-active': theme.preference === opt.value }"
+            :aria-pressed="theme.preference === opt.value"
+            :data-testid="`theme-${opt.value}`"
+            @click="theme.apply(opt.value)"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+      </div>
+    </div>
 
     <div class="card">
       <!-- Master switch (the kill switch) -->
       <div class="switch-row">
         <div class="switch-label">
           <h2>Enrichment</h2>
-          <p class="muted">When on, workflows get an AI summary, category, and criticality. When off, Argus runs fully deterministic — no summaries, nothing sent.</p>
+          <p class="muted">When on, workflows get an AI summary, category, and criticality. When off, Argus runs fully deterministic — no summaries, nothing sent. Only the workflow metadata allow-list is ever sent — never secrets or URLs.</p>
         </div>
         <button
           type="button"
@@ -360,6 +393,17 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 .switch--on .knob { background: var(--color--neutral-white); opacity: 1; }
 .switch--locked { opacity: 0.6; cursor: not-allowed; }
 .switch-text { line-height: 1; }
+
+/* Appearance: segmented Auto / Light / Dark control (matches the app's theme control). */
+.theme-seg { display: inline-flex; align-self: flex-start; border: 1px solid var(--border-color); border-radius: var(--radius--md); overflow: hidden; }
+.theme-seg-btn {
+  appearance: none; border: 0; background: var(--background--surface); color: var(--color--text--shade-1);
+  font: inherit; font-size: var(--font-size--2xs); font-weight: var(--font-weight--medium);
+  padding: var(--spacing--4xs) var(--spacing--sm); cursor: pointer;
+}
+.theme-seg-btn + .theme-seg-btn { border-left: 1px solid var(--border-color); }
+.theme-seg-btn:hover:not(.is-active) { background: var(--background--subtle); }
+.theme-seg-btn.is-active { background: var(--background--brand); color: var(--color--neutral-white); }
 
 /* Status banner */
 .status { margin: 0; font-size: var(--font-size--sm); display: flex; align-items: center; gap: var(--spacing--4xs); padding: var(--spacing--2xs) var(--spacing--sm); border-radius: var(--radius--md); border: 1px solid var(--border-color--subtle); }

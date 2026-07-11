@@ -2,18 +2,10 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from './stores/auth';
-import { useThemeStore, type ThemePreference } from './stores/theme';
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
-const theme = useThemeStore();
-
-const themeOptions: { value: ThemePreference; label: string }[] = [
-  { value: 'system', label: 'Auto' },
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-];
 
 // The chrome (sidebar) is only shown once signed in; the login page is bare.
 const showShell = computed(() => auth.actor !== null && route.name !== 'login');
@@ -94,19 +86,6 @@ async function logout(): Promise<void> {
         </nav>
 
         <div class="side-foot">
-          <div class="theme-control" role="group" aria-label="Theme">
-            <button
-              v-for="opt in themeOptions"
-              :key="opt.value"
-              type="button"
-              class="theme-button"
-              :class="{ 'is-active': theme.preference === opt.value }"
-              :aria-pressed="theme.preference === opt.value"
-              @click="theme.apply(opt.value)"
-            >
-              {{ opt.label }}
-            </button>
-          </div>
           <div v-if="auth.actor" class="who">
             <span class="avatar" aria-hidden="true">{{ initial }}</span>
             <span class="who-meta lbl">
@@ -187,14 +166,6 @@ async function logout(): Promise<void> {
 }
 
 .side-foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--spacing--2xs); padding-top: var(--spacing--sm); }
-.theme-control { display: inline-flex; border: 1px solid var(--border-color); border-radius: var(--radius--md); overflow: hidden; }
-.theme-button {
-  appearance: none; border: 0; flex: 1; background: var(--background--surface); color: var(--color--text--shade-1);
-  font: inherit; font-size: var(--font-size--3xs); padding: var(--spacing--4xs) var(--spacing--2xs); cursor: pointer;
-}
-.theme-button + .theme-button { border-left: 1px solid var(--border-color); }
-.theme-button:hover { background: var(--background--subtle); }
-.theme-button.is-active { background: var(--background--brand); color: var(--color--neutral-white); }
 
 .who { display: flex; align-items: center; gap: var(--spacing--2xs); padding: var(--spacing--3xs); }
 .avatar {
@@ -229,7 +200,6 @@ async function logout(): Promise<void> {
 /* collapsed rail — icons only */
 .sidebar.collapsed .lbl,
 .sidebar.collapsed .nav-sec,
-.sidebar.collapsed .theme-control,
 .sidebar.collapsed .who-meta,
 .sidebar.collapsed .signout { display: none; }
 .sidebar.collapsed .nav-item,
@@ -269,7 +239,7 @@ async function logout(): Promise<void> {
   .sidebar.open { transform: translateX(0); }
   .sidebar.collapsed { width: 16rem; }               /* collapse is desktop-only */
   .sidebar.collapsed .lbl, .sidebar.collapsed .nav-sec,
-  .sidebar.collapsed .theme-control, .sidebar.collapsed .who-meta,
+  .sidebar.collapsed .who-meta,
   .sidebar.collapsed .signout { display: revert; }
   .icon-btn.side-close { display: inline-grid; }
   .collapse-btn { display: none; }
