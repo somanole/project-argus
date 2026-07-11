@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useWorkflowsStore } from '../stores/workflows';
+import { useWorkflowsStore, type StateFilter } from '../stores/workflows';
 import { useConnectionsStore } from '../stores/connections';
 import type { WorkflowListItem } from '@argus/shared';
 import StateBadge from '../components/StateBadge.vue';
@@ -30,9 +30,46 @@ let poll: ReturnType<typeof setInterval> | undefined;
 // The selected workflow for the detail drawer.
 const selected = ref<WorkflowListItem | null>(null);
 
-// On narrow widths the facet chips collapse behind a "Filters" control (desktop
-// always shows them — the CSS only honours this below the mobile breakpoint).
-const filtersOpen = ref(false);
+// Instance is the primary axis and stays out front (the scope control); every other
+// facet lives in the "Filters" panel, and whatever's applied surfaces as removable
+// tokens. The panel opens on demand and closes on an outside click.
+const panelOpen = ref(false);
+const sysSearch = ref('');
+const filterRoot = ref<HTMLElement | null>(null);
+function onDocClick(e: MouseEvent): void {
+  if (panelOpen.value && filterRoot.value && !filterRoot.value.contains(e.target as Node)) panelOpen.value = false;
+}
+
+// Count of applied facets BEHIND the panel (instance + search live out front, so
+// they don't count toward the panel badge).
+const panelFilterCount = computed(
+  () =>
+    systems.value.length + triggers.value.length + criticality.value.length + health.value.length +
+    (mcpOnly.value ? 1 : 0) + (brokenOnly.value ? 1 : 0) + (stateFilter.value !== 'all' ? 1 : 0),
+);
+
+// The System facet is long (25+) — a search field narrows it in place.
+const filteredSystems = computed(() => {
+  const needle = sysSearch.value.trim().toLowerCase();
+  return needle ? facets.value.systems.filter((s) => s.value.toLowerCase().includes(needle)) : facets.value.systems;
+});
+
+// The "here's what's applied" strip: one removable token per active facet (instance
+// is shown in the scope control and search in its box, so neither becomes a token).
+const STATE_LABEL: Record<StateFilter, string> = { all: '', active: 'Active', archived: 'Archived' };
+const joinVals = (vals: string[]): string =>
+  vals.length <= 2 ? vals.join(', ') : `${vals.slice(0, 2).join(', ')} +${vals.length - 2}`;
+const appliedTokens = computed(() => {
+  const t: { key: string; label: string; text: string; remove: () => void }[] = [];
+  if (criticality.value.length) t.push({ key: 'criticality', label: 'Criticality', text: joinVals(criticality.value), remove: () => store.clearCriticality() });
+  if (health.value.length) t.push({ key: 'health', label: 'Health', text: joinVals(health.value), remove: () => store.clearHealth() });
+  if (systems.value.length) t.push({ key: 'system', label: 'System', text: joinVals(systems.value), remove: () => store.clearSystems() });
+  if (triggers.value.length) t.push({ key: 'trigger', label: 'Trigger', text: joinVals(triggers.value.map((v) => triggerLabels.value[v] ?? v)), remove: () => store.clearTriggers() });
+  if (stateFilter.value !== 'all') t.push({ key: 'state', label: 'Status', text: STATE_LABEL[stateFilter.value], remove: () => store.setStateFilter('all') });
+  if (mcpOnly.value) t.push({ key: 'mcp', label: '', text: 'MCP-exposed', remove: () => store.setMcpOnly(false) });
+  if (brokenOnly.value) t.push({ key: 'broken', label: '', text: 'Broken refs', remove: () => store.setBrokenOnly(false) });
+  return t;
+});
 
 // Debounced search box (server-side query on each change).
 const qInput = ref('');
@@ -69,11 +106,13 @@ const enrichmentLabel = computed(() => {
 });
 
 onMounted(async () => {
+  document.addEventListener('click', onDocClick);
   await refreshAll();
   poll = setInterval(() => void refreshAll(), 15_000);
   clock = setInterval(() => (now.value = Date.now()), 1_000);
 });
 onUnmounted(() => {
+  document.removeEventListener('click', onDocClick);
   if (poll) clearInterval(poll);
   if (clock) clearInterval(clock);
 });
@@ -133,92 +172,121 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <!-- Filter bar -->
-    <div class="filterbar">
-      <input v-model="qInput" class="input search" type="search" placeholder="Search by name…" aria-label="Search workflows by name" data-testid="filter-search">
-      <div class="seg" role="group" aria-label="State" data-testid="filter-state">
-        <button :class="{ on: stateFilter === 'all' }" @click="store.setStateFilter('all')">All</button>
-        <button :class="{ on: stateFilter === 'active' }" @click="store.setStateFilter('active')">Active</button>
-        <button :class="{ on: stateFilter === 'archived' }" @click="store.setStateFilter('archived')">Archived</button>
-      </div>
-      <button class="chip" :class="{ 'chip--active': mcpOnly }" data-testid="filter-mcp" @click="store.setMcpOnly(!mcpOnly)">MCP-exposed</button>
-      <button class="chip" :class="{ 'chip--active': brokenOnly }" data-testid="filter-broken" @click="store.setBrokenOnly(!brokenOnly)">Broken refs</button>
-      <button class="btn btn--secondary btn--sm filters-toggle" :aria-expanded="filtersOpen" @click="filtersOpen = !filtersOpen">
-        Filters<span v-if="activeFilterCount"> ({{ activeFilterCount }})</span> {{ filtersOpen ? '▲' : '▾' }}
-      </button>
-    </div>
+    <!-- Filter toolbar: instance scope stays out front; every other facet lives in
+         the Filters panel and surfaces as a removable token below. -->
+    <div ref="filterRoot" class="toolbar">
+      <div class="bar">
+        <!-- Scope: which instance (the primary axis). -->
+        <div class="seg scope" role="group" aria-label="Filter by instance" data-testid="filter-instance">
+          <button :class="{ on: instanceId === 'all' }" @click="store.setInstance('all')">All estate</button>
+          <button
+            v-for="i in facets.instances"
+            :key="i.id"
+            :class="{ on: instanceId === i.id }"
+            @click="store.setInstance(i.id)"
+          >
+            <span class="dot" :style="{ background: instanceColor(i.id) }" />{{ i.label }} <span class="count">{{ i.count }}</span>
+          </button>
+        </div>
 
-    <div class="facets" :class="{ 'facets--collapsed': !filtersOpen }">
-      <!-- Instance facet -->
-      <div class="facet" role="group" aria-label="Filter by instance" data-testid="filter-instance">
-        <span class="facet-label muted">Instance</span>
-        <button class="chip" :class="{ 'chip--active': instanceId === 'all' }" @click="store.setInstance('all')">All estate</button>
-        <button
-          v-for="i in facets.instances"
-          :key="i.id"
-          class="chip"
-          :class="{ 'chip--active': instanceId === i.id }"
-          @click="store.setInstance(i.id)"
-        >
-          <span class="dot" :style="{ background: instanceColor(i.id) }" />
-          {{ i.label }} <span class="count">{{ i.count }}</span>
-        </button>
+        <input v-model="qInput" class="input search" type="search" placeholder="Search by name…" aria-label="Search workflows by name" data-testid="filter-search">
+
+        <!-- Filters panel: everything except instance + search. -->
+        <div class="filters-anchor">
+          <button
+            class="btn btn--secondary btn--sm filters-btn"
+            :class="{ 'is-open': panelOpen }"
+            :aria-expanded="panelOpen"
+            @click.stop="panelOpen = !panelOpen"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="fico" aria-hidden="true"><path d="M3 6h18M6 12h12M10 18h4" /></svg>
+            Filters
+            <span v-if="panelFilterCount" class="fcount">{{ panelFilterCount }}</span>
+            <span class="caret" aria-hidden="true">{{ panelOpen ? '▲' : '▾' }}</span>
+          </button>
+
+          <div v-show="panelOpen" class="filters-panel" @click.stop>
+            <div class="panel-scroll">
+              <div class="facet-sec">
+                <span class="facet-h">Status</span>
+                <div class="seg seg--sm" role="group" aria-label="Filter by state" data-testid="filter-state">
+                  <button :class="{ on: stateFilter === 'all' }" @click="store.setStateFilter('all')">All</button>
+                  <button :class="{ on: stateFilter === 'active' }" @click="store.setStateFilter('active')">Active</button>
+                  <button :class="{ on: stateFilter === 'archived' }" @click="store.setStateFilter('archived')">Archived</button>
+                </div>
+              </div>
+
+              <div class="facet-sec" role="group" aria-label="Filter by external system" data-testid="filter-system">
+                <span class="facet-h">System</span>
+                <input
+                  v-if="facets.systems.length > 8"
+                  v-model="sysSearch"
+                  class="input input--sm sys-search"
+                  type="search"
+                  :placeholder="`Search ${facets.systems.length} systems…`"
+                  aria-label="Search systems"
+                >
+                <div class="checklist">
+                  <button
+                    v-for="s in filteredSystems"
+                    :key="s.value"
+                    class="opt"
+                    :class="{ sel: systems.includes(s.value) }"
+                    @click="store.toggleSystem(s.value)"
+                  >
+                    <span class="box" /><span class="opt-t">{{ s.value }}</span><span class="opt-c">{{ s.count }}</span>
+                  </button>
+                  <p v-if="filteredSystems.length === 0" class="muted small pad-s">No systems match.</p>
+                </div>
+              </div>
+
+              <div class="facet-sec" role="group" aria-label="Filter by criticality" data-testid="filter-criticality">
+                <span class="facet-h">Criticality</span>
+                <div class="checklist wrap">
+                  <button v-for="c in CRITICALITY_LEVELS" :key="c" class="opt opt--chip" :class="{ sel: criticality.includes(c) }" @click="store.toggleCriticality(c)"><span class="box" />{{ c }}</button>
+                </div>
+              </div>
+
+              <div class="facet-sec" role="group" aria-label="Filter by health" data-testid="filter-health">
+                <span class="facet-h">Health</span>
+                <div class="checklist wrap">
+                  <button v-for="h in HEALTH_LEVELS" :key="h" class="opt opt--chip" :class="{ sel: health.includes(h) }" @click="store.toggleHealth(h)"><span class="box" />{{ h }}</button>
+                </div>
+              </div>
+
+              <div class="facet-sec" role="group" aria-label="Filter by trigger" data-testid="filter-trigger">
+                <span class="facet-h">Trigger</span>
+                <div class="checklist">
+                  <button v-for="t in facets.triggers" :key="t.value" class="opt" :class="{ sel: triggers.includes(t.value) }" @click="store.toggleTrigger(t.value)"><span class="box" /><span class="opt-t">{{ t.label }}</span><span class="opt-c">{{ t.count }}</span></button>
+                </div>
+              </div>
+
+              <div class="facet-sec">
+                <span class="facet-h">Flags</span>
+                <div class="checklist wrap">
+                  <button class="opt opt--chip" :class="{ sel: mcpOnly }" data-testid="filter-mcp" @click="store.setMcpOnly(!mcpOnly)"><span class="box" />MCP-exposed</button>
+                  <button class="opt opt--chip" :class="{ sel: brokenOnly }" data-testid="filter-broken" @click="store.setBrokenOnly(!brokenOnly)"><span class="box" />Broken refs</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel-foot">
+              <button class="linkish" :disabled="activeFilterCount === 0" @click="store.clearFilters()">Clear all</button>
+              <button class="btn btn--primary btn--sm" @click="panelOpen = false">Done</button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <!-- System facet -->
-      <div v-if="facets.systems.length" class="facet" role="group" aria-label="Filter by external system" data-testid="filter-system">
-        <span class="facet-label muted">System</span>
-        <button
-          v-for="s in facets.systems"
-          :key="s.value"
-          class="chip"
-          :class="{ 'chip--active': systems.includes(s.value) }"
-          @click="store.toggleSystem(s.value)"
-        >
-          {{ s.value }} <span class="count">{{ s.count }}</span>
-        </button>
-      </div>
-
-      <!-- Criticality facet (enrichment) -->
-      <div class="facet" role="group" aria-label="Filter by criticality" data-testid="filter-criticality">
-        <span class="facet-label muted">Criticality</span>
-        <button
-          v-for="c in CRITICALITY_LEVELS"
-          :key="c"
-          class="chip"
-          :class="{ 'chip--active': criticality.includes(c) }"
-          @click="store.toggleCriticality(c)"
-        >
-          {{ c }}
-        </button>
-      </div>
-
-      <!-- Health facet (S3) -->
-      <div class="facet" role="group" aria-label="Filter by health" data-testid="filter-health">
-        <span class="facet-label muted">Health</span>
-        <button
-          v-for="h in HEALTH_LEVELS"
-          :key="h"
-          class="chip"
-          :class="{ 'chip--active': health.includes(h) }"
-          @click="store.toggleHealth(h)"
-        >
-          {{ h }}
-        </button>
-      </div>
-
-      <!-- Trigger facet -->
-      <div v-if="facets.triggers.length" class="facet" role="group" aria-label="Filter by trigger" data-testid="filter-trigger">
-        <span class="facet-label muted">Trigger</span>
-        <button
-          v-for="t in facets.triggers"
-          :key="t.value"
-          class="chip"
-          :class="{ 'chip--active': triggers.includes(t.value) }"
-          @click="store.toggleTrigger(t.value)"
-        >
-          {{ t.label }} <span class="count">{{ t.count }}</span>
-        </button>
+      <!-- Applied-filter tokens: a calm "here's what's applied", each removable. -->
+      <div v-if="appliedTokens.length" class="applied" data-testid="applied-filters">
+        <span class="applied-lbl muted">Filtered:</span>
+        <span v-for="tok in appliedTokens" :key="tok.key" class="token">
+          <span v-if="tok.label" class="token-dim">{{ tok.label }}</span>
+          <span class="token-val">{{ tok.text }}</span>
+          <button class="token-x" :aria-label="`Remove ${tok.label || tok.text} filter`" @click="tok.remove()">✕</button>
+        </span>
+        <button class="linkish clear-tokens" @click="store.clearFilters()">Clear all</button>
       </div>
     </div>
 
@@ -303,29 +371,91 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
   font: inherit; font-size: var(--font-size--sm); cursor: pointer; padding: 0;
 }
 
-.filterbar { display: flex; gap: var(--spacing--2xs); flex-wrap: wrap; align-items: center; }
-.search { max-width: 18rem; }
-.seg { display: inline-flex; border: 1px solid var(--border-color); border-radius: var(--radius--md); overflow: hidden; }
+.search { max-width: 18rem; flex: 1 1 12rem; }
+
+/* Filter toolbar: scope + search + Filters button on one row, applied tokens below. */
+.toolbar { display: flex; flex-direction: column; gap: var(--spacing--2xs); }
+.bar { display: flex; gap: var(--spacing--2xs); flex-wrap: wrap; align-items: center; }
+
+/* Segmented control — the instance scope and the panel's Status control. */
+.seg { display: inline-flex; border: 1px solid var(--border-color); border-radius: var(--radius--md); overflow: hidden; flex-wrap: wrap; }
 .seg button {
   appearance: none; border: 0; background: var(--background--surface); color: var(--color--text--shade-1);
   font: inherit; font-size: var(--font-size--2xs); font-weight: var(--font-weight--medium);
   padding: var(--spacing--4xs) var(--spacing--sm); cursor: pointer; border-right: 1px solid var(--border-color);
+  display: inline-flex; align-items: center; gap: var(--spacing--4xs); white-space: nowrap;
 }
 .seg button:last-child { border-right: 0; }
+.seg button:hover:not(.on) { background: var(--background--subtle); }
 .seg button.on { background: var(--background--brand); color: var(--color--neutral-white); }
+.seg .count { opacity: 0.7; font-variant-numeric: tabular-nums; }
+.seg .dot { width: 0.5rem; height: 0.5rem; border-radius: var(--radius--full); flex: none; }
+.seg--sm button { font-size: var(--font-size--3xs); padding: var(--spacing--5xs) var(--spacing--2xs); }
 
-.facet { display: flex; gap: var(--spacing--2xs); flex-wrap: wrap; align-items: center; }
-.facet-label { font-size: var(--font-size--3xs); text-transform: uppercase; letter-spacing: var(--letter-spacing--wide); min-width: 3.5rem; }
-.chip {
-  appearance: none; display: inline-flex; align-items: center; gap: var(--spacing--4xs);
-  border: 1px solid var(--border-color); border-radius: var(--radius--full);
-  background: var(--background--surface); color: var(--color--text--shade-1);
-  font: inherit; font-size: var(--font-size--2xs); font-weight: var(--font-weight--medium);
-  padding: var(--spacing--4xs) var(--spacing--sm); cursor: pointer;
+/* Filters button + popover panel. */
+.filters-anchor { position: relative; }
+.filters-btn { display: inline-flex; align-items: center; gap: var(--spacing--4xs); }
+.filters-btn.is-open { border-color: var(--border-color--strong); background: var(--background--subtle); }
+.fico { width: 0.9rem; height: 0.9rem; }
+.fcount {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 1.1rem; height: 1.1rem; padding: 0 var(--spacing--5xs);
+  border-radius: var(--radius--full); background: var(--background--brand); color: var(--color--neutral-white);
+  font-size: var(--font-size--3xs); font-weight: var(--font-weight--bold); font-variant-numeric: tabular-nums;
 }
-.chip:hover { background: var(--background--subtle); }
-.chip--active { background: var(--background--brand); color: var(--color--neutral-white); border-color: var(--background--brand); }
-.chip .count { opacity: 0.7; font-variant-numeric: tabular-nums; }
+.caret { font-size: 0.65em; opacity: 0.7; }
+
+.filters-panel {
+  position: absolute; z-index: 20; top: calc(100% + var(--spacing--4xs)); right: 0;
+  width: 22rem; max-width: calc(100vw - 2rem);
+  background: var(--background--surface); border: 1px solid var(--border-color);
+  border-radius: var(--radius--lg); box-shadow: var(--shadow); display: flex; flex-direction: column;
+}
+.panel-scroll { max-height: min(60vh, 30rem); overflow-y: auto; padding: var(--spacing--2xs); display: flex; flex-direction: column; gap: var(--spacing--2xs); }
+.facet-sec { display: flex; flex-direction: column; gap: var(--spacing--4xs); border-top: 1px solid var(--border-color--subtle); padding-top: var(--spacing--2xs); }
+.facet-sec:first-child { border-top: 0; padding-top: 0; }
+.facet-h { font-size: var(--font-size--3xs); font-weight: var(--font-weight--bold); text-transform: uppercase; letter-spacing: var(--letter-spacing--wide); color: var(--color--text--shade-1); opacity: 0.65; }
+.sys-search { margin: var(--spacing--5xs) 0; }
+.input--sm { padding: var(--spacing--5xs) var(--spacing--xs); font-size: var(--font-size--2xs); }
+
+.checklist { display: flex; flex-direction: column; gap: 1px; }
+.checklist.wrap { flex-direction: row; flex-wrap: wrap; gap: var(--spacing--4xs); }
+.opt {
+  appearance: none; border: 0; background: none; font: inherit; color: var(--color--text--shade-1); cursor: pointer; text-align: left;
+  display: flex; align-items: center; gap: var(--spacing--2xs); padding: var(--spacing--4xs) var(--spacing--3xs);
+  border-radius: var(--radius--2xs); font-size: var(--font-size--2xs);
+}
+.opt:hover { background: var(--background--hover, var(--background--subtle)); }
+.opt .box {
+  width: 0.95rem; height: 0.95rem; flex: none; border: 1.5px solid var(--border-color--strong, var(--border-color));
+  border-radius: var(--radius--2xs); display: grid; place-items: center;
+}
+.opt.sel .box { background: var(--background--brand); border-color: var(--background--brand); }
+.opt.sel .box::after { content: '✓'; color: var(--color--neutral-white); font-size: 0.6rem; font-weight: var(--font-weight--bold); line-height: 1; }
+.opt-t { flex: 1; min-width: 0; }
+.opt-c { color: var(--color--text--shade-1); opacity: 0.5; font-variant-numeric: tabular-nums; font-size: var(--font-size--3xs); }
+.opt--chip { border: 1px solid var(--border-color); border-radius: var(--radius--full); padding: var(--spacing--4xs) var(--spacing--2xs); }
+.opt--chip.sel { background: var(--background--brand); border-color: var(--background--brand); color: var(--color--neutral-white); }
+.opt--chip.sel .box { border-color: var(--color--neutral-white); }
+.opt--chip .box { width: 0.8rem; height: 0.8rem; }
+.pad-s { padding: var(--spacing--3xs); margin: 0; }
+.small { font-size: var(--font-size--2xs); }
+
+.panel-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing--2xs); padding: var(--spacing--2xs); border-top: 1px solid var(--border-color--subtle); }
+.panel-foot .linkish:disabled { opacity: 0.4; cursor: default; }
+
+/* Applied-filter tokens — the calm "here's what's applied" strip. */
+.applied { display: flex; align-items: center; gap: var(--spacing--4xs); flex-wrap: wrap; }
+.applied-lbl { font-size: var(--font-size--3xs); text-transform: uppercase; letter-spacing: var(--letter-spacing--wide); font-weight: var(--font-weight--medium); }
+.token {
+  display: inline-flex; align-items: center; gap: var(--spacing--4xs);
+  border: 1px solid var(--border-color); background: var(--background--subtle); border-radius: var(--radius--full);
+  padding: var(--spacing--5xs) var(--spacing--2xs); font-size: var(--font-size--2xs);
+}
+.token-dim { color: var(--color--text--shade-1); opacity: 0.6; }
+.token-val { font-weight: var(--font-weight--medium); }
+.token-x { appearance: none; border: 0; background: none; color: var(--color--text--shade-1); opacity: 0.55; cursor: pointer; font-size: var(--font-size--3xs); padding: 0 0 0 var(--spacing--5xs); line-height: 1; }
+.token-x:hover { opacity: 1; color: var(--color--danger); }
+.clear-tokens { font-size: var(--font-size--2xs); }
 
 .table-wrap { border: 1px solid var(--border-color--subtle); border-radius: var(--radius--lg); overflow-x: auto; }
 .wf { width: 100%; border-collapse: collapse; font-size: var(--font-size--sm); }
@@ -352,17 +482,17 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 .err { color: var(--color--danger); }
 a { color: var(--color--primary, var(--background--brand)); }
 
-/* The faceted filter groups (instance / system / criticality / health / trigger)
-   collapse behind the "Filters" toggle at EVERY width — the 25-chip system wall was
-   a tall header to scan past on desktop too. The search box + quick pills stay always
-   visible; the toggle shows the active-filter count so applied filters aren't hidden. */
-.facets { display: flex; flex-direction: column; gap: var(--spacing--sm); }
-.facets--collapsed { display: none; }
-.filters-toggle { display: inline-flex; }
-
-/* Mobile (≤720px): the catalog table also reflows to stacked cards — never a
-   horizontal page scroll, never a clipped field (rule 10). */
+/* Mobile (≤720px): the Filters panel becomes a bottom sheet (never overflowing the
+   viewport), and the catalog table reflows to stacked cards — no horizontal page
+   scroll, no clipped field (rule 10). */
 @media (max-width: 720px) {
+  .search { flex-basis: 100%; max-width: none; }
+  .filters-panel {
+    position: fixed; inset: auto 0 0 0; top: auto; width: auto; max-width: none;
+    border-radius: var(--radius--lg) var(--radius--lg) 0 0;
+  }
+  .panel-scroll { max-height: 60vh; }
+
   .table-wrap { border: 0; overflow: visible; }
   .wf, .wf tbody, .wf tr, .wf td { display: block; width: 100%; }
   .wf thead { display: none; }

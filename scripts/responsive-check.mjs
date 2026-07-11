@@ -203,7 +203,7 @@ async function serveDist() {
 const VIEWS = [
   { name: 'Login', path: '/login', mock: mockApiUnauth, waitFor: 'form.panel', key: 'form.panel' },
   { name: 'Overview', path: '/overview', mock: mockApi, waitFor: '[data-testid="overview-score"]', key: '[data-testid="overview-score-breakdown"]' },
-  { name: 'Catalog list', path: '/workflows', mock: mockApi, waitFor: '.wf tbody tr', key: '.filterbar' },
+  { name: 'Catalog list', path: '/workflows', mock: mockApi, waitFor: '.wf tbody tr', key: '.toolbar' },
   { name: 'Health view', path: '/health', mock: mockApi, waitFor: '[data-testid="health-failing-list"]', key: '[data-testid="health-summary"]' },
   // Wait on the view root (instant) rather than the heavy async vue-flow canvas — the
   // rule-10 gate here is "no horizontal overflow at 375px"; the canvas rendering is

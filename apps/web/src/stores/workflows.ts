@@ -133,6 +133,11 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     stateFilter.value = v;
     void refresh();
   };
+  // Clear a single facet in one shot — backs the removable "applied filter" tokens.
+  const clearSystems = () => { systems.value = []; void refresh(); };
+  const clearTriggers = () => { triggers.value = []; void refresh(); };
+  const clearCriticality = () => { criticality.value = []; void refresh(); };
+  const clearHealth = () => { health.value = []; void refresh(); };
   const setQuery = (v: string) => {
     q.value = v;
     void refresh();
@@ -182,5 +187,9 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     setStateFilter,
     setQuery,
     clearFilters,
+    clearSystems,
+    clearTriggers,
+    clearCriticality,
+    clearHealth,
   };
 });
