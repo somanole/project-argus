@@ -264,7 +264,7 @@ onUnmounted(() => { if (clock) clearInterval(clock); });
       <section class="card fig" data-testid="overview-changelog">
         <div class="fig-head static">
           <span class="fig-title">Recent changes</span>
-          <router-link class="muted small" to="/estate/ownership">Full audit timeline →</router-link>
+          <router-link class="muted small" to="/activity">Full audit timeline →</router-link>
         </div>
         <p class="fig-why muted small">The latest governance actions Argus has recorded — append-only, tamper-evident.</p>
         <ul class="changelog">

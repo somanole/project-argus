@@ -18,6 +18,7 @@ const routes: RouteRecordRaw[] = [
     ],
   },
   { path: '/chat', name: 'chat', component: () => import('./views/ChatView.vue') },
+  { path: '/activity', name: 'activity', component: () => import('./views/ActivityView.vue') },
   { path: '/connections', name: 'connections', component: () => import('./views/ConnectionsView.vue') },
   { path: '/settings', name: 'settings', component: () => import('./views/SettingsView.vue') },
   // Back-compat: the old top-level pages now live as Estate lenses / the graph view.

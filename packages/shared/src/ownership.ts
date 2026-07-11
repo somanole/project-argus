@@ -170,11 +170,16 @@ export const auditTimelineEntrySchema = z.object({
 });
 export type AuditTimelineEntry = z.infer<typeof auditTimelineEntrySchema>;
 
-/** The filterable audit-timeline payload (Argus self-audit only in S4). */
+/** The filterable, paginated audit-timeline payload (Argus self-audit only in S4). */
 export const auditTimelineResponseSchema = z.object({
   entries: z.array(auditTimelineEntrySchema),
   /** Distinct actions present, for the filter dropdown. */
   actions: z.array(z.string()),
+  /** Total rows matching the current filters (across all pages) — the pagination denominator. */
+  total: z.number().int().nonnegative(),
+  /** Page size and the row offset this page started at (echoed back so the client can page). */
+  limit: z.number().int().positive(),
+  offset: z.number().int().nonnegative(),
   generatedAt: z.string().datetime(),
 });
 export type AuditTimelineResponse = z.infer<typeof auditTimelineResponseSchema>;

@@ -116,6 +116,10 @@ describe('Governance overview — UI-presence (rule 11)', () => {
     expect(tid('overview-unowned').text()).toContain('1 critical');
     // Incident card frames confirmed-owner incidents (inferred owners don't count).
     expect(tid('overview-incidents').text()).toContain('confirmed owner');
+
+    // "Full audit timeline →" points at the Activity view (not the old ownership page).
+    const auditLink = tid('overview-changelog').findComponent(RouterLinkStub);
+    expect(auditLink.props('to')).toBe('/activity');
     w.unmount();
   });
 

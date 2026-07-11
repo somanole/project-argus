@@ -4,8 +4,9 @@ import { createPinia, setActivePinia } from 'pinia';
 import GovernanceView from './GovernanceView.vue';
 
 /**
- * Rule-11 UI-presence for the S4 Governance view: the governance-gaps panel (with each
- * gap group) and the filterable + exportable audit timeline all render.
+ * Rule-11 UI-presence for the S4 Governance view: the governance-gaps panel with each
+ * gap group renders. (The audit timeline moved to its own Activity view — see
+ * ActivityView.test.ts.)
  */
 const gap = (over: Record<string, unknown>) => ({
   instanceId: 'a', instanceLabel: 'prod', workflowId: 'w1', name: 'Daily Stripe Reconciliation',
@@ -46,7 +47,7 @@ describe('Governance view — UI-presence (rule 11)', () => {
   beforeEach(() => setActivePinia(createPinia()));
   afterEach(() => vi.unstubAllGlobals());
 
-  it('renders the view, all four gap groups, and the audit timeline + export', async () => {
+  it('renders the view and all four gap groups', async () => {
     stubFetch();
     const w = mountView();
     await flushPromises();
@@ -62,13 +63,8 @@ describe('Governance view — UI-presence (rule 11)', () => {
     expect(tid('gap-personal-space').text()).toContain('Personal Ops Hack');
     expect(tid('gap-no-backup').text()).toContain('Invoice Dispatch');
 
-    // The audit timeline + export control.
-    expect(tid('governance-audit-timeline').exists()).toBe(true);
-    expect(tid('governance-audit-timeline').text()).toContain('ownership.assign');
-    expect(tid('governance-audit-timeline').text()).toContain('Ops Admin');
-    const exportLink = tid('governance-audit-export');
-    expect(exportLink.exists()).toBe(true);
-    expect(exportLink.attributes('href')).toContain('/api/ownership/audit/export.csv');
+    // The audit timeline no longer lives here — it moved to the Activity view.
+    expect(tid('governance-audit-timeline').exists()).toBe(false);
     w.unmount();
   });
 

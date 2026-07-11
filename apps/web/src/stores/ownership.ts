@@ -31,19 +31,24 @@ export const useOwnershipStore = defineStore('ownership', () => {
   const auditError = ref<string | null>(null);
   const filters = ref<AuditFilterState>({ action: '', actor: '', from: '', to: '' });
 
-  function auditQuery(f: AuditFilterState): string {
+  /** Timeline pagination: page size + the current (0-based) page. */
+  const AUDIT_PAGE_SIZE = 50;
+  const auditPage = ref(0);
+
+  /** Filter-only query string (no pagination) — shared by the CSV export link. */
+  function filterQuery(f: AuditFilterState): URLSearchParams {
     const p = new URLSearchParams();
     if (f.action) p.set('action', f.action);
     if (f.actor) p.set('actor', f.actor);
     if (f.from) p.set('from', f.from);
     if (f.to) p.set('to', f.to);
-    const s = p.toString();
-    return s ? `?${s}` : '';
+    return p;
   }
 
-  /** The CSV export URL for the current filters (a plain download link, no fetch). */
+  /** The CSV export URL for the current filters (a plain download link, no fetch; all pages). */
   function exportUrl(): string {
-    return `/api/ownership/audit/export.csv${auditQuery(filters.value)}`;
+    const q = filterQuery(filters.value).toString();
+    return `/api/ownership/audit/export.csv${q ? `?${q}` : ''}`;
   }
 
   async function refreshGaps(): Promise<void> {
@@ -61,7 +66,10 @@ export const useOwnershipStore = defineStore('ownership', () => {
   async function refreshAudit(): Promise<void> {
     if (auditState.value === 'idle') auditState.value = 'loading';
     try {
-      audit.value = await api(`/api/ownership/audit${auditQuery(filters.value)}`, {}, auditTimelineResponseSchema);
+      const p = filterQuery(filters.value);
+      p.set('limit', String(AUDIT_PAGE_SIZE));
+      p.set('offset', String(auditPage.value * AUDIT_PAGE_SIZE));
+      audit.value = await api(`/api/ownership/audit?${p.toString()}`, {}, auditTimelineResponseSchema);
       auditState.value = 'ok';
       auditError.value = null;
     } catch (err) {
@@ -70,9 +78,26 @@ export const useOwnershipStore = defineStore('ownership', () => {
     }
   }
 
+  /** Apply the filters from page 1 — resets pagination so a new filter isn't stuck on a stale page. */
+  async function applyAuditFilters(): Promise<void> {
+    auditPage.value = 0;
+    await refreshAudit();
+  }
+
+  /** Jump to a 0-based page (clamped to the available range) and reload. */
+  async function goToAuditPage(page: number): Promise<void> {
+    const total = audit.value?.total ?? 0;
+    const lastPage = Math.max(Math.ceil(total / AUDIT_PAGE_SIZE) - 1, 0);
+    const next = Math.min(Math.max(page, 0), lastPage);
+    if (next === auditPage.value) return;
+    auditPage.value = next;
+    await refreshAudit();
+  }
+
   return {
     gaps, gapsState, gapsError,
     audit, auditState, auditError, filters,
-    exportUrl, refreshGaps, refreshAudit,
+    auditPage, auditPageSize: AUDIT_PAGE_SIZE,
+    exportUrl, refreshGaps, refreshAudit, applyAuditFilters, goToAuditPage,
   };
 });

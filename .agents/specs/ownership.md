@@ -178,8 +178,12 @@ events join when the deferred Log Streaming receiver lands.
 
 **Incident + audit timeline.**
 - [ ] A **failing** workflow (S3) shows **its owner** (the start of the incident view).
-- [ ] The **audit timeline** shows Argus's **self-audit** entries, **filterable** (action
-      / entity / actor / date) and **exportable to CSV** (secret-free; no payloads).
+- [ ] The **audit timeline** (in its own **Activity view** — see below) shows Argus's
+      **self-audit** entries, **filterable** (action / entity / date, and a **partial,
+      case-insensitive** actor substring matched against **name OR email** — `sor` finds
+      `Sorin` or `sorin@x.io`), **paginated**
+      (50/page, newest first, with prev/next + an "X–Y of N" readout), and **exportable
+      to CSV** (secret-free; no payloads; the export covers **every page**, never one).
 
 **UI presence (standing rule 11 — this chrome is guarded, not just built).**
 Each element carries a stable `data-testid`, a fast component test asserting it renders
@@ -188,8 +192,13 @@ with its key text/state, and a `pnpm verify` row.
       (`governance-view`); existing chrome is unchanged (additive only, rule 11).
 - [ ] The Governance view shows the **governance-gaps** panel (`governance-gaps`:
       unowned-critical, single-owner-critical, personal-space-critical, no-backup) with
-      counts + criticality, and the **audit timeline** (`governance-audit-timeline`) with
-      filter controls and an **export** control (`governance-audit-export`).
+      counts + criticality.
+- [ ] A side-panel **"Activity"** item routes to the **Activity view** (`activity-view`),
+      which shows the **audit timeline** (`governance-audit-timeline`) with filter controls
+      (`audit-filter-action`, `audit-filter-actor` — partial name-or-email match), a **pager**
+      (`audit-pager` with `audit-pager-prev` / `audit-pager-next` and an `audit-pager-range`
+      readout), and an **export** control (`governance-audit-export`). (Split out of the
+      Ownership lens so the audit trail has its own home.)
 - [ ] The **catalog** shows an **owner badge** per workflow (`owner-badge`:
       assigned/inferred/unowned; the inferred state is visibly advisory).
 - [ ] The **detail drawer** (shared by catalog + health) shows an **ownership section**
@@ -206,7 +215,7 @@ with its key text/state, and a `pnpm verify` row.
 
 **Responsive (standing rule 10 — both themes AND both widths).** Each hero view is
 rendered at 375px + desktop, in light AND dark, asserted to have no horizontal overflow.
-- [ ] The **Governance view** (gaps + audit timeline) is usable at 375px with no
-      overflow, in both themes.
+- [ ] The **Governance view** (gaps) and the **Activity view** (audit timeline) are each
+      usable at 375px with no overflow, in both themes.
 - [ ] The **catalog with the owner badge/column** and the **assign-owner dialog** are
       usable at 375px with no overflow, in both themes.

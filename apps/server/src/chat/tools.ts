@@ -424,14 +424,14 @@ export function buildChatTools(db: Database.Database, recordRefs: RecordRefs, op
     {
       name: 'audit_log',
       description:
-        'The append-only governance timeline (who did what, when). Filter by entity (a workflow id), actor (an email), and/or action family ("ownership" matches ownership.assign etc); leave "" to not filter. Newest first.',
+        'The append-only governance timeline (who did what, when). Filter by entity (a workflow id), actor (a partial name or email — "sor" matches Sorin), and/or action family ("ownership" matches ownership.assign etc); leave "" to not filter. Newest first.',
       schema: z.object({ entity: z.string(), actor: z.string(), action: z.string(), limit: z.number().int().min(1).max(100) }),
       summarize: (r) => `${(r as { total: number }).total} entr${(r as { total: number }).total === 1 ? 'y' : 'ies'}`,
       execute: async (raw) => {
         const a = raw as { entity: string; actor: string; action: string; limit: number };
         const entries = listAudit(db, {
           entityType: undefined,
-          actorEmail: a.actor || undefined,
+          actor: a.actor || undefined,
           action: a.action || undefined,
           limit: a.limit,
         }).filter((e) => (a.entity ? e.entityId === a.entity : true));

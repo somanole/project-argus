@@ -78,6 +78,9 @@ const auditBody = {
     { id: 1, ts: '2026-07-06T09:00:00.000Z', actorName: 'Ops Admin', actorEmail: 'ops@acme.example', action: 'connection.register', entityType: 'connection', entityId: 'prod', detail: null },
   ],
   actions: ['connection.register', 'ownership.assign'],
+  total: 2,
+  limit: 50,
+  offset: 0,
   generatedAt: '2026-07-05T00:00:00.000Z',
 };
 const overviewBody = {
@@ -209,7 +212,8 @@ const VIEWS = [
   // rule-10 gate here is "no horizontal overflow at 375px"; the canvas rendering is
   // proven by GraphView.test.ts. Key element is the always-present scope switcher.
   { name: 'Graph view', path: '/graph', mock: mockApi, waitFor: '[data-testid="graph-view"]', key: '[data-testid="graph-scope-switcher"]' },
-  { name: 'Governance view', path: '/governance', mock: mockApi, waitFor: '[data-testid="governance-gaps"]', key: '[data-testid="governance-audit-timeline"]' },
+  { name: 'Governance view', path: '/governance', mock: mockApi, waitFor: '[data-testid="governance-gaps"]', key: '[data-testid="gap-unowned"]' },
+  { name: 'Activity view', path: '/activity', mock: mockApi, waitFor: '[data-testid="activity-view"]', key: '[data-testid="governance-audit-timeline"]' },
   { name: 'Detail drawer', path: '/workflows', mock: mockApi, waitFor: '.wf tbody tr', key: '.drawer',
     action: async (page) => { await page.click('.wf tbody tr'); await page.waitForSelector('.drawer', { timeout: 4000 }); } },
   { name: 'Settings', path: '/settings', mock: mockApi, waitFor: '[data-testid="settings-view"]', key: '.card' },

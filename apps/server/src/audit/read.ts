@@ -11,11 +11,14 @@ export interface AuditFilters {
   /** Exact action OR an action-family prefix: 'ownership' also matches 'ownership.assign'. */
   action?: string | undefined;
   entityType?: string | undefined;
-  actorEmail?: string | undefined;
+  /** Case-insensitive SUBSTRING match on the actor's name OR email ('sor' matches 'Sorin' or 'sorin@x.io'). */
+  actor?: string | undefined;
   /** ISO lower/upper bounds on `ts` (inclusive). */
   from?: string | undefined;
   to?: string | undefined;
   limit?: number | undefined;
+  /** Rows to skip before the page (pagination). */
+  offset?: number | undefined;
 }
 
 interface AuditRow {
@@ -50,8 +53,13 @@ function toEntry(r: AuditRow): AuditTimelineEntry {
   };
 }
 
-/** The filtered timeline, newest first. */
-export function listAudit(db: Database.Database, filters: AuditFilters = {}): AuditTimelineEntry[] {
+/** Escape the LIKE metacharacters in a user substring so it matches literally (used with ESCAPE '\'). */
+function likeContains(term: string): string {
+  return `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+}
+
+/** Build the shared WHERE clause + params so `listAudit` and `countAudit` filter identically. */
+function buildWhere(filters: AuditFilters): { clause: string; params: unknown[] } {
   const where: string[] = [];
   const params: unknown[] = [];
   if (filters.action) {
@@ -62,9 +70,12 @@ export function listAudit(db: Database.Database, filters: AuditFilters = {}): Au
     where.push('entity_type = ?');
     params.push(filters.entityType);
   }
-  if (filters.actorEmail) {
-    where.push('actor_email = ?');
-    params.push(filters.actorEmail);
+  if (filters.actor) {
+    // Partial, case-insensitive (SQLite LIKE is ASCII-case-insensitive) substring match on
+    // either the actor's name or email — one box finds a person whichever they went by.
+    where.push("(actor_name LIKE ? ESCAPE '\\' OR actor_email LIKE ? ESCAPE '\\')");
+    const like = likeContains(filters.actor);
+    params.push(like, like);
   }
   if (filters.from) {
     where.push('ts >= ?');
@@ -74,12 +85,26 @@ export function listAudit(db: Database.Database, filters: AuditFilters = {}): Au
     where.push('ts <= ?');
     params.push(filters.to);
   }
+  return { clause: where.length ? ` WHERE ${where.join(' AND ')}` : '', params };
+}
+
+/** The filtered timeline page, newest first (LIMIT/OFFSET). */
+export function listAudit(db: Database.Database, filters: AuditFilters = {}): AuditTimelineEntry[] {
+  const { clause, params } = buildWhere(filters);
   const limit = Math.min(Math.max(filters.limit ?? 500, 1), 5000);
+  const offset = Math.max(filters.offset ?? 0, 0);
   const sql = `SELECT id, ts, actor_name, actor_email, action, entity_type, entity_id, detail_json
-                 FROM audit_log${where.length ? ` WHERE ${where.join(' AND ')}` : ''}
-                ORDER BY id DESC LIMIT ${limit}`;
+                 FROM audit_log${clause}
+                ORDER BY id DESC LIMIT ${limit} OFFSET ${offset}`;
   const rows = db.prepare(sql).all(...params) as AuditRow[];
   return rows.map(toEntry);
+}
+
+/** Total rows matching the filters (ignores limit/offset) — the pagination denominator. */
+export function countAudit(db: Database.Database, filters: AuditFilters = {}): number {
+  const { clause, params } = buildWhere(filters);
+  const row = db.prepare(`SELECT COUNT(*) AS n FROM audit_log${clause}`).get(...params) as { n: number };
+  return row.n;
 }
 
 /** Distinct actions present in the log (for the filter dropdown), sorted. */

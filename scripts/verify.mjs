@@ -237,16 +237,23 @@ try {
     hMissing.length === 0 ? `${healthUi.length} health UI elements present` : `MISSING: ${hMissing.join(', ')}`);
 
   // S4: ownership chrome — the catalog owner badge, the drawer ownership section +
-  // assign dialog, the Governance view (gaps groups + audit timeline + export), and the
-  // incident owner on the failing surface. Each has a component test; presence counterpart.
+  // assign dialog, the Governance view (gaps groups), and the incident owner on the
+  // failing surface. Each has a component test; presence counterpart.
   const ownUi = [
     'owner-badge', 'ownership-section', 'ownership-assign-button', 'assign-owner-dialog', 'assign-owner-picker', 'assign-owner-suggestion',
     'governance-view', 'governance-gaps', 'gap-unowned', 'gap-single-owner', 'gap-personal-space', 'gap-no-backup',
-    'governance-audit-timeline', 'governance-audit-export', 'incident-owner',
+    'incident-owner',
   ];
   const oMissing = missing(ownUi);
-  add('Ownership UI ships (owner badge, assign dialog, Governance gaps + audit timeline, incident owner)', oMissing.length === 0,
+  add('Ownership UI ships (owner badge, assign dialog, Governance gaps, incident owner)', oMissing.length === 0,
     oMissing.length === 0 ? `${ownUi.length} ownership UI elements present` : `MISSING: ${oMissing.join(', ')}`);
+
+  // The Argus self-audit timeline lives in its own Activity view — the filterable,
+  // CSV-exportable action log. Component test in ActivityView.test.ts; presence here.
+  const activityUi = ['activity-view', 'governance-audit-timeline', 'governance-audit-export', 'audit-filter-action', 'audit-filter-actor', 'audit-pager', 'audit-pager-prev', 'audit-pager-next'];
+  const aMissing = missing(activityUi);
+  add('Activity UI ships (audit timeline + filters + pagination + CSV export)', aMissing.length === 0,
+    aMissing.length === 0 ? `${activityUi.length} activity UI elements present` : `MISSING: ${aMissing.join(', ')}`);
 
   // S5: graph chrome — the fleet graph canvas, scope switcher, archived + MCP toggles,
   // the confidence/cross-instance legend, and the blast-radius impact panel with its
@@ -1428,6 +1435,29 @@ async function s4Checks() {
     } catch { /* fetch failed */ }
     add('Governance gaps + filterable audit timeline (CSV-exportable) served', gapsShapeOk && csvOk,
       `gaps shape ${gapsShapeOk ? 'ok' : 'bad'}, CSV export ${csvOk ? 'ok' : 'MISSING'}`);
+
+    // Audit timeline: partial (case-insensitive substring) actor match + paginated pages.
+    let pageOk = false;
+    let auditDetail = '';
+    try {
+      const full = (await argus('/api/ownership/audit')).json ?? {};
+      const p1 = (await argus('/api/ownership/audit?limit=1&offset=0')).json ?? {};
+      const p2 = (await argus('/api/ownership/audit?limit=1&offset=1')).json ?? {};
+      const paged = (p1.entries?.length === 1) && (p2.entries?.length === 1)
+        && p1.entries[0].id !== p2.entries[0].id && p1.total === full.total && full.total >= 2;
+      // 'VERIF' is an uppercase substring of verify@acme.example — proves partial + case-insensitive.
+      // Matches name OR email; every hit must carry the substring in one of the two.
+      const partial = (await argus('/api/ownership/audit?actor=VERIF')).json ?? {};
+      const partialOk = (partial.entries?.length ?? 0) > 0
+        && partial.entries.every((e) => `${e.actorName} ${e.actorEmail}`.toLowerCase().includes('verif'));
+      const none = (await argus('/api/ownership/audit?actor=nobody-xyz')).json ?? {};
+      const noneOk = (none.entries?.length ?? 0) === 0 && none.total === 0;
+      pageOk = paged && partialOk && noneOk;
+      auditDetail = `total ${full.total}, pages distinct=${paged}, partial 'VERIF'→${partial.entries?.length ?? 0}, empty-miss=${noneOk}`;
+    } catch (e) {
+      auditDetail = `audit paging/partial failed: ${e.message}`;
+    }
+    add('Audit timeline pages + partial actor match (name or email, case-insensitive)', pageOk, auditDetail);
   } finally {
     try { child.kill(); } catch { /* already gone */ }
   }

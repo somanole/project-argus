@@ -8,7 +8,7 @@ import {
   auditTimelineResponseSchema,
 } from '@argus/shared';
 import { assignOwner, setBackupOwner, removeOwner, resolveOwner, governanceGaps } from '../ownership/repo.js';
-import { listAudit, distinctAuditActions, auditToCsv, type AuditFilters } from '../audit/read.js';
+import { listAudit, countAudit, distinctAuditActions, auditToCsv, type AuditFilters } from '../audit/read.js';
 import { getConnectionRow, decryptApiKey } from '../connections/repo.js';
 import { createN8nClient, HttpError, reason as n8nReason } from '../n8n/client.js';
 import { actorOf } from '../auth/middleware.js';
@@ -37,20 +37,30 @@ export function ownershipRouter(db: Database.Database, encryptionKey: string): R
     res.json(governanceGapsResponseSchema.parse({ ...governanceGaps(db), generatedAt: new Date().toISOString() }));
   });
 
-  // The Argus self-audit timeline, filterable + CSV-exportable.
+  // The Argus self-audit timeline, filterable + CSV-exportable. The CSV exports the whole
+  // filtered set (every page), so it strips pagination — an export must never silently
+  // truncate to one page (rule 5).
   router.get('/audit/export.csv', (req, res) => {
-    const entries = listAudit(db, parseAuditFilters(req.query));
+    const filters = parseAuditFilters(req.query);
+    const entries = listAudit(db, { ...filters, limit: undefined, offset: undefined });
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="argus-audit-log.csv"');
     res.send(auditToCsv(entries));
   });
 
   router.get('/audit', (req, res) => {
-    const entries = listAudit(db, parseAuditFilters(req.query));
+    const filters = parseAuditFilters(req.query);
+    // Default to a 50-row page for the timeline UI; the query can override.
+    const limit = filters.limit ?? AUDIT_PAGE_SIZE;
+    const offset = filters.offset ?? 0;
+    const entries = listAudit(db, { ...filters, limit, offset });
     res.json(
       auditTimelineResponseSchema.parse({
         entries,
         actions: distinctAuditActions(db),
+        total: countAudit(db, filters),
+        limit,
+        offset,
         generatedAt: new Date().toISOString(),
       }),
     );
@@ -121,14 +131,25 @@ export function ownershipRouter(db: Database.Database, encryptionKey: string): R
   return router;
 }
 
+/** Default timeline page size when the request doesn't specify a `limit`. */
+const AUDIT_PAGE_SIZE = 50;
+
+/** Parse a positive integer query param, or undefined if absent/invalid. */
+function posInt(v: unknown): number | undefined {
+  const s = str(v);
+  if (!s) return undefined;
+  const n = Number(s);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : undefined;
+}
+
 function parseAuditFilters(query: Record<string, unknown>): AuditFilters {
-  const limit = str(query.limit);
   return {
     action: str(query.action),
     entityType: str(query.entity),
-    actorEmail: str(query.actor),
+    actor: str(query.actor),
     from: str(query.from),
     to: str(query.to),
-    limit: limit ? Number(limit) : undefined,
+    limit: posInt(query.limit),
+    offset: posInt(query.offset),
   };
 }

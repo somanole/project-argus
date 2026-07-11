@@ -195,14 +195,38 @@ describe('Argus API', () => {
     const after = await agent.get('/api/workflows');
     expect(after.body.workflows[0].owner).toMatchObject({ status: 'assigned', owner: { email: 'sam@acme.example' } });
 
-    // The assignment is on the self-audit timeline with who + before→after.
+    // The assignment is on the self-audit timeline with who + before→after, and the
+    // payload carries pagination info (total across pages + echoed limit/offset).
     const audit = await agent.get('/api/ownership/audit');
     const entry = audit.body.entries.find((e: { action: string }) => e.action === 'ownership.assign');
     expect(entry).toBeTruthy();
     expect(entry).toMatchObject({ actorEmail: 'sam@acme.example', entityId: `${id}/w1` });
     expect(entry.detail.after.ownerEmail).toBe('sam@acme.example');
+    expect(audit.body).toMatchObject({ limit: 50, offset: 0 });
+    expect(audit.body.total).toBeGreaterThanOrEqual(2); // ≥ connection.register + ownership.assign
 
-    // CSV export is attachment + contains the entry.
+    // Pagination: one row per page, and the total is unchanged by the page window.
+    const page1 = await agent.get('/api/ownership/audit?limit=1&offset=0');
+    const page2 = await agent.get('/api/ownership/audit?limit=1&offset=1');
+    expect(page1.body.entries).toHaveLength(1);
+    expect(page2.body.entries).toHaveLength(1);
+    expect(page1.body.entries[0].id).not.toBe(page2.body.entries[0].id); // distinct pages
+    expect(page1.body.total).toBe(audit.body.total);
+
+    // Partial, case-insensitive actor match on EMAIL: a substring finds the actor…
+    const byEmail = await agent.get('/api/ownership/audit?actor=SAM');
+    expect(byEmail.body.entries.length).toBeGreaterThan(0);
+    expect(byEmail.body.entries.every((e: { actorEmail: string }) => e.actorEmail.includes('sam'))).toBe(true);
+    // …and on NAME too — "Rivers" is in the name "Sam Rivers" but NOT in sam@acme.example.
+    const byName = await agent.get('/api/ownership/audit?actor=Rivers');
+    expect(byName.body.entries.length).toBeGreaterThan(0);
+    expect(byName.body.entries.every((e: { actorName: string }) => e.actorName.toLowerCase().includes('rivers'))).toBe(true);
+    // …and a substring in neither name nor email returns nothing (honest empty, not everything).
+    const none = await agent.get('/api/ownership/audit?actor=nobody-xyz');
+    expect(none.body.entries).toHaveLength(0);
+    expect(none.body.total).toBe(0);
+
+    // CSV export is attachment + contains the entry (and exports every page, not just one).
     const csv = await agent.get('/api/ownership/audit/export.csv');
     expect(csv.headers['content-type']).toContain('text/csv');
     expect(csv.headers['content-disposition']).toContain('attachment');
