@@ -53,6 +53,8 @@ export interface WorkflowFilters {
   health?: string[] | undefined;
   /** Only workflows with at least one certain-broken reference. */
   broken?: boolean | undefined;
+  /** Only workflows whose stored analysis is stale (enrichment exists but its input hash drifted). */
+  stale?: boolean | undefined;
   q?: string | undefined;
 }
 
@@ -357,6 +359,11 @@ export function listWorkflows(db: Database.Database, filters: WorkflowFilters = 
   }
   if (filters.broken) {
     where.push('w.broken_ref_count > 0');
+  }
+  if (filters.stale) {
+    // Stale = a stored enrichment whose input hash no longer matches the workflow's current
+    // hash (mirrors the served enrichment.status === 'stale'). `IS NOT` handles NULL hashes.
+    where.push('e.input_hash IS NOT NULL AND e.input_hash IS NOT w.enrichment_input_hash');
   }
   if (filters.criticality && filters.criticality.length > 0) {
     const placeholders = filters.criticality.map(() => '?').join(', ');

@@ -93,16 +93,26 @@ dashboard surfaces, each with a count that opens the precise set behind it:
   assignments, corrections, config) from the append-only audit log, newest first,
   with a link to the full filterable timeline (S4's).
 
-**Drill-down mechanics (inline, never a divergent re-query).** Every figure
-**expands in place** to the exact workflow set behind its count — the composed
-payload already carries those rows, so the drilled list is byte-for-byte the count's
-source (the drill-count test pins `count === list.length` per figure). Convenience
-**"Open in Health / Graph →" links** sit beside the relevant figures for a deeper
-look. *(Build note: I implemented drill-down as uniform inline expansion rather than
-deep-linking presets into Catalog/Health. It fully satisfies the intent — click a
-number, see those exact workflows — is airtight to test, and touches **zero** existing
-view chrome, which is the safer choice under rule 11. The as-built matches this
-paragraph.)*
+**Tile mechanics (navigate to the owning page, never reproduce it).** The dashboard
+is a glanceable router, not a place that reproduces detail. Each figure is a **uniform
+metric tile** — label + ⓘ tooltip, a count coloured by severity (a clean zero reads
+muted), a one-line context — and the **whole tile navigates** to the page that owns
+that set, **deep-linked** to exactly it:
+- Accountability tiles → the **Ownership** view, anchored to the matching gap section
+  (`#gap-unowned`, `#gap-single-owner`, `#gap-personal-space`).
+- Failing-with-owner → the **Health** view.
+- Broken refs → Estate `?broken`; stale analysis → Estate `?stale`; idle-but-active →
+  Estate `?health=idle&active=true`; MCP exposure → Estate `?mcp` (the MCP-exposed set).
+The composition guarantee still holds — the composed payload carries the exact set
+behind every count, and `count === list.length` per figure is pinned by test, which is
+what makes each deep-link honest (the number leads to precisely that set). The longer
+"why" prose and every uncertainty caveat (advisory inferred owner, confirmed-reach-only)
+live in the tile's **ⓘ tooltip**, off the surface but one hover away. *(Build note:
+redesigned from inline drill-down to deep-linking after the owner asked for a cleaner,
+uniform surface — every widget now behaves the same way and points to its page rather
+than expanding in place. Two Estate catalog filters — `stale`, and `idle-active` via the
+existing `health`+`active` filters — were added so "deep-link everything" lands on the
+exact set, not merely near it.)*
 
 **Unowned and the Ownership score agree by construction.** Both key on the same
 notion — *assigned* ownership. The **unowned figure** counts workflows with no
@@ -180,8 +190,9 @@ that slice's own probe/verify catches it first.
       equals the owned subset of `healthEstate().failing`+`degraded`, MCP-exposure
       equals the confirmed S5 reach — asserted by a non-divergence test that computes
       each figure both ways and requires equality.
-- [x] Every headline figure **drills to the exact workflow set** behind it: the count
-      N and the drilled list length are the same N (tested per figure).
+- [x] Every headline figure's count **equals its exact workflow set** (N == list
+      length, tested per figure) — the composition guarantee that makes each tile's
+      deep-link honest (the number leads to precisely that set).
 - [x] The dashboard reads correctly against the **seeded estate** — the planted
       problems (unowned criticals, prod↔staging SPOF, personal-space criticals,
       MCP-to-sensitive) all appear with non-zero, sane counts.
@@ -213,19 +224,22 @@ Each element carries a stable `data-testid`, a fast component test asserting it
 renders with its key text/state, and a `pnpm verify` row.
 - [x] The **/overview view** renders with the **governance score** and its five-pillar
       breakdown (`overview-view`, `overview-score`, `overview-score-breakdown`).
-- [x] **Unowned-by-criticality** renders with per-criticality counts and drills
-      (`overview-unowned`).
-- [x] **SPOF owners** renders with cross-instance flag and drills (`overview-spof`).
-- [x] **Failing-with-owner incidents** renders each with owner + failure rate
-      (`overview-incidents`).
-- [x] **Hygiene**, **MCP exposure surface**, and **personal-space-critical** each
-      render with counts and drill (`overview-hygiene`, `overview-exposure`,
-      `overview-personal-space`).
-- [x] **Changelog / audit timeline** renders newest-first with a link to the full
-      timeline (`overview-changelog`).
+- [x] Each metric is a **uniform tile** that **navigates** to its exact set — no inline
+      drill. Accountability tiles deep-link to the Ownership gap sections
+      (`overview-unowned` → `#gap-unowned`, `overview-spof` → `#gap-single-owner`,
+      `overview-personal-space` → `#gap-personal-space`).
+- [x] **Failing-with-owner incidents** (`overview-incidents`) → Health.
+- [x] The three **hygiene** metrics render as peer tiles and deep-link to the filtered
+      Estate catalog: `overview-broken` → `?broken`, `overview-stale` → `?stale`,
+      `overview-idle-active` → `?health=idle&active=true`.
+- [x] **MCP exposure surface** (`overview-exposure`) → Estate `?mcp` (the MCP-exposed set).
+- [x] **Recent activity** renders newest-first with "View all →" to the Activity view
+      (`overview-changelog`).
 - [x] An **export** control renders and downloads the report (`overview-export`).
-- [x] Uncertainty is **visible on-screen**: advisory-owner, health-unavailable, and
-      `possible`-excluded labels render where they apply (not laundered).
+- [x] Uncertainty is **preserved, one hover away**: the advisory-owner and
+      confirmed-reach-only caveats live in the tiles' ⓘ tooltips (`infotip`), and the
+      health-unavailable banner still renders on-surface (`overview-health-unavailable`)
+      — nothing laundered.
 
 **Responsive (standing rule 10 — both themes AND both widths).** The overview view is
 rendered in a real browser at 375px + desktop, in light AND dark, asserted no

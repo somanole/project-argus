@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useWorkflowsStore, type StateFilter } from '../stores/workflows';
 import { useConnectionsStore } from '../stores/connections';
@@ -15,8 +16,9 @@ import { relativeTime } from '../lib/time';
 
 const store = useWorkflowsStore();
 const connections = useConnectionsStore();
-const { workflows, facets, coverage, enrichmentProgress, state, error, lastUpdated, instanceId, systems, triggers, criticality, health, mcpOnly, brokenOnly, stateFilter, activeFilterCount, triggerLabels } =
+const { workflows, facets, coverage, enrichmentProgress, state, error, lastUpdated, instanceId, systems, triggers, criticality, health, mcpOnly, brokenOnly, staleOnly, stateFilter, activeFilterCount, triggerLabels } =
   storeToRefs(store);
+const route = useRoute();
 
 // Criticality filter levels, most-severe first (from the enrichment enum).
 const CRITICALITY_LEVELS = ['critical', 'high', 'medium', 'low'];
@@ -45,7 +47,7 @@ function onDocClick(e: MouseEvent): void {
 const panelFilterCount = computed(
   () =>
     systems.value.length + triggers.value.length + criticality.value.length + health.value.length +
-    (mcpOnly.value ? 1 : 0) + (brokenOnly.value ? 1 : 0) + (stateFilter.value !== 'all' ? 1 : 0),
+    (mcpOnly.value ? 1 : 0) + (brokenOnly.value ? 1 : 0) + (staleOnly.value ? 1 : 0) + (stateFilter.value !== 'all' ? 1 : 0),
 );
 
 // The System facet is long (25+) — a search field narrows it in place.
@@ -68,6 +70,7 @@ const appliedTokens = computed(() => {
   if (stateFilter.value !== 'all') t.push({ key: 'state', label: 'Status', text: STATE_LABEL[stateFilter.value], remove: () => store.setStateFilter('all') });
   if (mcpOnly.value) t.push({ key: 'mcp', label: '', text: 'MCP-exposed', remove: () => store.setMcpOnly(false) });
   if (brokenOnly.value) t.push({ key: 'broken', label: '', text: 'Broken refs', remove: () => store.setBrokenOnly(false) });
+  if (staleOnly.value) t.push({ key: 'stale', label: '', text: 'Stale analysis', remove: () => store.setStaleOnly(false) });
   return t;
 });
 
@@ -107,6 +110,10 @@ const enrichmentLabel = computed(() => {
 
 onMounted(async () => {
   document.addEventListener('click', onDocClick);
+  // Deep-links (e.g. Overview tiles) carry filters in the query — apply them before the
+  // first load so the catalog opens on exactly that set. Also seed the search box.
+  store.applyFromQuery(route?.query ?? {});
+  qInput.value = store.q;
   await refreshAll();
   poll = setInterval(() => void refreshAll(), 15_000);
   clock = setInterval(() => (now.value = Date.now()), 1_000);
@@ -265,6 +272,7 @@ onUnmounted(() => {
                 <div class="checklist wrap">
                   <button class="opt opt--chip" :class="{ sel: mcpOnly }" data-testid="filter-mcp" @click="store.setMcpOnly(!mcpOnly)"><span class="box" />MCP-exposed</button>
                   <button class="opt opt--chip" :class="{ sel: brokenOnly }" data-testid="filter-broken" @click="store.setBrokenOnly(!brokenOnly)"><span class="box" />Broken refs</button>
+                  <button class="opt opt--chip" :class="{ sel: staleOnly }" data-testid="filter-stale" @click="store.setStaleOnly(!staleOnly)"><span class="box" />Stale analysis</button>
                 </div>
               </div>
             </div>
@@ -470,8 +478,14 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 .row { cursor: pointer; }
 .row:hover td, .row:focus-visible td { background: var(--background--hover, var(--background--subtle)); }
 .row:focus-visible { outline: 2px solid var(--focus--border-color, var(--color--primary)); outline-offset: -2px; }
-.c-name { font-weight: var(--font-weight--medium); }
-.name-cell { display: inline-flex; align-items: center; gap: var(--spacing--4xs); flex-wrap: wrap; }
+/* Give the name room so the name reads on its own line and the stacked labels sit under
+   it — if the table can't fit, `.table-wrap` scrolls horizontally within its own panel
+   (rule 10), never crushing the name column to a few characters. */
+.c-name { font-weight: var(--font-weight--medium); min-width: 13rem; }
+/* Name on its own line, all labels wrap onto the line beneath it — consistently for every
+   row (the name takes the full cell width, so badges never sit inline with a short name). */
+.name-cell { display: flex; align-items: center; gap: var(--spacing--4xs); flex-wrap: wrap; }
+.name-cell .name { flex: 0 0 100%; }
 .c-upd { white-space: nowrap; font-size: var(--font-size--2xs); }
 .badges { display: flex; flex-wrap: wrap; gap: var(--spacing--4xs); max-width: 22rem; }
 .instance { display: inline-flex; align-items: center; gap: var(--spacing--4xs); white-space: nowrap; }

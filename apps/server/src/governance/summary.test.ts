@@ -5,7 +5,7 @@ import Database from 'better-sqlite3';
 import type { SessionActor, WorkflowFacts } from '@argus/shared';
 import { governanceOverviewResponseSchema } from '@argus/shared';
 import { migrate } from '../db/migrate.js';
-import { replaceInstanceWorkflows, type CacheWorkflow } from '../workflows/repo.js';
+import { replaceInstanceWorkflows, listWorkflows, type CacheWorkflow } from '../workflows/repo.js';
 import { assignOwner, governanceGaps } from '../ownership/repo.js';
 import { healthEstate } from '../health/repo.js';
 import { replaceAllEdges } from '../graph/repo.js';
@@ -168,6 +168,18 @@ describe('S6 governance overview — composition never diverges', () => {
     expect(o.exposure.mcpExposed).toBe(o.exposure.surfaces.length);
     // activeNoExecutions drills to exactly the idle-but-active workflow.
     expect(o.hygiene.activeNoExecutions.workflows.map((w) => w.id)).toEqual(['sens']);
+  });
+
+  it('the Overview tiles deep-link to catalog filters that return the SAME exact set', () => {
+    const o = governanceOverview(db, ISO);
+    // "Idle but active" tile → ?health=idle&active=true — same set the overview counts.
+    const idleActive = listWorkflows(db, { health: ['idle'], active: true });
+    expect(idleActive.map((w) => w.id).sort()).toEqual(o.hygiene.activeNoExecutions.workflows.map((w) => w.id).sort());
+    expect(idleActive.map((w) => w.id)).toEqual(['sens']);
+    // "Stale analysis" tile → ?stale=true — the enriched-but-hash-drifted workflows.
+    const stale = listWorkflows(db, { stale: true });
+    expect(stale.map((w) => w.id).sort()).toEqual(o.hygiene.staleEnrichment.workflows.map((w) => w.id).sort());
+    expect(stale.every((w) => w.enrichment?.status === 'stale')).toBe(true);
   });
 
   it('a POSSIBLE edge to a sensitive system is EXCLUDED from the exposure surface; a CONFIRMED one is counted (S5 trust spine)', () => {

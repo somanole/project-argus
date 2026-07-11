@@ -1,55 +1,141 @@
 <script setup lang="ts">
 // The Governance overview (S6) — the one screen that says "here's the state of our
-// estate". PURE COMPOSITION: every figure is the same read the individual views
-// show (server-composed), and every number drills to the exact workflows behind it.
-// Honest to the estate's uncertainty (rule 5): inferred owners are badged advisory,
-// unavailable health is shown as unavailable (never "healthy"), and possible edges
-// are excluded from exposure — none of it laundered into false precision.
+// estate". A glanceable dashboard, not a place that reproduces detail: the score panel
+// composes every pillar, then a uniform grid of metric tiles each NAVIGATE to the exact
+// workflow set on the page that owns it (Ownership / Health / Estate / Graph). Longer
+// prose lives in ⓘ tooltips, not on the surface. Honest to the estate's uncertainty
+// (rule 5): inferred owners are advisory, unavailable health is shown as unavailable,
+// possible edges are excluded — the caveats move into tooltips, never removed.
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useOverviewStore } from '../stores/overview';
-import type { Criticality, ScorePillar } from '@argus/shared';
-import FactBadge from '../components/FactBadge.vue';
-import { instanceColor } from '../lib/instanceColor';
+import type { ScorePillar } from '@argus/shared';
+import InfoTip from '../components/InfoTip.vue';
+import OverviewTile, { type OverviewTileData } from '../components/OverviewTile.vue';
 import { relativeTime } from '../lib/time';
 
 const store = useOverviewStore();
-const { data, state, error } = storeToRefs(store);
+const { data, state, error, lastUpdated } = storeToRefs(store);
 
 const now = ref(Date.now());
 let clock: ReturnType<typeof setInterval> | undefined;
 
-const CRIT_TONE: Record<Criticality, 'danger' | 'warn' | 'muted' | 'faint'> = { critical: 'danger', high: 'warn', medium: 'muted', low: 'faint' };
-const critTone = (c: Criticality | null): 'danger' | 'warn' | 'muted' | 'faint' => (c ? CRIT_TONE[c] : 'muted');
-
 const o = computed(() => data.value);
 const score = computed(() => o.value?.score ?? null);
 const unavailableInstances = computed(() => o.value?.health.windows.filter((w) => !w.available) ?? []);
-// How many "no confirmed owner" workflows have an advisory inferred owner Argus can
-// suggest (a lead to confirm — not counted as ownership by the score).
 const advisoryCovered = computed(() => o.value?.unowned.workflows.filter((w) => w.inferred?.status === 'inferred').length ?? 0);
-// Total failing + degraded (for context beside the confirmed-owner incident count).
 const totalUnhealthy = computed(() => (o.value ? o.value.health.summary.failing + o.value.health.summary.degraded : 0));
 
-/** Score → a semantic tone (drives the hero + pillar-bar color, tokens only). */
-function scoreTone(n: number | null): 'ok' | 'warn' | 'danger' | 'muted' {
+type Tone = 'ok' | 'warn' | 'danger' | 'muted';
+/** Score → semantic tone (tokens only, so both themes come for free). Also drives the tile tone. */
+function scoreTone(n: number | null): Tone {
   if (n == null) return 'muted';
   if (n >= 80) return 'ok';
   if (n >= 50) return 'warn';
   return 'danger';
 }
+const scoreBand = (n: number | null): string => (n == null ? '—' : n >= 80 ? 'Good' : n >= 50 ? 'Fair' : 'Poor');
 const pct = (n: number | null): string => (n == null ? '0%' : `${n}%`);
 const weightPct = (p: ScorePillar): string => `${Math.round(p.weight * 100)}%`;
 
-// Inline drill-down: each figure expands in place to its exact workflow set.
-const expanded = ref<Set<string>>(new Set());
-function toggle(key: string): void {
-  const next = new Set(expanded.value);
-  if (next.has(key)) next.delete(key);
-  else next.add(key);
-  expanded.value = next;
+/**
+ * The headline VALUE behind a pillar's score, surfaced inline so it's readable without
+ * opening the ⓘ (which keeps the full sentence). Built from the pillar's structured
+ * `inputs` (the explainability contract), never by parsing the prose. '' when unscored.
+ */
+function pillarValue(p: ScorePillar): string {
+  if (!p.scored) return '';
+  const n = (k: string): number => p.inputs[k] ?? 0;
+  switch (p.key) {
+    case 'ownership':
+      return n('unowned') === 0 ? 'all workflows owned' : `${n('unowned')} of ${n('total')} unowned`;
+    case 'reliability':
+      return n('failing') + n('degraded') === 0
+        ? `${n('healthy')} of ${n('evaluated')} healthy`
+        : `${n('failing')} failing · ${n('degraded')} degraded of ${n('evaluated')}`;
+    case 'resilience':
+      return n('atRisk') === 0 ? `${n('criticalTotal')} criticals resilient` : `${n('atRisk')} of ${n('criticalTotal')} criticals at risk`;
+    case 'hygiene':
+      return n('issueWorkflows') === 0 ? `${n('total')} clean` : `${n('issueWorkflows')} of ${n('total')} with issues`;
+    case 'exposure':
+      return n('mcpExposed') === 0 ? 'no MCP exposure' : `${n('reachingSensitive')} of ${n('mcpExposed')} reach sensitive`;
+    default:
+      return '';
+  }
 }
-const isOpen = (key: string): boolean => expanded.value.has(key);
+
+/** Top two non-zero criticality buckets of the unowned set, e.g. "2 critical · 62 high". */
+const unownedContext = computed<string>(() => {
+  const u = o.value?.unowned;
+  if (!u || u.total === 0) return 'every workflow has an owner';
+  const b = u.byCriticality;
+  const parts = ([['critical', b.critical], ['high', b.high], ['medium', b.medium], ['low', b.low], ['unlabeled', b.none]] as const)
+    .filter(([, n]) => n > 0)
+    .map(([label, n]) => `${n} ${label}`);
+  return parts.slice(0, 2).join(' · ');
+});
+
+const accountabilityTiles = computed<OverviewTileData[]>(() => {
+  const v = o.value;
+  if (!v) return [];
+  return [
+    {
+      key: 'unowned', testid: 'overview-unowned', label: 'No assigned owner', count: v.unowned.total, tone: 'danger',
+      context: unownedContext.value,
+      info: `Workflows with no confirmed owner — the accountability gap that drives the ownership score.${advisoryCovered.value > 0 ? ` Argus can suggest an owner for ${advisoryCovered.value} of them from n8n membership, but inference is advisory — assign a person to actually close the gap.` : ''}`,
+      to: { path: '/estate/ownership', hash: '#gap-unowned' }, dest: 'Ownership',
+    },
+    {
+      key: 'spof', testid: 'overview-spof', label: 'Single-owner criticals', count: v.spofOwners.length, tone: 'danger',
+      context: 'sole owner of ≥2 criticals',
+      info: 'One person is the sole owner of several critical workflows — a single point of failure. Exact-email match; cross-instance identity is a later slice.',
+      to: { path: '/estate/ownership', hash: '#gap-single-owner' }, dest: 'Ownership',
+    },
+    {
+      key: 'personal-space', testid: 'overview-personal-space', label: 'Critical in personal space', count: v.personalSpaceCritical.length, tone: 'danger',
+      context: 'not in a team project',
+      info: 'Business-critical workflows living in someone’s personal project rather than a shared team project.',
+      to: { path: '/estate/ownership', hash: '#gap-personal-space' }, dest: 'Ownership',
+    },
+  ];
+});
+
+const operationsTiles = computed<OverviewTileData[]>(() => {
+  const v = o.value;
+  if (!v) return [];
+  return [
+    {
+      key: 'incidents', testid: 'overview-incidents', label: 'Failing / degraded, owned', count: v.failingWithOwner.count, tone: 'danger',
+      context: totalUnhealthy.value > 0 ? `${totalUnhealthy.value} unhealthy · ${totalUnhealthy.value - v.failingWithOwner.count} unowned` : 'nothing unhealthy',
+      info: 'Failing or degraded workflows that have a confirmed owner to page — the actionable incidents. Any unhealthy workflow with no confirmed owner has no one to escalate to.',
+      to: '/estate/health', dest: 'Health',
+    },
+    {
+      key: 'broken', testid: 'overview-broken', label: 'Broken references', count: v.hygiene.brokenRefs.count, tone: 'danger',
+      context: 'unresolved node refs',
+      info: 'Workflows referencing a node or credential that no longer resolves — a certain break, not a guess.',
+      to: { path: '/estate', query: { broken: 'true' } }, dest: 'Estate',
+    },
+    {
+      key: 'stale', testid: 'overview-stale', label: 'Stale analysis', count: v.hygiene.staleEnrichment.count, tone: 'warn',
+      context: 'analysis has drifted',
+      info: 'Workflows whose stored analysis no longer matches their current definition — the enrichment needs a re-run.',
+      to: { path: '/estate', query: { stale: 'true' } }, dest: 'Estate',
+    },
+    {
+      key: 'idle-active', testid: 'overview-idle-active', label: 'Idle but active', count: v.hygiene.activeNoExecutions.count, tone: 'warn',
+      context: 'active, no recent runs',
+      info: 'Workflows marked active that have not executed in the health window — candidates to archive or investigate.',
+      to: { path: '/estate', query: { health: 'idle', active: 'true' } }, dest: 'Estate',
+    },
+    {
+      key: 'exposure', testid: 'overview-exposure', label: 'MCP reaching sensitive', count: v.exposure.reachingSensitive, tone: 'danger',
+      context: `of ${v.exposure.mcpExposed} exposed · ${v.exposure.reachingSensitiveUnowned} unowned`,
+      info: 'MCP-exposed workflows whose confirmed dependency path reaches a sensitive system. Confirmed reach only — inferred edges are excluded. Opens the MCP-exposed set in the catalog.',
+      to: { path: '/estate', query: { mcp: 'true' } }, dest: 'Estate',
+    },
+  ];
+});
 
 async function refresh(): Promise<void> {
   await store.refresh();
@@ -67,7 +153,10 @@ onUnmounted(() => { if (clock) clearInterval(clock); });
     <header class="head">
       <div>
         <h1>Governance overview</h1>
-        <p class="muted sub">The state of the estate at a glance — ownership, health, resilience, hygiene and exposure, composed from every view. Every number drills to the workflows behind it.</p>
+        <p class="muted sub">
+          Estate-wide accountability, health and exposure
+          <span v-if="lastUpdated"> · as of {{ relativeTime(lastUpdated, now) }}</span>
+        </p>
       </div>
       <div class="actions">
         <a class="btn btn--secondary btn--sm" data-testid="overview-export" :href="store.exportUrl()">Export report</a>
@@ -84,191 +173,59 @@ onUnmounted(() => { if (clock) clearInterval(clock); });
         Health is unavailable for {{ unavailableInstances.map((w) => w.instanceLabel).join(', ') }} — those workflows are excluded from the reliability score, never counted as healthy.
       </div>
 
-      <!-- ── Governance score (the one composed computation) ─────────────── -->
+      <!-- ── Governance score ────────────────────────────────────────────── -->
       <div class="card score" data-testid="overview-score">
         <div class="score-hero">
-          <div class="score-num" :class="`t-${scoreTone(score?.score ?? null)}`">
-            {{ score?.score ?? '—' }}<span class="score-max">/100</span>
-          </div>
-          <div class="score-cap">
-            <strong>Governance score</strong>
-            <p class="muted small">A deterministic, explainable weighted average — every pillar shows what drove it. Not a black box.</p>
+          <div class="score-figure">
+            <div class="score-num" :class="`t-${scoreTone(score?.score ?? null)}`">
+              {{ score?.score ?? '—' }}<span class="score-max">/100</span>
+            </div>
+            <div class="score-cap">
+              <span class="score-band" :class="`band-${scoreTone(score?.score ?? null)}`">{{ scoreBand(score?.score ?? null) }}</span>
+              <span class="score-label">Governance score</span>
+              <InfoTip text="A deterministic, explainable weighted average of five pillars — not a black box. Each pillar shows what drove it; hover its ⓘ for why." />
+            </div>
           </div>
         </div>
         <ul class="pillars" data-testid="overview-score-breakdown">
           <li v-for="p in score?.pillars ?? []" :key="p.key" class="pillar">
             <div class="pillar-top">
               <span class="pillar-label">{{ p.label }}</span>
-              <span class="pillar-weight muted small">weight {{ weightPct(p) }}</span>
+              <InfoTip :text="p.reason" :label="`Why ${p.label} scored this`" />
+              <span class="pillar-weight muted small">{{ weightPct(p) }}</span>
               <span class="pillar-score" :class="`t-${scoreTone(p.scored ? p.score : null)}`">
                 {{ p.scored ? p.score : 'couldn’t score' }}
               </span>
             </div>
             <div class="bar"><div class="bar-fill" :class="`b-${scoreTone(p.scored ? p.score : null)}`" :style="{ width: p.scored ? pct(p.score) : '0%' }" /></div>
-            <p class="pillar-why muted small">{{ p.reason }}</p>
+            <p v-if="pillarValue(p)" class="pillar-value muted small" data-testid="pillar-value">{{ pillarValue(p) }}</p>
           </li>
         </ul>
       </div>
 
-      <div class="grid">
-        <!-- ── Unowned by criticality ───────────────────────────────────── -->
-        <section class="card fig" data-testid="overview-unowned">
-          <button class="fig-head" :aria-expanded="isOpen('unowned')" @click="toggle('unowned')">
-            <span class="fig-title">No assigned owner</span>
-            <span class="fig-count" :class="{ 'is-bad': o.unowned.total > 0 }">{{ o.unowned.total }}</span>
-          </button>
-          <p class="fig-why muted small">
-            Workflows with no <em>confirmed</em> owner — the accountability gap that drives the ownership score.
-            <template v-if="advisoryCovered > 0">Argus can <strong>suggest</strong> an owner for {{ advisoryCovered }} of them from n8n membership, but inference is a lead to confirm — not ownership. Assign a person to actually close the gap.</template>
-          </p>
-          <div class="chips">
-            <FactBadge v-if="o.unowned.byCriticality.critical" :label="`${o.unowned.byCriticality.critical} critical`" tone="danger" />
-            <FactBadge v-if="o.unowned.byCriticality.high" :label="`${o.unowned.byCriticality.high} high`" tone="warn" />
-            <FactBadge v-if="o.unowned.byCriticality.medium" :label="`${o.unowned.byCriticality.medium} medium`" tone="muted" />
-            <FactBadge v-if="o.unowned.byCriticality.low" :label="`${o.unowned.byCriticality.low} low`" tone="muted" />
-            <FactBadge v-if="o.unowned.byCriticality.none" :label="`${o.unowned.byCriticality.none} unlabeled`" tone="muted" />
-            <span v-if="o.unowned.total === 0" class="muted small">Every workflow has an answerable owner.</span>
-          </div>
-          <ul v-if="isOpen('unowned')" class="drill" data-testid="overview-unowned-drill">
-            <li v-for="w in o.unowned.workflows" :key="w.instanceId + '/' + w.workflowId">
-              <FactBadge :label="w.criticality ?? 'unlabeled'" :tone="critTone(w.criticality)" />
-              <span class="wf">{{ w.name }}</span>
-              <span class="inst muted"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span>
-              <span v-if="w.inferred?.status === 'inferred'" class="advisory" data-testid="overview-advisory">advisory: {{ w.inferred.owner?.name ?? w.inferred.owner?.email }}</span>
-            </li>
-          </ul>
-        </section>
-
-        <!-- ── Single-point-of-failure owners ───────────────────────────── -->
-        <section class="card fig" data-testid="overview-spof">
-          <button class="fig-head" :aria-expanded="isOpen('spof')" @click="toggle('spof')">
-            <span class="fig-title">Single-point-of-failure owners</span>
-            <span class="fig-count" :class="{ 'is-bad': o.spofOwners.length > 0 }">{{ o.spofOwners.length }}</span>
-          </button>
-          <p class="fig-why muted small">One person is the sole owner of several critical workflows (exact-email — cross-instance identity is a later slice).</p>
-          <ul v-if="isOpen('spof')" class="drill" data-testid="overview-spof-drill">
-            <li v-for="(g, i) in o.spofOwners" :key="i" class="spof">
-              <div class="spof-head">
-                <strong>{{ g.owner.name ?? g.owner.email }}</strong>
-                <FactBadge :label="`${g.workflows.length} critical`" tone="danger" />
-                <FactBadge v-if="g.crossInstance" label="across instances" tone="warn" />
-              </div>
-              <ul class="spof-wfs">
-                <li v-for="w in g.workflows" :key="w.instanceId + '/' + w.workflowId">
-                  <span class="wf">{{ w.name }}</span>
-                  <span class="inst muted"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span>
-                </li>
-              </ul>
-            </li>
-            <li v-if="o.spofOwners.length === 0" class="muted small">No single-owner critical clusters.</li>
-          </ul>
-        </section>
-
-        <!-- ── Failing-with-owner incidents ─────────────────────────────── -->
-        <section class="card fig" data-testid="overview-incidents">
-          <button class="fig-head" :aria-expanded="isOpen('incidents')" @click="toggle('incidents')">
-            <span class="fig-title">Failing / degraded with a confirmed owner</span>
-            <span class="fig-count" :class="{ 'is-bad': o.failingWithOwner.count > 0 }">{{ o.failingWithOwner.count }}</span>
-          </button>
-          <p class="fig-why muted small">
-            The actionable incidents — a failing workflow and a real person to page.
-            <template v-if="totalUnhealthy > 0">{{ totalUnhealthy }} failing/degraded in all; <strong>{{ totalUnhealthy - o.failingWithOwner.count }}</strong> have no confirmed owner to escalate to.</template>
-            <router-link to="/estate/health">Open Health →</router-link>
-          </p>
-          <ul v-if="isOpen('incidents')" class="drill" data-testid="overview-incidents-drill">
-            <li v-for="w in o.failingWithOwner.workflows" :key="w.instanceId + '/' + w.id">
-              <FactBadge v-if="w.enrichment?.criticality" :label="w.enrichment.criticality" :tone="critTone(w.enrichment.criticality)" />
-              <span class="wf">{{ w.name }}</span>
-              <span class="inst muted"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span>
-              <span v-if="w.health" class="rate" data-testid="overview-incident-rate">{{ Math.round((w.health.failureRate ?? 0) * 100) }}% failing</span>
-              <span class="muted small">owner: {{ w.owner?.owner?.name ?? w.owner?.owner?.email }}</span>
-            </li>
-            <li v-if="o.failingWithOwner.count === 0" class="muted small">No owned workflow is failing.</li>
-          </ul>
-        </section>
-
-        <!-- ── Hygiene ──────────────────────────────────────────────────── -->
-        <section class="card fig" data-testid="overview-hygiene">
-          <div class="fig-head static"><span class="fig-title">Hygiene</span></div>
-          <ul class="subfigs">
-            <li>
-              <button class="subfig" :aria-expanded="isOpen('broken')" @click="toggle('broken')">
-                <span>Broken references</span><span class="fig-count" :class="{ 'is-bad': o.hygiene.brokenRefs.count > 0 }">{{ o.hygiene.brokenRefs.count }}</span>
-              </button>
-              <ul v-if="isOpen('broken')" class="drill">
-                <li v-for="w in o.hygiene.brokenRefs.workflows" :key="w.instanceId + '/' + w.id"><span class="wf">{{ w.name }}</span><span class="inst muted">{{ w.instanceLabel }}</span></li>
-              </ul>
-            </li>
-            <li>
-              <button class="subfig" :aria-expanded="isOpen('stale')" @click="toggle('stale')">
-                <span>Stale analysis</span><span class="fig-count" :class="{ 'is-bad': o.hygiene.staleEnrichment.count > 0 }">{{ o.hygiene.staleEnrichment.count }}</span>
-              </button>
-              <ul v-if="isOpen('stale')" class="drill">
-                <li v-for="w in o.hygiene.staleEnrichment.workflows" :key="w.instanceId + '/' + w.id"><span class="wf">{{ w.name }}</span><span class="inst muted">{{ w.instanceLabel }}</span></li>
-              </ul>
-            </li>
-            <li>
-              <button class="subfig" :aria-expanded="isOpen('noexec')" @click="toggle('noexec')">
-                <span>Active, no executions</span><span class="fig-count" :class="{ 'is-bad': o.hygiene.activeNoExecutions.count > 0 }">{{ o.hygiene.activeNoExecutions.count }}</span>
-              </button>
-              <ul v-if="isOpen('noexec')" class="drill">
-                <li v-for="w in o.hygiene.activeNoExecutions.workflows" :key="w.instanceId + '/' + w.id"><span class="wf">{{ w.name }}</span><span class="inst muted">{{ w.instanceLabel }}</span></li>
-              </ul>
-            </li>
-          </ul>
-        </section>
-
-        <!-- ── MCP exposure surface ─────────────────────────────────────── -->
-        <section class="card fig" data-testid="overview-exposure">
-          <button class="fig-head" :aria-expanded="isOpen('exposure')" @click="toggle('exposure')">
-            <span class="fig-title">MCP exposure surface</span>
-            <span class="fig-count" :class="{ 'is-bad': o.exposure.reachingSensitive > 0 }">{{ o.exposure.mcpExposed }}</span>
-          </button>
-          <p class="fig-why muted small">
-            {{ o.exposure.reachingSensitive }} reach a sensitive system ({{ o.exposure.reachingSensitiveUnowned }} unowned).
-            <span data-testid="overview-possible-note">Confirmed reach only — inferred edges excluded.</span>
-            <router-link to="/graph">Open Graph →</router-link>
-          </p>
-          <ul v-if="isOpen('exposure')" class="drill" data-testid="overview-exposure-drill">
-            <li v-for="s in o.exposure.surfaces" :key="s.instanceId + '/' + s.workflowId">
-              <FactBadge v-if="s.reachesSensitive" label="sensitive" tone="danger" />
-              <span class="wf">{{ s.name }}</span>
-              <span class="inst muted"><span class="dot" :style="{ background: instanceColor(s.instanceId) }" />{{ s.instanceLabel }}</span>
-              <FactBadge v-if="!s.owned" label="unowned" tone="warn" />
-              <span v-if="s.sensitiveSystems.length" class="muted small">→ {{ s.sensitiveSystems.join(', ') }}</span>
-            </li>
-            <li v-if="o.exposure.mcpExposed === 0" class="muted small">No MCP-exposed workflows — no external exposure surface.</li>
-          </ul>
-        </section>
-
-        <!-- ── Personal-space-critical ──────────────────────────────────── -->
-        <section class="card fig" data-testid="overview-personal-space">
-          <button class="fig-head" :aria-expanded="isOpen('personal')" @click="toggle('personal')">
-            <span class="fig-title">Critical work in personal space</span>
-            <span class="fig-count" :class="{ 'is-bad': o.personalSpaceCritical.length > 0 }">{{ o.personalSpaceCritical.length }}</span>
-          </button>
-          <p class="fig-why muted small">Business-critical workflows in a personal project, not a shared team project.</p>
-          <ul v-if="isOpen('personal')" class="drill" data-testid="overview-personal-space-drill">
-            <li v-for="w in o.personalSpaceCritical" :key="w.instanceId + '/' + w.workflowId">
-              <FactBadge :label="w.criticality ?? 'critical'" :tone="critTone(w.criticality)" />
-              <span class="wf">{{ w.name }}</span>
-              <span class="inst muted"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span>
-              <span v-if="w.person" class="muted small">{{ w.person.name ?? w.person.email }}’s space</span>
-            </li>
-            <li v-if="o.personalSpaceCritical.length === 0" class="muted small">None.</li>
-          </ul>
-        </section>
+      <!-- ── Metric tiles: every number leads to its exact set (one shared tile) ── -->
+      <div class="group">
+        <p class="group-h">Accountability</p>
+        <div class="tiles">
+          <OverviewTile v-for="t in accountabilityTiles" :key="t.key" :tile="t" />
+        </div>
       </div>
 
-      <!-- ── Changelog / audit timeline ─────────────────────────────────── -->
-      <section class="card fig" data-testid="overview-changelog">
-        <div class="fig-head static">
-          <span class="fig-title">Recent changes</span>
-          <router-link class="muted small" to="/activity">Full audit timeline →</router-link>
+      <div class="group">
+        <p class="group-h">Operations and exposure</p>
+        <div class="tiles">
+          <OverviewTile v-for="t in operationsTiles" :key="t.key" :tile="t" />
         </div>
-        <p class="fig-why muted small">The latest governance actions Argus has recorded — append-only, tamper-evident.</p>
+      </div>
+
+      <!-- ── Recent activity (a pulse; the full log lives in Activity) ────── -->
+      <section class="card changelog-card" data-testid="overview-changelog">
+        <div class="cl-head">
+          <span class="cl-title">Recent activity</span>
+          <router-link class="cl-link small" to="/activity">View all →</router-link>
+        </div>
         <ul class="changelog">
-          <li v-for="e in o.changelog" :key="e.id">
+          <li v-for="e in o.changelog.slice(0, 6)" :key="e.id">
             <span class="c-when muted small" :title="e.ts">{{ relativeTime(e.ts, now) }}</span>
             <span class="mono small">{{ e.action }}</span>
             <span class="muted small">{{ e.actorName }}</span>
@@ -285,7 +242,7 @@ onUnmounted(() => { if (clock) clearInterval(clock); });
 .ov { display: flex; flex-direction: column; gap: var(--spacing--md); }
 .head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--spacing--md); flex-wrap: wrap; }
 h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight--bold); }
-.sub { margin: var(--spacing--5xs) 0 0; font-size: var(--font-size--sm); max-width: 46rem; }
+.sub { margin: var(--spacing--5xs) 0 0; font-size: var(--font-size--sm); }
 .actions { display: flex; gap: var(--spacing--2xs); flex-wrap: wrap; }
 .actions a { text-decoration: none; }
 .small { font-size: var(--font-size--2xs); }
@@ -297,85 +254,65 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
   color: var(--color--danger); font-size: var(--font-size--2xs);
 }
 
-/* Score hero */
+/* ── Score panel ── */
 .score { display: flex; flex-direction: column; gap: var(--spacing--md); }
 .score-hero { display: flex; align-items: center; gap: var(--spacing--md); flex-wrap: wrap; }
-.score-num { font-size: 3.5rem; font-weight: var(--font-weight--bold); line-height: 1; font-variant-numeric: tabular-nums; }
+.score-figure { display: flex; align-items: center; gap: var(--spacing--sm); flex-wrap: wrap; }
+.score-num { font-size: 3.25rem; font-weight: var(--font-weight--bold); line-height: 1; font-variant-numeric: tabular-nums; }
 .score-max { font-size: var(--font-size--md); font-weight: var(--font-weight--medium); opacity: 0.5; }
-.score-cap strong { font-size: var(--font-size--md); }
-.score-cap p { margin: var(--spacing--5xs) 0 0; max-width: 34rem; }
+.score-cap { display: flex; align-items: center; gap: var(--spacing--2xs); flex-wrap: wrap; }
+.score-band { font-size: var(--font-size--2xs); font-weight: var(--font-weight--bold); padding: var(--spacing--5xs) var(--spacing--2xs); border-radius: var(--radius--md); }
+.band-ok { color: var(--color--success); background: var(--background--success, var(--background--subtle)); }
+.band-warn { color: var(--color--warning); background: var(--background--warning, var(--background--subtle)); }
+.band-danger { color: var(--color--danger); background: var(--background--danger, var(--background--subtle)); }
+.band-muted { color: var(--color--text--shade-1); background: var(--background--subtle); }
+.score-label { font-size: var(--font-size--sm); font-weight: var(--font-weight--medium); }
 
 .pillars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing--sm); }
 .pillar { display: flex; flex-direction: column; gap: var(--spacing--5xs); }
-.pillar-top { display: flex; align-items: baseline; gap: var(--spacing--2xs); }
+.pillar-top { display: flex; align-items: center; gap: var(--spacing--2xs); }
 .pillar-label { font-weight: var(--font-weight--medium); font-size: var(--font-size--sm); }
 .pillar-weight { margin-left: auto; }
 .pillar-score { font-variant-numeric: tabular-nums; font-weight: var(--font-weight--bold); font-size: var(--font-size--sm); min-width: 3rem; text-align: right; }
-.pillar-why { margin: 0; }
-/* Track uses a visible neutral (the card bg is already --background--subtle, so the
-   old subtle track was invisible — the fill read as a floating underline). */
 .bar { height: 0.5rem; border-radius: var(--radius--full); background: var(--border-color); overflow: hidden; }
 .bar-fill { height: 100%; border-radius: var(--radius--full); transition: width var(--duration--slow, 0.3s) var(--easing--ease-out, ease); }
+.pillar-value { margin: var(--spacing--5xs) 0 0; font-variant-numeric: tabular-nums; }
 
-/* Semantic tones — tokens only, so both themes come for free. */
+/* Semantic tones — tokens only. */
 .t-ok { color: var(--color--success); }
 .t-warn { color: var(--color--warning); }
 .t-danger { color: var(--color--danger); }
-.t-muted { color: var(--color--text--shade-1); opacity: 0.6; }
+.t-muted { color: var(--color--text--shade-1); opacity: 0.55; }
 .b-ok { background: var(--color--success); }
 .b-warn { background: var(--color--warning); }
 .b-danger { background: var(--color--danger); }
 .b-muted { background: var(--border-color--strong, var(--border-color)); }
 
-/* Figure grid */
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); gap: var(--spacing--md); }
-.fig { display: flex; flex-direction: column; gap: var(--spacing--2xs); }
-.fig-head {
-  appearance: none; background: none; border: 0; font: inherit; color: inherit; cursor: pointer;
-  display: flex; align-items: center; gap: var(--spacing--sm); width: 100%; text-align: left; padding: 0;
+/* ── Metric tile grid ── */
+.group { display: flex; flex-direction: column; gap: var(--spacing--2xs); }
+.group-h {
+  margin: 0 0 0 var(--spacing--5xs); font-size: var(--font-size--3xs); font-weight: var(--font-weight--bold);
+  text-transform: uppercase; letter-spacing: var(--letter-spacing--wide);
+  color: var(--color--text--shade-1); opacity: 0.5;
 }
-.fig-head.static { cursor: default; }
-.fig-title { font-size: var(--font-size--md); font-weight: var(--font-weight--bold); }
-.fig-count { margin-left: auto; font-size: var(--font-size--lg); font-weight: var(--font-weight--bold); font-variant-numeric: tabular-nums; opacity: 0.7; }
-.fig-count.is-bad { color: var(--color--danger); opacity: 1; }
-.fig-why { margin: 0; }
-.fig-why a, .fig-head a { color: var(--background--brand); text-decoration: none; }
-.chips { display: flex; gap: var(--spacing--4xs); flex-wrap: wrap; }
+/* Tiles are a shared component (OverviewTile.vue); this just lays out the grid. */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: var(--spacing--sm); }
 
-.subfigs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing--4xs); }
-.subfig {
-  appearance: none; background: none; border: 0; font: inherit; color: inherit; cursor: pointer;
-  display: flex; align-items: center; justify-content: space-between; gap: var(--spacing--sm); width: 100%; text-align: left;
-  padding: var(--spacing--4xs) 0; font-size: var(--font-size--sm);
-}
-.subfig .fig-count { font-size: var(--font-size--sm); }
-
-.drill { list-style: none; margin: var(--spacing--3xs) 0 0; padding: var(--spacing--2xs) 0 0; border-top: 1px solid var(--border-color--subtle); display: flex; flex-direction: column; gap: var(--spacing--4xs); }
-.drill > li { display: flex; align-items: center; gap: var(--spacing--2xs); flex-wrap: wrap; font-size: var(--font-size--2xs); }
-.wf { font-weight: var(--font-weight--medium); font-size: var(--font-size--sm); }
-.inst { display: inline-flex; align-items: center; gap: var(--spacing--4xs); white-space: nowrap; }
-.dot { width: 0.5rem; height: 0.5rem; border-radius: var(--radius--full); flex: none; }
-.advisory, .rate { font-size: var(--font-size--3xs); padding: 0 var(--spacing--4xs); border-radius: var(--radius--2xs); background: var(--background--subtle); color: var(--color--text--shade-1); opacity: 0.8; }
-.rate { color: var(--color--danger); opacity: 1; }
-
-.spof { flex-direction: column; align-items: stretch; gap: var(--spacing--4xs); width: 100%; }
-.spof-head { display: flex; align-items: center; gap: var(--spacing--2xs); flex-wrap: wrap; }
-.spof-wfs { list-style: none; margin: 0; padding: 0 0 0 var(--spacing--sm); display: flex; flex-direction: column; gap: var(--spacing--5xs); }
-.spof-wfs li { display: flex; gap: var(--spacing--sm); align-items: center; flex-wrap: wrap; }
-
+/* ── Recent activity ── */
+.changelog-card { display: flex; flex-direction: column; gap: var(--spacing--2xs); }
+.cl-head { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing--sm); }
+.cl-title { font-size: var(--font-size--md); font-weight: var(--font-weight--bold); }
+.cl-link { color: var(--background--brand); text-decoration: none; }
 .changelog { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing--4xs); }
 .changelog li { display: flex; gap: var(--spacing--sm); align-items: baseline; flex-wrap: wrap; }
 .c-when { white-space: nowrap; min-width: 4.5rem; }
-/* Entity id can be a long uuid — keep it in flow right after the actor (no dead gap
-   to the panel edge) and truncate; full value on hover. */
 .c-entity { max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .pad { padding: var(--spacing--md); }
 .err { color: var(--color--danger); }
 
 @media (max-width: 640px) {
-  .grid { grid-template-columns: 1fr; }
+  .tiles { grid-template-columns: 1fr; }
   .score-num { font-size: 2.75rem; }
-  .c-entity { margin-left: 0; }
 }
 </style>

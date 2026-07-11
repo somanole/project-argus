@@ -156,6 +156,7 @@ function parseFilters(query: Record<string, unknown>): WorkflowFilters {
     archived: parseBool(query.archived),
     mcp: parseBool(query.mcp) === true ? true : undefined,
     broken: parseBool(query.broken) === true ? true : undefined,
+    stale: parseBool(query.stale) === true ? true : undefined,
     systems: parseList(query.system),
     triggers: parseList(query.trigger),
     criticality: parseList(query.criticality),

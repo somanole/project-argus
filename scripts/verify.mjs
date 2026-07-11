@@ -203,9 +203,9 @@ try {
   add('Catalog surfaces a failing sync (rejected key ≠ healthy pill)', surfacesFailure,
     surfacesFailure ? 'failing-state pill ships' : 'failing-state pill MISSING');
 
-  const filters = ['filter-search', 'filter-state', 'filter-mcp', 'filter-broken', 'filter-instance', 'filter-system', 'filter-criticality', 'filter-trigger'];
+  const filters = ['filter-search', 'filter-state', 'filter-mcp', 'filter-broken', 'filter-stale', 'filter-instance', 'filter-system', 'filter-criticality', 'filter-trigger'];
   const fmissing = missing(filters);
-  add('Catalog shows all filter controls (search/state/MCP/broken/instance/system/criticality/trigger)', fmissing.length === 0,
+  add('Catalog shows all filter controls (search/state/MCP/broken/stale/instance/system/criticality/trigger)', fmissing.length === 0,
     fmissing.length === 0 ? `${filters.length} filter controls present` : `MISSING: ${fmissing.join(', ')}`);
 
   add('Connections screen shows the connection-health indicator', has('connection-health'),
@@ -271,13 +271,15 @@ try {
   // figure (unowned/SPOF/incidents/hygiene/exposure/personal-space/changelog), the export
   // control, and the uncertainty labels (advisory owner, health-unavailable, possible
   // excluded). Each has a component test (OverviewView.test.ts); presence counterpart.
+  // Each metric tile navigates to its exact set (no inline drill); the longer prose +
+  // uncertainty caveats (advisory owner, confirmed-reach-only) live in ⓘ tooltips.
   const overviewUi = [
-    'overview-view', 'overview-score', 'overview-score-breakdown', 'overview-unowned', 'overview-spof',
-    'overview-incidents', 'overview-hygiene', 'overview-exposure', 'overview-personal-space',
-    'overview-changelog', 'overview-export', 'overview-health-unavailable', 'overview-possible-note', 'overview-advisory',
+    'overview-view', 'overview-score', 'overview-score-breakdown', 'pillar-value', 'overview-unowned', 'overview-spof',
+    'overview-incidents', 'overview-broken', 'overview-stale', 'overview-idle-active', 'overview-exposure', 'overview-personal-space',
+    'overview-changelog', 'overview-export', 'overview-health-unavailable', 'infotip',
   ];
   const ovMissing = missing(overviewUi);
-  add('Governance overview UI ships (score+pillars, every figure, export, uncertainty labels)', ovMissing.length === 0,
+  add('Governance overview UI ships (score+pillars, metric tiles → their page, export, tooltips)', ovMissing.length === 0,
     ovMissing.length === 0 ? `${overviewUi.length} overview UI elements present` : `MISSING: ${ovMissing.join(', ')}`);
 
   // S7: chat chrome — the chat view, message list + composer, streaming indicator,
@@ -1670,7 +1672,8 @@ async function s6Checks() {
       inRange && explained,
       `score ${s.score}; pillars ${s.pillars?.map((p) => `${p.label}=${p.scored ? p.score : 'n/a'}`).join(', ')}`);
 
-    // 4. Every headline figure drills to its exact workflow set (count == list length).
+    // 4. Every headline tile's count equals its EXACT workflow set — the composition
+    //    guarantee that makes each tile's deep-link honest (the number leads to that set).
     const drills = [
       ['unowned', ov.unowned.total, ov.unowned.workflows.length],
       ['failing-with-owner', ov.failingWithOwner.count, ov.failingWithOwner.workflows.length],
@@ -1679,8 +1682,22 @@ async function s6Checks() {
       ['mcp-exposed', ov.exposure.mcpExposed, ov.exposure.surfaces.length],
     ];
     const mismatched = drills.filter(([, count, len]) => count !== len);
-    add('Every overview figure drills to its exact workflows (count == list)', mismatched.length === 0,
-      mismatched.length === 0 ? `${drills.length} figures drill exactly` : `MISMATCH: ${mismatched.map(([n, c, l]) => `${n} ${c}≠${l}`).join(', ')}`);
+    add('Every overview tile count == its exact workflow set (deep-links stay honest)', mismatched.length === 0,
+      mismatched.length === 0 ? `${drills.length} tiles match their set exactly` : `MISMATCH: ${mismatched.map(([n, c, l]) => `${n} ${c}≠${l}`).join(', ')}`);
+
+    // 4b. The Estate deep-links each land on EXACTLY the tile's set — the catalog filters
+    //     the hygiene/idle tiles point at (?broken / ?stale / ?health=idle&active=true).
+    const brokenList = (await argus('/api/workflows?broken=true')).json ?? {};
+    const staleList = (await argus('/api/workflows?stale=true')).json ?? {};
+    const idleActiveList = (await argus('/api/workflows?health=idle&active=true')).json ?? {};
+    const linkChecks = [
+      ['broken', brokenList.workflows?.length, ov.hygiene.brokenRefs.count],
+      ['stale', staleList.workflows?.length, ov.hygiene.staleEnrichment.count],
+      ['idle-active', idleActiveList.workflows?.length, ov.hygiene.activeNoExecutions.count],
+    ];
+    const linkBad = linkChecks.filter(([, got, want]) => got !== want);
+    add('Overview tiles deep-link to their exact Estate set (broken / stale / idle-active filters)', linkBad.length === 0,
+      linkBad.length === 0 ? linkChecks.map(([n, got]) => `${n}=${got}`).join(', ') : `MISMATCH: ${linkBad.map(([n, g, w]) => `${n} ${g}≠${w}`).join(', ')}`);
 
     // 5. The export is a structured, readable report that matches the screen.
     const rep = await argus('/api/governance/export');

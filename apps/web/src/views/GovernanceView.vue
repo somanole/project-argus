@@ -3,7 +3,8 @@
 // assignment happens in the workflow drawer. Honest states only (rule 5): empty gaps
 // read as "nothing here", errors show a reason. (The Argus self-audit timeline lives
 // in its own Activity view.)
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useOwnershipStore } from '../stores/ownership';
 import type { Criticality, GapWorkflow } from '@argus/shared';
@@ -12,6 +13,7 @@ import { instanceColor } from '../lib/instanceColor';
 
 const store = useOwnershipStore();
 const { gaps, gapsState, gapsError } = storeToRefs(store);
+const route = useRoute();
 
 const CRIT_TONE: Record<Criticality, 'danger' | 'warn' | 'muted' | 'faint'> = { critical: 'danger', high: 'warn', medium: 'muted', low: 'faint' };
 const critTone = (c: Criticality | null): 'danger' | 'warn' | 'muted' | 'faint' => (c ? CRIT_TONE[c] : 'muted');
@@ -34,8 +36,17 @@ async function refresh(): Promise<void> {
   await store.refreshGaps();
 }
 
+/** Deep-link support: scroll to the gap section named in the URL hash (e.g. #gap-unowned). */
+async function scrollToHash(): Promise<void> {
+  const id = (route?.hash ?? '').replace(/^#/, '');
+  if (!id) return;
+  await nextTick();
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 onMounted(async () => {
   await refresh();
+  await scrollToHash();
 });
 </script>
 
@@ -56,7 +67,7 @@ onMounted(async () => {
 
       <template v-else>
         <!-- What has no owner -->
-        <section v-if="unowned.length" class="gap" data-testid="gap-unowned">
+        <section v-if="unowned.length" id="gap-unowned" class="gap" data-testid="gap-unowned">
           <h2 class="gap-title">What has no owner <span class="count">{{ unowned.length }}</span></h2>
           <p class="gap-why muted">Workflows with no assigned owner — critical first. Assign one from the workflow drawer.</p>
           <ul class="rows">
@@ -78,7 +89,7 @@ onMounted(async () => {
         </section>
 
         <!-- Single-owner-critical (cross-instance SPOF) -->
-        <section v-if="singleOwner.length" class="gap" data-testid="gap-single-owner">
+        <section v-if="singleOwner.length" id="gap-single-owner" class="gap" data-testid="gap-single-owner">
           <h2 class="gap-title">Single owner of multiple criticals <span class="count">{{ singleOwner.length }}</span></h2>
           <p class="gap-why muted">One person is the sole owner of several critical workflows — a single point of failure.</p>
           <ul class="rows">
@@ -100,7 +111,7 @@ onMounted(async () => {
         </section>
 
         <!-- Personal-space-critical -->
-        <section v-if="personalSpace.length" class="gap" data-testid="gap-personal-space">
+        <section v-if="personalSpace.length" id="gap-personal-space" class="gap" data-testid="gap-personal-space">
           <h2 class="gap-title">Critical work in a personal space <span class="count">{{ personalSpace.length }}</span></h2>
           <p class="gap-why muted">Business-critical workflows living in someone’s personal project, not a shared team project.</p>
           <ul class="rows">

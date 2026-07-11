@@ -37,6 +37,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
   const triggers = ref<string[]>([]);
   const mcpOnly = ref<boolean>(false);
   const brokenOnly = ref<boolean>(false);
+  const staleOnly = ref<boolean>(false);
   const criticality = ref<string[]>([]);
   const health = ref<string[]>([]);
   const stateFilter = ref<StateFilter>('all');
@@ -51,6 +52,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
       health.value.length +
       (mcpOnly.value ? 1 : 0) +
       (brokenOnly.value ? 1 : 0) +
+      (staleOnly.value ? 1 : 0) +
       (stateFilter.value !== 'all' ? 1 : 0) +
       (q.value.trim() ? 1 : 0),
   );
@@ -69,6 +71,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     for (const h of health.value) p.append('health', h);
     if (mcpOnly.value) p.set('mcp', 'true');
     if (brokenOnly.value) p.set('broken', 'true');
+    if (staleOnly.value) p.set('stale', 'true');
     if (stateFilter.value === 'active') p.set('active', 'true');
     if (stateFilter.value === 'archived') p.set('archived', 'true');
     const query = q.value.trim();
@@ -129,6 +132,10 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     brokenOnly.value = v;
     void refresh();
   };
+  const setStaleOnly = (v: boolean) => {
+    staleOnly.value = v;
+    void refresh();
+  };
   const setStateFilter = (v: StateFilter) => {
     stateFilter.value = v;
     void refresh();
@@ -142,7 +149,9 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     q.value = v;
     void refresh();
   };
-  const clearFilters = () => {
+  // Reset every filter to its default WITHOUT re-querying — the shared body of both the
+  // "Clear filters" action and the deep-link apply (which refreshes once, itself).
+  const resetFilters = () => {
     instanceId.value = 'all';
     systems.value = [];
     triggers.value = [];
@@ -150,9 +159,38 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     health.value = [];
     mcpOnly.value = false;
     brokenOnly.value = false;
+    staleOnly.value = false;
     stateFilter.value = 'all';
     q.value = '';
+  };
+  const clearFilters = () => {
+    resetFilters();
     void refresh();
+  };
+
+  /**
+   * Set filters from a URL query (deep-links, e.g. the Overview tiles). AUTHORITATIVE:
+   * the URL fully determines the filter state, so we reset to a clean slate first and
+   * then apply only the query's keys — a deep-link lands on EXACTLY its set and never
+   * inherits a previous link's filters (successive tiles don't accumulate). Does NOT
+   * refresh (the caller refreshes once). Unknown keys are ignored.
+   */
+  const applyFromQuery = (query: Record<string, unknown>): void => {
+    const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
+    const list = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : str(v) ? [str(v) as string] : []);
+    const bool = (v: unknown): boolean => str(v) === 'true' || str(v) === '1';
+    resetFilters();
+    if (str(query.instanceId)) instanceId.value = str(query.instanceId) as string;
+    if (query.system !== undefined) systems.value = list(query.system);
+    if (query.trigger !== undefined) triggers.value = list(query.trigger);
+    if (query.criticality !== undefined) criticality.value = list(query.criticality);
+    if (query.health !== undefined) health.value = list(query.health);
+    if (query.mcp !== undefined) mcpOnly.value = bool(query.mcp);
+    if (query.broken !== undefined) brokenOnly.value = bool(query.broken);
+    if (query.stale !== undefined) staleOnly.value = bool(query.stale);
+    if (query.active !== undefined && bool(query.active)) stateFilter.value = 'active';
+    else if (query.archived !== undefined && bool(query.archived)) stateFilter.value = 'archived';
+    if (str(query.q)) q.value = str(query.q) as string;
   };
 
   return {
@@ -170,11 +208,13 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     health,
     mcpOnly,
     brokenOnly,
+    staleOnly,
     stateFilter,
     q,
     activeFilterCount,
     triggerLabels,
     refresh,
+    applyFromQuery,
     refreshCoverage,
     refreshEnrichmentProgress,
     setInstance,
@@ -184,6 +224,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     toggleHealth,
     setMcpOnly,
     setBrokenOnly,
+    setStaleOnly,
     setStateFilter,
     setQuery,
     clearFilters,

@@ -4,9 +4,10 @@ import { createPinia, setActivePinia } from 'pinia';
 import OverviewView from './OverviewView.vue';
 
 /**
- * Rule-11 UI-presence for the S6 governance overview: the score + pillar breakdown,
- * every headline figure, the drill-down, and the uncertainty labels (advisory owner,
- * health-unavailable, possible-excluded) all render — nothing laundered.
+ * Rule-11 UI-presence for the S6 governance overview: the score + pillar breakdown and
+ * every headline metric tile render, each tile NAVIGATES to its exact set (no inline
+ * drill), and the uncertainty caveats (advisory owner, health-unavailable, confirmed-
+ * reach-only) are preserved in the tooltips — nothing laundered.
  */
 const listItem = (over: Record<string, unknown>) => ({
   instanceId: 'a', instanceLabel: 'prod', id: 'w1', name: 'Daily Stripe Reconciliation',
@@ -19,16 +20,16 @@ const listItem = (over: Record<string, unknown>) => ({
   ...over,
 });
 
-const pillar = (key: string, label: string, score: number | null) => ({
+const pillar = (key: string, label: string, score: number | null, inputs: Record<string, number> = { total: 3 }) => ({
   key, label, weight: 0.2, effectiveWeight: score == null ? 0 : 0.25, score, scored: score != null,
-  reason: `${label} reason`, inputs: { total: 3 },
+  reason: `${label} reason`, inputs,
 });
 
 const overviewBody = {
   score: {
     score: 62.5,
     pillars: [
-      pillar('ownership', 'Ownership', 70),
+      pillar('ownership', 'Ownership', 70, { total: 201, assigned: 2, unowned: 199, criticalUnowned: 2 }),
       pillar('reliability', 'Reliability', null), // one unscored — "couldn't score" must render
       pillar('resilience', 'Accountability resilience', 55),
       pillar('hygiene', 'Hygiene', 90),
@@ -94,66 +95,71 @@ describe('Governance overview — UI-presence (rule 11)', () => {
   beforeEach(() => setActivePinia(createPinia()));
   afterEach(() => vi.unstubAllGlobals());
 
-  it('renders the score, five-pillar breakdown, and every headline figure', async () => {
+  it('renders the score, five-pillar breakdown, and every headline tile', async () => {
     stubFetch();
     const w = mountView();
     await flushPromises();
     const tid = (id: string) => w.find(`[data-testid="${id}"]`);
 
     expect(tid('overview-view').exists()).toBe(true);
-    // Score + breakdown.
+    // Score + breakdown + band.
     expect(tid('overview-score').text()).toContain('62.5');
+    expect(tid('overview-score').text()).toContain('Fair'); // 62.5 → Fair band
     expect(tid('overview-score-breakdown').exists()).toBe(true);
     expect(tid('overview-score-breakdown').text()).toContain('Ownership');
     // An unscored pillar shows "couldn't score", never a fabricated number.
     expect(tid('overview-score-breakdown').text()).toContain('couldn’t score');
+    // The pillar's headline VALUE is surfaced inline (from inputs), not just hidden in the ⓘ.
+    expect(tid('overview-score-breakdown').text()).toContain('199 of 201 unowned');
+    // The unscored pillar surfaces no value line (no fabricated figure).
+    expect(w.findAll('[data-testid="pillar-value"]').length).toBe(4); // 4 of 5 pillars scored
 
-    // Every headline figure renders.
-    for (const id of ['overview-unowned', 'overview-spof', 'overview-incidents', 'overview-hygiene', 'overview-exposure', 'overview-personal-space', 'overview-changelog', 'overview-export']) {
+    // Every headline tile renders (hygiene is now three peer tiles: broken/stale/idle-active).
+    for (const id of ['overview-unowned', 'overview-spof', 'overview-incidents', 'overview-broken', 'overview-stale', 'overview-idle-active', 'overview-exposure', 'overview-personal-space', 'overview-changelog', 'overview-export']) {
       expect(tid(id).exists()).toBe(true);
     }
-    // Unowned decomposed by criticality.
+    // Unowned tile shows its criticality context + count.
     expect(tid('overview-unowned').text()).toContain('1 critical');
-    // Incident card frames confirmed-owner incidents (inferred owners don't count).
-    expect(tid('overview-incidents').text()).toContain('confirmed owner');
+    expect(tid('overview-unowned').text()).toContain('2');
 
-    // "Full audit timeline →" points at the Activity view (not the old ownership page).
+    // "View all →" points at the Activity view (not the old ownership page).
     const auditLink = tid('overview-changelog').findComponent(RouterLinkStub);
     expect(auditLink.props('to')).toBe('/activity');
     w.unmount();
   });
 
-  it('drills every figure to its exact workflows on click (count matches the list)', async () => {
+  it('every tile navigates to its exact set (no inline drill)', async () => {
     stubFetch();
     const w = mountView();
     await flushPromises();
+    const linkTo = (id: string) => w.find(`[data-testid="${id}"]`).findComponent(RouterLinkStub).props('to');
 
-    // Unowned: count 2 → drilled list has 2 rows.
-    await w.find('[data-testid="overview-unowned"] .fig-head').trigger('click');
-    await flushPromises();
-    expect(w.findAll('[data-testid="overview-unowned-drill"] > li')).toHaveLength(2);
-    expect(w.find('[data-testid="overview-unowned-drill"]').text()).toContain('Unowned Critical');
+    // Accountability tiles deep-link to the matching Ownership gap section.
+    expect(linkTo('overview-unowned')).toEqual({ path: '/estate/ownership', hash: '#gap-unowned' });
+    expect(linkTo('overview-spof')).toEqual({ path: '/estate/ownership', hash: '#gap-single-owner' });
+    expect(linkTo('overview-personal-space')).toEqual({ path: '/estate/ownership', hash: '#gap-personal-space' });
+    // Operations tiles deep-link to Health / filtered Estate / Graph.
+    expect(linkTo('overview-incidents')).toBe('/estate/health');
+    expect(linkTo('overview-broken')).toEqual({ path: '/estate', query: { broken: 'true' } });
+    expect(linkTo('overview-stale')).toEqual({ path: '/estate', query: { stale: 'true' } });
+    expect(linkTo('overview-idle-active')).toEqual({ path: '/estate', query: { health: 'idle', active: 'true' } });
+    expect(linkTo('overview-exposure')).toEqual({ path: '/estate', query: { mcp: 'true' } });
 
-    // Incidents: count 1 → 1 row, with the failure rate.
-    await w.find('[data-testid="overview-incidents"] .fig-head').trigger('click');
-    await flushPromises();
-    expect(w.findAll('[data-testid="overview-incidents-drill"] > li')).toHaveLength(1);
-    expect(w.find('[data-testid="overview-incident-rate"]').text()).toContain('75% failing');
+    // No inline drill anywhere anymore.
+    expect(w.find('[data-testid="overview-unowned-drill"]').exists()).toBe(false);
     w.unmount();
   });
 
-  it('preserves uncertainty on-screen: advisory owner, health-unavailable, possible-excluded', async () => {
+  it('preserves uncertainty in the tooltips: advisory owner, health-unavailable, confirmed-reach-only', async () => {
     stubFetch();
     const w = mountView();
     await flushPromises();
     // Health unavailable banner (staging) — never laundered into "healthy".
     expect(w.find('[data-testid="overview-health-unavailable"]').text()).toContain('staging');
-    // Possible-excluded note in exposure.
-    expect(w.find('[data-testid="overview-possible-note"]').text()).toContain('Confirmed reach only');
-    // Advisory inferred-owner label in the unowned drill.
-    await w.find('[data-testid="overview-unowned"] .fig-head').trigger('click');
-    await flushPromises();
-    expect(w.find('[data-testid="overview-advisory"]').text()).toContain('Lee');
+    // Confirmed-reach-only caveat lives in the exposure tile's tooltip.
+    expect(w.find('[data-testid="overview-exposure"]').text()).toContain('Confirmed reach only');
+    // Advisory inferred-owner caveat lives in the unowned tile's tooltip (1 covered).
+    expect(w.find('[data-testid="overview-unowned"]').text()).toContain('advisory');
     w.unmount();
   });
 

@@ -3,6 +3,10 @@ import { mount, flushPromises, RouterLinkStub } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import WorkflowsView from './WorkflowsView.vue';
 
+// The catalog reads deep-link filters from the route on mount; stub a bare route so the
+// component mounts without a full router (these tests assert presence, not navigation).
+vi.mock('vue-router', async (orig) => ({ ...(await orig<object>()), useRoute: () => ({ query: {}, hash: '' }) }));
+
 /**
  * Rule-11 UI-presence checks for the persistent catalog chrome: every signed-off
  * header element and filter control renders with its key text/state. These assert

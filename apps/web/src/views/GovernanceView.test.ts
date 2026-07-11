@@ -3,6 +3,10 @@ import { mount, flushPromises, RouterLinkStub } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import GovernanceView from './GovernanceView.vue';
 
+// The view scrolls to a #gap-… hash on mount; stub a bare route so it mounts without a
+// full router (these tests assert gap-group presence, not the scroll).
+vi.mock('vue-router', async (orig) => ({ ...(await orig<object>()), useRoute: () => ({ query: {}, hash: '' }) }));
+
 /**
  * Rule-11 UI-presence for the S4 Governance view: the governance-gaps panel with each
  * gap group renders. (The audit timeline moved to its own Activity view — see

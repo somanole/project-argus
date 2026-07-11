@@ -70,6 +70,33 @@ describe('workflows store (server-side filtering)', () => {
     expect(store.activeFilterCount).toBe(4);
   });
 
+  it('applies deep-link filters from a URL query (Overview tiles land on their set)', async () => {
+    const fetchMock = vi.fn(async (_url: string) => okResponse([item('1', 'a', 'prod')]));
+    vi.stubGlobal('fetch', fetchMock);
+    const store = useWorkflowsStore();
+
+    // e.g. the "Idle but active" tile → /estate?health=idle&active=true.
+    store.applyFromQuery({ health: 'idle', active: 'true' });
+    await store.refresh();
+    let lastUrl = String(fetchMock.mock.calls.at(-1)?.[0] ?? '');
+    expect(lastUrl).toContain('health=idle');
+    expect(lastUrl).toContain('active=true');
+
+    // A second deep-link is AUTHORITATIVE — it clears the previous link's filters instead
+    // of accumulating (the bug: idle+active+broken+stale stacking to zero matches). No
+    // manual clearFilters() in between.
+    store.applyFromQuery({ stale: 'true' });
+    await store.refresh();
+    lastUrl = String(fetchMock.mock.calls.at(-1)?.[0] ?? '');
+    expect(lastUrl).toContain('stale=true');
+    expect(lastUrl).not.toContain('health=idle'); // previous filter gone
+    expect(lastUrl).not.toContain('active=true');
+    expect(store.staleOnly).toBe(true);
+    expect(store.health).toEqual([]);
+    expect(store.stateFilter).toBe('all');
+    expect(store.activeFilterCount).toBe(1); // exactly the one deep-linked filter
+  });
+
   it('reports an honest error when the server is unreachable', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => {
       throw new Error('down');
