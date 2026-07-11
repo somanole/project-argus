@@ -315,8 +315,8 @@ const onKeydown = (e: KeyboardEvent) => {
   border-radius: var(--radius--md);
   background: var(--background--danger, var(--background--subtle));
 }
-.fail-title { font-size: var(--font-size--sm); font-weight: var(--font-weight--medium); color: var(--text-color--danger, var(--color--danger)); }
-.fail-err { font-size: var(--font-size--2xs); color: var(--text-color--danger, var(--color--danger)); }
+.fail-title { font-size: var(--font-size--sm); font-weight: var(--font-weight--medium); color: var(--color--danger); }
+.fail-err { font-size: var(--font-size--2xs); color: var(--color--danger); }
 .runs-label { margin: var(--spacing--2xs) 0 var(--spacing--4xs); font-size: var(--font-size--3xs); text-transform: uppercase; letter-spacing: var(--letter-spacing--wide); }
 .runlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing--4xs); }
 .run { display: flex; align-items: center; gap: var(--spacing--2xs); flex-wrap: wrap; font-size: var(--font-size--2xs); }
@@ -335,7 +335,7 @@ const onKeydown = (e: KeyboardEvent) => {
 .gaps { margin: 0; padding-left: var(--spacing--md); font-size: var(--font-size--2xs); display: flex; flex-direction: column; gap: var(--spacing--5xs); }
 .open { margin-top: var(--spacing--2xs); text-decoration: none; }
 .pad { padding: var(--spacing--md) 0; }
-.err { color: var(--text-color--danger, var(--color--danger)); }
+.err { color: var(--color--danger); }
 
 /* Mobile (≤720px): the drawer goes full-width (off-canvas → full screen). */
 @media (max-width: 720px) {

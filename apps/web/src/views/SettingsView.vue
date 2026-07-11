@@ -6,6 +6,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useSettingsStore } from '../stores/settings';
+import { relativeTime } from '../lib/time';
 import { checkBaseUrl, type LlmProvider } from '@argus/shared';
 
 const store = useSettingsStore();
@@ -57,10 +58,15 @@ watch(config, (c) => {
   if (c?.provider === 'openai_compatible' && c.model) modelId.value = c.model;
 });
 
-// "Enrichment last ran" — absolute date + time (or never).
+// "Enrichment last ran" — relative ("2h ago"), matching every other freshness stamp
+// in the app; the exact local timestamp rides along as a hover title.
 const lastEnrichedLabel = computed(() => {
   const t = progress.value?.lastEnrichedAt;
-  return t ? new Date(t).toLocaleString() : 'never';
+  return t ? relativeTime(new Date(t).toISOString()) : 'never';
+});
+const lastEnrichedExact = computed(() => {
+  const t = progress.value?.lastEnrichedAt;
+  return t ? new Date(t).toLocaleString() : '';
 });
 // Honest run feedback: report what ACTUALLY happened, never imply work that didn't run.
 const enriching = ref(false);
@@ -312,7 +318,7 @@ async function save(): Promise<void> {
           <div class="run-row">
             <div class="run-meta">
               <span class="muted run-label">Enrichment last ran</span>
-              <span class="run-time" data-testid="enrichment-last-ran">{{ lastEnrichedLabel }}</span>
+              <span class="run-time" data-testid="enrichment-last-ran" :title="lastEnrichedExact">{{ lastEnrichedLabel }}</span>
               <span v-if="progress && progress.pending + progress.stale > 0" class="muted"> · {{ progress.pending + progress.stale }} to do</span>
               <span v-else-if="progress && progress.total > 0" class="muted"> · {{ progress.analyzed }}/{{ progress.total }} enriched</span>
             </div>
@@ -415,7 +421,7 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 .run-time { font-weight: var(--font-weight--medium); font-variant-numeric: tabular-nums; }
 .run-note { margin: 0; font-size: var(--font-size--2xs); }
 .ok { font-size: var(--font-size--2xs); }
-.err { color: var(--text-color--danger, var(--color--danger)); font-size: var(--font-size--2xs); }
+.err { color: var(--color--danger); font-size: var(--font-size--2xs); }
 
 @media (max-width: 720px) {
   .prov { flex-basis: 100%; }

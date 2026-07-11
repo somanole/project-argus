@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // A small labelled pill for a catalog fact (a system, a trigger, MCP, a warning).
 // All tones are token-based, so every one flips correctly in light/dark.
-withDefaults(defineProps<{ label: string; tone?: 'system' | 'trigger' | 'mcp' | 'ok' | 'warn' | 'danger' | 'muted'; title?: string }>(), {
+withDefaults(defineProps<{ label: string; tone?: 'system' | 'trigger' | 'mcp' | 'ok' | 'warn' | 'danger' | 'muted' | 'faint'; title?: string }>(), {
   tone: 'muted',
   title: '',
 });
@@ -63,5 +63,11 @@ withDefaults(defineProps<{ label: string; tone?: 'system' | 'trigger' | 'mcp' | 
 }
 .fbadge--muted {
   opacity: 0.9;
+}
+/* One step below muted — an outline-only pill, so "low" reads as fainter than
+   "medium" (which keeps the subtle fill). */
+.fbadge--faint {
+  background: transparent;
+  opacity: 0.8;
 }
 </style>

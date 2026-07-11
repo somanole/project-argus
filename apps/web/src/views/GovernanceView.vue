@@ -16,10 +16,16 @@ const { gaps, gapsState, gapsError, audit, auditState, auditError, filters } = s
 const now = ref(Date.now());
 let clock: ReturnType<typeof setInterval> | undefined;
 
-const CRIT_TONE: Record<Criticality, 'danger' | 'warn' | 'muted'> = { critical: 'danger', high: 'warn', medium: 'muted', low: 'muted' };
-const critTone = (c: Criticality | null): 'danger' | 'warn' | 'muted' => (c ? CRIT_TONE[c] : 'muted');
+const CRIT_TONE: Record<Criticality, 'danger' | 'warn' | 'muted' | 'faint'> = { critical: 'danger', high: 'warn', medium: 'muted', low: 'faint' };
+const critTone = (c: Criticality | null): 'danger' | 'warn' | 'muted' | 'faint' => (c ? CRIT_TONE[c] : 'muted');
 
 const unowned = computed(() => gaps.value?.unowned ?? []);
+// The unowned list can be the whole estate (hundreds). Show the most-critical first
+// N and let the owner expand — so the audit timeline below stays reachable without a
+// 20,000px scroll. Nothing is hidden: the full count sits in the section header.
+const UNOWNED_PREVIEW = 25;
+const showAllUnowned = ref(false);
+const unownedShown = computed(() => (showAllUnowned.value ? unowned.value : unowned.value.slice(0, UNOWNED_PREVIEW)));
 const singleOwner = computed(() => gaps.value?.singleOwnerCritical ?? []);
 const personalSpace = computed(() => gaps.value?.personalSpaceCritical ?? []);
 const noBackup = computed(() => gaps.value?.noBackupOwner ?? []);
@@ -63,13 +69,21 @@ onUnmounted(() => { if (clock) clearInterval(clock); });
           <h2 class="gap-title">What has no owner <span class="count">{{ unowned.length }}</span></h2>
           <p class="gap-why muted">Workflows with no assigned owner — critical first. Assign one from the workflow drawer.</p>
           <ul class="rows">
-            <li v-for="w in unowned" :key="w.instanceId + '/' + w.workflowId" class="grow">
+            <li v-for="w in unownedShown" :key="w.instanceId + '/' + w.workflowId" class="grow">
               <FactBadge :label="w.criticality ?? 'unlabeled'" :tone="critTone(w.criticality)" />
               <span class="wf">{{ wfLabel(w) }}</span>
               <span class="inst muted"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span>
-              <span v-if="w.inferred?.status === 'inferred'" class="muted small">inferred: {{ w.inferred.owner?.name ?? w.inferred.owner?.email }}</span>
+              <span v-if="w.inferred?.status === 'inferred'" class="muted small">{{ w.inferred.owner?.name ?? w.inferred.owner?.email }} · inferred</span>
             </li>
           </ul>
+          <button
+            v-if="unowned.length > UNOWNED_PREVIEW"
+            class="btn btn--secondary btn--sm show-more"
+            data-testid="gap-unowned-toggle"
+            @click="showAllUnowned = !showAllUnowned"
+          >
+            {{ showAllUnowned ? 'Show fewer' : `Show all ${unowned.length}` }}
+          </button>
         </section>
 
         <!-- Single-owner-critical (cross-instance SPOF) -->
@@ -154,7 +168,7 @@ onUnmounted(() => { if (clock) clearInterval(clock); });
               <td class="c-when muted" data-label="When" :title="e.ts">{{ relativeTime(e.ts, now) }}</td>
               <td data-label="Actor"><span class="actor">{{ e.actorName }}</span> <span class="muted small">{{ e.actorEmail }}</span></td>
               <td data-label="Action"><span class="mono">{{ e.action }}</span></td>
-              <td class="c-entity muted" data-label="Entity"><span class="mono">{{ e.entityId ?? e.entityType }}</span></td>
+              <td class="c-entity muted" data-label="Entity" :title="e.entityId ?? e.entityType"><span class="mono">{{ e.entityId ?? e.entityType }}</span></td>
             </tr>
           </tbody>
         </table>
@@ -210,12 +224,16 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 .wf tbody tr:last-child td { border-bottom: 0; }
 .c-when { white-space: nowrap; font-size: var(--font-size--2xs); }
 .actor { font-weight: var(--font-weight--medium); }
-.c-entity { font-size: var(--font-size--2xs); }
+/* Entity is often a long uuid — truncate with an ellipsis (full value on hover) so it
+   never widens the column into a horizontal scroll. */
+.c-entity { font-size: var(--font-size--2xs); max-width: 18rem; }
+.c-entity .mono { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.show-more { align-self: flex-start; margin-top: var(--spacing--3xs); }
 
 .card.empty { text-align: center; }
 .card.empty p { margin: 0; }
 .pad { padding: var(--spacing--md); }
-.err { color: var(--text-color--danger, var(--color--danger)); }
+.err { color: var(--color--danger); }
 
 /* Mobile (≤720px): the audit table reflows to stacked cards; no horizontal scroll. */
 @media (max-width: 720px) {

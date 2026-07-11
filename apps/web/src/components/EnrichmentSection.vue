@@ -57,7 +57,7 @@ async function saveCorrection(correction: { category?: string; criticality?: str
       <h3>Sense-making</h3>
       <button
         v-if="e && e.status !== 'stub'"
-        class="btn btn--ghost btn--sm"
+        class="btn btn--secondary btn--sm"
         data-testid="enrichment-correct-button"
         @click="dialogOpen = true"
       >
@@ -145,7 +145,7 @@ async function saveCorrection(correction: { category?: string; criticality?: str
 .more dt { font-size: var(--font-size--3xs); text-transform: uppercase; letter-spacing: var(--letter-spacing--wide); opacity: 0.6; }
 .more dd { margin: 0 0 var(--spacing--2xs); font-size: var(--font-size--2xs); line-height: var(--line-height--md); }
 .prov { font-size: var(--font-size--3xs); }
-.stub, .stale { margin: 0; font-size: var(--font-size--2xs); color: var(--text-color--warning, var(--color--warning)); }
+.stub, .stale { margin: 0; font-size: var(--font-size--2xs); color: var(--color--warning); }
 .summary + .crit-row { margin-top: var(--spacing--4xs); }
-.err { color: var(--text-color--danger, var(--color--danger)); font-size: var(--font-size--2xs); margin: 0; }
+.err { color: var(--color--danger); font-size: var(--font-size--2xs); margin: 0; }
 </style>

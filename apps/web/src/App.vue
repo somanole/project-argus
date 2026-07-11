@@ -126,4 +126,23 @@ async function logout(): Promise<void> {
 
 .content { max-width: 72rem; margin: 0 auto; padding: var(--spacing--lg) var(--spacing--lg) var(--spacing--3xl); }
 .bare { display: block; }
+
+/* Mobile: the wrapped 8-item nav used to stack into ~4 sticky rows (≈¼ of the
+   viewport). Keep it to two: wordmark + a single horizontally-scrollable nav row,
+   with the theme/actor/sign-out controls on their own row. Additive — no DOM change. */
+@media (max-width: 40rem) {
+  .topbar { padding: var(--spacing--2xs) var(--spacing--sm); gap: var(--spacing--2xs); }
+  .left { width: 100%; flex-wrap: nowrap; min-width: 0; gap: var(--spacing--sm); }
+  .nav {
+    flex: 1;
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav a { white-space: nowrap; }
+  .right { width: 100%; justify-content: space-between; }
+}
 </style>

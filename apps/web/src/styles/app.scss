@@ -28,7 +28,15 @@
   color: var(--color--neutral-white);
 }
 .btn--primary:hover:not(:disabled) { background: var(--background--brand--hover); }
-.btn--primary:disabled { background: var(--background--brand--disabled); opacity: 1; }
+// Disabled: a bordered, muted-text state that stays visible in BOTH themes. The old
+// brand--disabled fill matched --background--subtle in dark (same as cards), so the
+// button vanished into the surface; the border + surface fill keep it legible.
+.btn--primary:disabled {
+  background: var(--background--surface);
+  color: var(--color--text--shade-1);
+  border-color: var(--border-color);
+  opacity: 0.55;
+}
 
 .btn--secondary {
   background: var(--background--surface);

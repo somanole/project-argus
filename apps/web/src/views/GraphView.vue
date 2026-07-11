@@ -248,7 +248,7 @@ const sel = computed(() => graph.selectedNode);
 .stage { flex: 1 1 auto; display: flex; gap: var(--spacing--2xs); min-height: 0; }
 .canvas-wrap { flex: 1 1 auto; min-width: 0; position: relative; }
 .state { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
-.err { color: var(--text-color--danger, var(--color--danger)); }
+.err { color: var(--color--danger); }
 
 .panel {
   flex: 0 0 300px; overflow-y: auto; background: var(--background--surface);
@@ -262,7 +262,7 @@ const sel = computed(() => graph.selectedNode);
 .affected { list-style: none; margin: var(--spacing--2xs) 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing--5xs); font-size: var(--font-size--2xs); max-height: 40vh; overflow-y: auto; }
 .reach { margin-top: var(--spacing--sm); border-top: 1px solid var(--border-color--subtle); padding-top: var(--spacing--2xs); }
 .reach h3 { font-size: var(--font-size--2xs); margin: 0 0 var(--spacing--4xs); }
-.reach--danger { color: var(--text-color--danger, var(--color--danger)); font-weight: var(--font-weight--medium); }
+.reach--danger { color: var(--color--danger); font-weight: var(--font-weight--medium); }
 
 @media (max-width: 900px) {
   .graph-view { height: auto; }

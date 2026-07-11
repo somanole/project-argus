@@ -349,19 +349,20 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 .empty { text-align: center; }
 .empty p { margin: 0; }
 .pad { padding: var(--spacing--md) 0; }
-.err { color: var(--text-color--danger, var(--color--danger)); }
+.err { color: var(--color--danger); }
 a { color: var(--color--primary, var(--background--brand)); }
 
-/* Filters collapse behind a control on narrow widths (desktop always shows them). */
+/* The faceted filter groups (instance / system / criticality / health / trigger)
+   collapse behind the "Filters" toggle at EVERY width — the 25-chip system wall was
+   a tall header to scan past on desktop too. The search box + quick pills stay always
+   visible; the toggle shows the active-filter count so applied filters aren't hidden. */
 .facets { display: flex; flex-direction: column; gap: var(--spacing--sm); }
-.filters-toggle { display: none; }
+.facets--collapsed { display: none; }
+.filters-toggle { display: inline-flex; }
 
-/* Mobile (≤720px): filters collapse, and the catalog table reflows to stacked
-   cards — never a horizontal page scroll, never a clipped field (rule 10). */
+/* Mobile (≤720px): the catalog table also reflows to stacked cards — never a
+   horizontal page scroll, never a clipped field (rule 10). */
 @media (max-width: 720px) {
-  .filters-toggle { display: inline-flex; }
-  .facets--collapsed { display: none; }
-
   .table-wrap { border: 0; overflow: visible; }
   .wf, .wf tbody, .wf tr, .wf td { display: block; width: 100%; }
   .wf thead { display: none; }

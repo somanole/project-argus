@@ -109,13 +109,13 @@ onUnmounted(() => {
             <HealthBadge :health="c.health" data-testid="connection-health" />
           </div>
           <div class="conn-url mono">{{ c.baseUrl }}</div>
-          <dl class="meta">
-            <div><dt>Workflows</dt><dd>{{ c.health.workflowCount }}</dd></div>
-            <div><dt>Last synced</dt><dd>{{ relativeTime(c.health.lastSyncedAt) }}</dd></div>
-          </dl>
           <p v-if="c.health.lastError" class="err small">{{ c.health.lastError }}</p>
           <AnalyzerDriftNotice :drift="c.health.analyzerDrift" data-testid="analyzer-drift" />
-          <div class="conn-actions">
+          <div class="conn-foot">
+            <dl class="meta">
+              <div><dt>Workflows</dt><dd>{{ c.health.workflowCount }}</dd></div>
+              <div><dt>Last synced</dt><dd>{{ relativeTime(c.health.lastSyncedAt) }}</dd></div>
+            </dl>
             <button class="btn btn--danger btn--sm" :disabled="removingId === c.id" @click="remove(c.id, c.label)">
               {{ removingId === c.id ? 'Removing…' : 'Remove' }}
             </button>
@@ -143,13 +143,15 @@ onUnmounted(() => {
 .conn-head { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing--sm); }
 .conn-label { display: inline-flex; align-items: center; gap: var(--spacing--4xs); font-weight: var(--font-weight--bold); }
 .conn-url { color: var(--color--text--shade-1); opacity: 0.8; word-break: break-all; }
-.meta { display: flex; gap: var(--spacing--xl); margin: var(--spacing--4xs) 0 0; }
+/* Stats and the Remove action share the footer row — stats left, action right —
+   so the card stays as tall as its content instead of trailing dead space. */
+.conn-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--spacing--sm); margin-top: var(--spacing--4xs); }
+.meta { display: flex; gap: var(--spacing--xl); margin: 0; }
 .meta div { display: flex; flex-direction: column; gap: 0; }
 .meta dt { font-size: var(--font-size--3xs); text-transform: uppercase; letter-spacing: var(--letter-spacing--wide); color: var(--color--text--shade-1); opacity: 0.6; }
 .meta dd { margin: 0; font-size: var(--font-size--sm); font-variant-numeric: tabular-nums; }
-.conn-actions { display: flex; justify-content: flex-end; margin-top: var(--spacing--4xs); }
 
-.err { margin: 0; color: var(--text-color--danger, var(--color--danger)); font-size: var(--font-size--2xs); }
+.err { margin: 0; color: var(--color--danger); font-size: var(--font-size--2xs); }
 .err.small { font-size: var(--font-size--3xs); }
 .empty { text-align: center; }
 .pad { padding: var(--spacing--md) 0; }

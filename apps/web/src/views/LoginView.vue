@@ -95,7 +95,7 @@ async function submit(): Promise<void> {
 .lede { font-size: var(--font-size--sm); margin: 0 0 var(--spacing--2xs); }
 .err {
   margin: 0;
-  color: var(--text-color--danger, var(--color--danger));
+  color: var(--color--danger);
   font-size: var(--font-size--2xs);
 }
 </style>

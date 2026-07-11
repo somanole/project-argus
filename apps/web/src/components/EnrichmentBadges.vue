@@ -8,11 +8,11 @@ import FactBadge from './FactBadge.vue';
 
 const props = defineProps<{ enrichment: WorkflowEnrichment | null }>();
 
-const CRIT_TONE: Record<Criticality, 'danger' | 'warn' | 'muted'> = {
+const CRIT_TONE: Record<Criticality, 'danger' | 'warn' | 'muted' | 'faint'> = {
   critical: 'danger',
   high: 'warn',
   medium: 'muted',
-  low: 'muted',
+  low: 'faint',
 };
 const CATEGORY_LABEL: Record<string, string> = {
   'revenue-ops': 'Revenue Ops',

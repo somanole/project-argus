@@ -58,10 +58,10 @@ async function remove(): Promise<void> {
     <div class="sec-head">
       <h3>Ownership</h3>
       <div class="sec-actions">
-        <button class="btn btn--ghost btn--sm" data-testid="ownership-assign-button" :disabled="busy" @click="dialogOpen = true">
+        <button class="btn btn--secondary btn--sm" data-testid="ownership-assign-button" :disabled="busy" @click="dialogOpen = true">
           {{ isAssigned ? 'Reassign' : 'Assign owner' }}
         </button>
-        <button v-if="isAssigned" class="btn btn--ghost btn--sm" data-testid="ownership-remove-button" :disabled="busy" @click="remove">
+        <button v-if="isAssigned" class="btn btn--secondary btn--sm" data-testid="ownership-remove-button" :disabled="busy" @click="remove">
           Remove
         </button>
       </div>
@@ -117,5 +117,5 @@ async function remove(): Promise<void> {
 .line { margin: 0; font-size: var(--font-size--2xs); display: flex; gap: var(--spacing--2xs); }
 .line .k { color: var(--color--text--shade-1); opacity: 0.6; min-width: 3.5rem; }
 .prov { margin: 0; font-size: var(--font-size--3xs); line-height: var(--line-height--md); }
-.err { color: var(--text-color--danger, var(--color--danger)); font-size: var(--font-size--2xs); margin: var(--spacing--2xs) 0 0; }
+.err { color: var(--color--danger); font-size: var(--font-size--2xs); margin: var(--spacing--2xs) 0 0; }
 </style>

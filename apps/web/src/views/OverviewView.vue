@@ -19,8 +19,8 @@ const { data, state, error } = storeToRefs(store);
 const now = ref(Date.now());
 let clock: ReturnType<typeof setInterval> | undefined;
 
-const CRIT_TONE: Record<Criticality, 'danger' | 'warn' | 'muted'> = { critical: 'danger', high: 'warn', medium: 'muted', low: 'muted' };
-const critTone = (c: Criticality | null): 'danger' | 'warn' | 'muted' => (c ? CRIT_TONE[c] : 'muted');
+const CRIT_TONE: Record<Criticality, 'danger' | 'warn' | 'muted' | 'faint'> = { critical: 'danger', high: 'warn', medium: 'muted', low: 'faint' };
+const critTone = (c: Criticality | null): 'danger' | 'warn' | 'muted' | 'faint' => (c ? CRIT_TONE[c] : 'muted');
 
 const o = computed(() => data.value);
 const score = computed(() => o.value?.score ?? null);
@@ -272,7 +272,7 @@ onUnmounted(() => { if (clock) clearInterval(clock); });
             <span class="c-when muted small" :title="e.ts">{{ relativeTime(e.ts, now) }}</span>
             <span class="mono small">{{ e.action }}</span>
             <span class="muted small">{{ e.actorName }}</span>
-            <span class="c-entity muted small mono">{{ e.entityId ?? e.entityType }}</span>
+            <span class="c-entity muted small mono" :title="e.entityId ?? e.entityType">{{ e.entityId ?? e.entityType }}</span>
           </li>
           <li v-if="o.changelog.length === 0" class="muted small">No governance actions recorded yet.</li>
         </ul>
@@ -294,7 +294,7 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
   padding: var(--spacing--2xs) var(--spacing--sm);
   border: 1px solid var(--border-color--danger, var(--color--danger)); border-radius: var(--radius--md);
   background: var(--background--danger, var(--background--subtle));
-  color: var(--text-color--danger, var(--color--danger)); font-size: var(--font-size--2xs);
+  color: var(--color--danger); font-size: var(--font-size--2xs);
 }
 
 /* Score hero */
@@ -312,13 +312,15 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 .pillar-weight { margin-left: auto; }
 .pillar-score { font-variant-numeric: tabular-nums; font-weight: var(--font-weight--bold); font-size: var(--font-size--sm); min-width: 3rem; text-align: right; }
 .pillar-why { margin: 0; }
-.bar { height: 0.4rem; border-radius: var(--radius--full); background: var(--background--subtle); overflow: hidden; }
+/* Track uses a visible neutral (the card bg is already --background--subtle, so the
+   old subtle track was invisible — the fill read as a floating underline). */
+.bar { height: 0.5rem; border-radius: var(--radius--full); background: var(--border-color); overflow: hidden; }
 .bar-fill { height: 100%; border-radius: var(--radius--full); transition: width var(--duration--slow, 0.3s) var(--easing--ease-out, ease); }
 
 /* Semantic tones — tokens only, so both themes come for free. */
-.t-ok { color: var(--text-color--success, var(--color--success)); }
-.t-warn { color: var(--text-color--warning, var(--color--warning)); }
-.t-danger { color: var(--text-color--danger, var(--color--danger)); }
+.t-ok { color: var(--color--success); }
+.t-warn { color: var(--color--warning); }
+.t-danger { color: var(--color--danger); }
 .t-muted { color: var(--color--text--shade-1); opacity: 0.6; }
 .b-ok { background: var(--color--success); }
 .b-warn { background: var(--color--warning); }
@@ -335,7 +337,7 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 .fig-head.static { cursor: default; }
 .fig-title { font-size: var(--font-size--md); font-weight: var(--font-weight--bold); }
 .fig-count { margin-left: auto; font-size: var(--font-size--lg); font-weight: var(--font-weight--bold); font-variant-numeric: tabular-nums; opacity: 0.7; }
-.fig-count.is-bad { color: var(--text-color--danger, var(--color--danger)); opacity: 1; }
+.fig-count.is-bad { color: var(--color--danger); opacity: 1; }
 .fig-why { margin: 0; }
 .fig-why a, .fig-head a { color: var(--background--brand); text-decoration: none; }
 .chips { display: flex; gap: var(--spacing--4xs); flex-wrap: wrap; }
@@ -354,7 +356,7 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 .inst { display: inline-flex; align-items: center; gap: var(--spacing--4xs); white-space: nowrap; }
 .dot { width: 0.5rem; height: 0.5rem; border-radius: var(--radius--full); flex: none; }
 .advisory, .rate { font-size: var(--font-size--3xs); padding: 0 var(--spacing--4xs); border-radius: var(--radius--2xs); background: var(--background--subtle); color: var(--color--text--shade-1); opacity: 0.8; }
-.rate { color: var(--text-color--danger, var(--color--danger)); opacity: 1; }
+.rate { color: var(--color--danger); opacity: 1; }
 
 .spof { flex-direction: column; align-items: stretch; gap: var(--spacing--4xs); width: 100%; }
 .spof-head { display: flex; align-items: center; gap: var(--spacing--2xs); flex-wrap: wrap; }
@@ -363,11 +365,13 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 
 .changelog { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing--4xs); }
 .changelog li { display: flex; gap: var(--spacing--sm); align-items: baseline; flex-wrap: wrap; }
-.c-when { white-space: nowrap; }
-.c-entity { margin-left: auto; }
+.c-when { white-space: nowrap; min-width: 4.5rem; }
+/* Entity id can be a long uuid — keep it in flow right after the actor (no dead gap
+   to the panel edge) and truncate; full value on hover. */
+.c-entity { max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .pad { padding: var(--spacing--md); }
-.err { color: var(--text-color--danger, var(--color--danger)); }
+.err { color: var(--color--danger); }
 
 @media (max-width: 640px) {
   .grid { grid-template-columns: 1fr; }

@@ -224,7 +224,10 @@ watch(
   padding: var(--spacing--sm) var(--spacing--3xs);
 }
 
-.empty { margin: auto 0; }
+/* Anchor the starter prompts just above the composer (not dead-centre in the scroll
+   area) — they sit where the eye goes to type, instead of floating in a void below
+   the header. */
+.empty { margin-top: auto; }
 .examples { display: flex; flex-direction: column; gap: var(--spacing--2xs); margin-top: var(--spacing--2xs); align-items: flex-start; }
 .example {
   appearance: none;
@@ -289,7 +292,7 @@ watch(
 .tdot:nth-child(3) { animation-delay: 0.4s; }
 @keyframes blink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
 
-.err { color: var(--text-color--danger, var(--color--danger)); font-size: var(--font-size--2xs); margin: var(--spacing--3xs) 0 0; }
+.err { color: var(--color--danger); font-size: var(--font-size--2xs); margin: var(--spacing--3xs) 0 0; }
 .pad { padding: var(--spacing--2xs) 0; }
 
 .composer { display: flex; gap: var(--spacing--2xs); align-items: flex-end; padding-top: var(--spacing--sm); border-top: 1px solid var(--border-color--subtle); }

@@ -97,7 +97,7 @@ const communityMore = computed(() => props.drift ? props.drift.communityUnknown.
 .drift-title {
   margin: 0;
   font-weight: var(--font-weight--bold);
-  color: var(--text-color--warning, var(--color--text--shade-1));
+  color: var(--color--warning);
 }
 .drift-body { margin: 0; color: var(--color--text--shade-1); }
 .drift-body strong { font-weight: var(--font-weight--medium); }

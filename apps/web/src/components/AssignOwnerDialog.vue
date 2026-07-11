@@ -169,8 +169,8 @@ function save(): void {
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing--2xs); }
 .backup summary { font-size: var(--font-size--2xs); cursor: pointer; color: var(--color--text--shade-1); opacity: 0.8; padding: var(--spacing--4xs) 0; }
 .backup { display: flex; flex-direction: column; gap: var(--spacing--2xs); }
-.hint { margin: 0; font-size: var(--font-size--3xs); color: var(--text-color--warning, var(--color--warning)); }
+.hint { margin: 0; font-size: var(--font-size--3xs); color: var(--color--warning); }
 .actions { display: flex; justify-content: flex-end; gap: var(--spacing--2xs); margin-top: var(--spacing--2xs); }
-.err { color: var(--text-color--danger, var(--color--danger)); font-size: var(--font-size--2xs); margin: 0; }
+.err { color: var(--color--danger); font-size: var(--font-size--2xs); margin: 0; }
 @media (max-width: 480px) { .two { grid-template-columns: 1fr; } }
 </style>
