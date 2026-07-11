@@ -51,7 +51,6 @@ onUnmounted(() => { if (clock) clearInterval(clock); });
   <section class="gov" data-testid="governance-view">
     <header class="head">
       <div>
-        <h1>Governance</h1>
         <p class="muted sub">Who is accountable across the estate — the ownership gaps, and every governance action Argus has taken.</p>
       </div>
       <button class="btn btn--secondary btn--sm" data-testid="refresh-button" @click="refresh">Refresh</button>

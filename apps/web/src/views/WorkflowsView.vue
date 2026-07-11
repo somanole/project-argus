@@ -122,7 +122,6 @@ onUnmounted(() => {
   <section class="catalog">
     <header class="head">
       <div>
-        <h1>Catalog</h1>
         <p class="muted sub">
           {{ total }} workflow<span v-if="total !== 1">s</span>
           <span v-if="activeFilterCount > 0"> match · </span>

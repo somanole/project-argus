@@ -173,7 +173,7 @@ onUnmounted(() => { if (clock) clearInterval(clock); });
           <p class="fig-why muted small">
             The actionable incidents — a failing workflow and a real person to page.
             <template v-if="totalUnhealthy > 0">{{ totalUnhealthy }} failing/degraded in all; <strong>{{ totalUnhealthy - o.failingWithOwner.count }}</strong> have no confirmed owner to escalate to.</template>
-            <router-link to="/health">Open Health →</router-link>
+            <router-link to="/estate/health">Open Health →</router-link>
           </p>
           <ul v-if="isOpen('incidents')" class="drill" data-testid="overview-incidents-drill">
             <li v-for="w in o.failingWithOwner.workflows" :key="w.instanceId + '/' + w.id">
@@ -264,7 +264,7 @@ onUnmounted(() => { if (clock) clearInterval(clock); });
       <section class="card fig" data-testid="overview-changelog">
         <div class="fig-head static">
           <span class="fig-title">Recent changes</span>
-          <router-link class="muted small" to="/governance">Full audit timeline →</router-link>
+          <router-link class="muted small" to="/estate/ownership">Full audit timeline →</router-link>
         </div>
         <p class="fig-why muted small">The latest governance actions Argus has recorded — append-only, tamper-evident.</p>
         <ul class="changelog">

@@ -5,13 +5,26 @@ const routes: RouteRecordRaw[] = [
   { path: '/', redirect: '/overview' },
   { path: '/login', name: 'login', component: () => import('./views/LoginView.vue'), meta: { public: true } },
   { path: '/overview', name: 'overview', component: () => import('./views/OverviewView.vue') },
-  { path: '/workflows', name: 'workflows', component: () => import('./views/WorkflowsView.vue') },
-  { path: '/health', name: 'health', component: () => import('./views/HealthView.vue') },
+  // The Estate — one surface, switchable lenses (Explore / Health / Ownership). Each
+  // lens is a real route so links + the back button work; the lens views render inside
+  // the shared EstateLayout (which owns the lens tab bar).
+  {
+    path: '/estate',
+    component: () => import('./views/EstateLayout.vue'),
+    children: [
+      { path: '', name: 'estate', component: () => import('./views/WorkflowsView.vue') },
+      { path: 'health', name: 'estate-health', component: () => import('./views/HealthView.vue') },
+      { path: 'ownership', name: 'estate-ownership', component: () => import('./views/GovernanceView.vue') },
+    ],
+  },
   { path: '/graph', name: 'graph', component: () => import('./views/GraphView.vue') },
-  { path: '/governance', name: 'governance', component: () => import('./views/GovernanceView.vue') },
   { path: '/chat', name: 'chat', component: () => import('./views/ChatView.vue') },
   { path: '/connections', name: 'connections', component: () => import('./views/ConnectionsView.vue') },
   { path: '/settings', name: 'settings', component: () => import('./views/SettingsView.vue') },
+  // Back-compat: the old top-level pages now live as Estate lenses.
+  { path: '/workflows', redirect: '/estate' },
+  { path: '/health', redirect: '/estate/health' },
+  { path: '/governance', redirect: '/estate/ownership' },
   { path: '/:pathMatch(.*)*', redirect: '/overview' },
 ];
 

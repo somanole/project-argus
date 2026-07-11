@@ -62,7 +62,6 @@ onUnmounted(() => {
   <section class="health" data-testid="health-view">
     <header class="head">
       <div>
-        <h1>Health</h1>
         <p class="muted sub">
           What's failing across the estate — poll-fresh, over the last
           <span data-testid="health-window">~{{ windowDays }} days</span> of runs.
