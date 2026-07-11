@@ -10,7 +10,7 @@ import { relativeTime } from '../lib/time';
 import OwnerBadge from './OwnerBadge.vue';
 import AssignOwnerDialog from './AssignOwnerDialog.vue';
 
-const props = defineProps<{ instanceId: string; workflowId: string; owner: WorkflowOwner | null }>();
+const props = defineProps<{ instanceId: string; workflowId: string; owner: WorkflowOwner | null; suggestedOwnerRationale?: string | null }>();
 const emit = defineEmits<{ updated: [WorkflowOwner] }>();
 
 const owner = ref<WorkflowOwner | null>(props.owner);
@@ -91,6 +91,14 @@ async function remove(): Promise<void> {
 
       <!-- Unowned: show the honest "couldn't infer" reason when there is one. -->
       <p v-else-if="owner && owner.reason" class="prov muted">{{ owner.reason }}</p>
+
+      <!-- Advisory suggested owner (from sense-making) — a lead to confirm, kept behind a
+           disclosure so the confirmed/inferred owner leads. Advisory only, never counted
+           as ownership (rule 12). -->
+      <details v-if="suggestedOwnerRationale" class="suggestion" data-testid="ownership-suggested-owner">
+        <summary>Suggested owner</summary>
+        <p class="s-text muted">{{ suggestedOwnerRationale }}</p>
+      </details>
     </div>
 
     <p v-if="error" class="err" role="alert">{{ error }}</p>
@@ -117,5 +125,17 @@ async function remove(): Promise<void> {
 .line { margin: 0; font-size: var(--font-size--2xs); display: flex; gap: var(--spacing--2xs); }
 .line .k { color: var(--color--text--shade-1); opacity: 0.6; min-width: 3.5rem; }
 .prov { margin: 0; font-size: var(--font-size--3xs); line-height: var(--line-height--md); }
+.suggestion { margin: var(--spacing--4xs) 0 0; }
+.suggestion > summary {
+  cursor: pointer;
+  list-style: none;
+  width: fit-content;
+  font-size: var(--font-size--2xs);
+  color: var(--color--primary, var(--background--brand));
+}
+.suggestion > summary::-webkit-details-marker { display: none; }
+.suggestion > summary::before { content: '▸ '; opacity: 0.7; }
+.suggestion[open] > summary::before { content: '▾ '; }
+.suggestion .s-text { margin: var(--spacing--4xs) 0 0; font-size: var(--font-size--2xs); line-height: var(--line-height--md); }
 .err { color: var(--color--danger); font-size: var(--font-size--2xs); margin: var(--spacing--2xs) 0 0; }
 </style>

@@ -152,7 +152,18 @@ onUnmounted(() => {
         >
           <span class="cov-pct">{{ coverage.understoodPct }}%</span>
           <span class="cov-label muted">understood</span>
-          <FactBadge v-if="coverage.brokenRefTotal > 0" :label="`${coverage.brokenRefTotal} broken`" tone="danger" />
+          <button
+            v-if="coverage.brokenRefTotal > 0"
+            type="button"
+            class="cov-broken"
+            :class="{ 'cov-broken--on': brokenOnly }"
+            :aria-pressed="brokenOnly"
+            data-testid="coverage-broken-filter"
+            :title="brokenOnly ? 'Showing only workflows with broken references — click to clear' : 'Filter to workflows with broken references'"
+            @click="store.setBrokenOnly(!brokenOnly)"
+          >
+            <FactBadge :label="`${coverage.brokenRefTotal} broken`" tone="danger" />
+          </button>
         </div>
         <span
           v-if="enrichmentLabel"
@@ -376,6 +387,15 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 .coverage { display: inline-flex; align-items: baseline; gap: var(--spacing--4xs); }
 .cov-pct { font-size: var(--font-size--md); font-weight: var(--font-weight--bold); font-variant-numeric: tabular-nums; }
 .cov-label { font-size: var(--font-size--2xs); }
+/* The "N broken" count doubles as the broken-refs filter toggle. */
+.cov-broken {
+  appearance: none; border: 0; background: none; padding: 0; margin: 0;
+  cursor: pointer; line-height: 0; border-radius: var(--radius--full);
+  align-self: center;
+}
+.cov-broken:focus-visible { outline: 2px solid var(--color--danger); outline-offset: 2px; }
+.cov-broken:hover :deep(.fbadge) { border-color: var(--border-color--danger, var(--color--danger)); }
+.cov-broken--on :deep(.fbadge) { box-shadow: 0 0 0 1px var(--color--danger); font-weight: var(--font-weight--bold); }
 .synced { font-size: var(--font-size--2xs); }
 .linkish {
   appearance: none; border: 0; background: none; color: var(--color--primary, var(--background--brand));

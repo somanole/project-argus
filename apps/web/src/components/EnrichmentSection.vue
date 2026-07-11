@@ -100,19 +100,20 @@ async function saveCorrection(correction: { category?: string; criticality?: str
       <p v-if="e.criticalityReason" class="reason" data-testid="enrichment-criticality-reason">{{ e.criticalityReason }}</p>
 
       <div v-if="e.riskFlags.length" class="risks" data-testid="enrichment-risk-flags">
+        <span class="risks-label">Risk</span>
         <FactBadge v-for="f in e.riskFlags" :key="f" :label="RISK_LABEL[f] ?? f" tone="warn" />
       </div>
 
-      <dl class="more">
-        <template v-if="e.businessContext">
+      <!-- The longer business-context prose lives behind a disclosure so the summary
+           + risk flags lead; the suggested-owner rationale now sits in the Ownership
+           section, next to the assign controls where it's actionable. -->
+      <details v-if="e.businessContext" class="more-toggle" data-testid="enrichment-more">
+        <summary>More context</summary>
+        <dl class="more">
           <dt>Business context</dt>
           <dd>{{ e.businessContext }}</dd>
-        </template>
-        <template v-if="e.suggestedOwnerRationale">
-          <dt>Suggested owner</dt>
-          <dd>{{ e.suggestedOwnerRationale }}</dd>
-        </template>
-      </dl>
+        </dl>
+      </details>
 
       <p class="prov muted" data-testid="enrichment-provenance">Analyzed by {{ e.provider }} {{ e.model }}</p>
       <p v-if="saveError" class="err" role="alert">{{ saveError }}</p>
@@ -140,8 +141,23 @@ async function saveCorrection(correction: { category?: string; criticality?: str
 .crit-row { display: flex; flex-wrap: wrap; gap: var(--spacing--4xs); align-items: center; }
 .corrected { font-size: var(--font-size--3xs); }
 .reason { margin: 0; font-size: var(--font-size--2xs); color: var(--color--text--shade-1); opacity: 0.85; }
-.risks { display: flex; flex-wrap: wrap; gap: var(--spacing--4xs); }
-.more { display: grid; grid-template-columns: auto; gap: var(--spacing--4xs); margin: 0; }
+.risks { display: flex; flex-wrap: wrap; gap: var(--spacing--4xs); align-items: center; }
+.risks-label {
+  font-size: var(--font-size--3xs); text-transform: uppercase; letter-spacing: var(--letter-spacing--wide);
+  font-weight: var(--font-weight--bold); color: var(--color--text--shade-1); opacity: 0.55;
+  margin-right: var(--spacing--5xs);
+}
+.more-toggle > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--font-size--2xs);
+  color: var(--color--primary, var(--background--brand));
+  width: fit-content;
+}
+.more-toggle > summary::-webkit-details-marker { display: none; }
+.more-toggle > summary::before { content: '▸ '; opacity: 0.7; }
+.more-toggle[open] > summary::before { content: '▾ '; }
+.more { display: grid; grid-template-columns: auto; gap: var(--spacing--4xs); margin: var(--spacing--4xs) 0 0; }
 .more dt { font-size: var(--font-size--3xs); text-transform: uppercase; letter-spacing: var(--letter-spacing--wide); opacity: 0.6; }
 .more dd { margin: 0 0 var(--spacing--2xs); font-size: var(--font-size--2xs); line-height: var(--line-height--md); }
 .prov { font-size: var(--font-size--3xs); }

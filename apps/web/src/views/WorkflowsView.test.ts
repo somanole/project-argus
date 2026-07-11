@@ -108,6 +108,48 @@ describe('Catalog chrome — UI-presence (rule 11)', () => {
   });
 });
 
+describe('Coverage "N broken" pill doubles as the broken-refs filter', () => {
+  beforeEach(() => setActivePinia(createPinia()));
+  afterEach(() => vi.unstubAllGlobals());
+
+  function stubWithBroken() {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const u = String(url);
+      const body = u.includes('/api/workflows/coverage') ? { ...coverageBody, brokenRefTotal: 2 }
+        : u.includes('/api/workflows') ? workflowsBody
+          : u.includes('/api/connections') ? { connections: [] }
+            : {};
+      return { ok: true, status: 200, json: async () => body };
+    }));
+  }
+
+  it('renders the clickable broken pill and toggles the broken filter on click', async () => {
+    stubWithBroken();
+    const w = mount(WorkflowsView, { global: { stubs: { 'router-link': RouterLinkStub } } });
+    await flushPromises();
+    const tid = (id: string) => w.find(`[data-testid="${id}"]`);
+
+    const pill = tid('coverage-broken-filter');
+    expect(pill.exists()).toBe(true);
+    expect(pill.text()).toContain('2 broken');
+    expect(pill.attributes('aria-pressed')).toBe('false');
+    // The dropdown facet is not selected yet.
+    expect(tid('filter-broken').classes()).not.toContain('sel');
+
+    await pill.trigger('click');
+    // Clicking the header pill applies the SAME filter as the buried facet.
+    expect(pill.attributes('aria-pressed')).toBe('true');
+    expect(tid('filter-broken').classes()).toContain('sel');
+
+    // Clicking again clears it.
+    await pill.trigger('click');
+    expect(pill.attributes('aria-pressed')).toBe('false');
+    expect(tid('filter-broken').classes()).not.toContain('sel');
+
+    w.unmount();
+  });
+});
+
 describe('Catalog freshness surfaces sync failures (rule 5)', () => {
   beforeEach(() => setActivePinia(createPinia()));
   afterEach(() => vi.unstubAllGlobals());

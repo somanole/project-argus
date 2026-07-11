@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useEstateHealthStore } from '../stores/estate-health';
+import { useEstateHealthStore, type HealthView } from '../stores/estate-health';
 import { useConnectionsStore } from '../stores/connections';
 import type { WorkflowListItem } from '@argus/shared';
 import WorkflowHealthBadge from '../components/WorkflowHealthBadge.vue';
@@ -15,7 +15,7 @@ import { usePaged } from '../lib/paginate';
 
 const store = useEstateHealthStore();
 const connections = useConnectionsStore();
-const { data, state, error, lastUpdated, windowDays, unavailableInstances } = storeToRefs(store);
+const { data, state, error, lastUpdated, windowDays, unavailableInstances, view, rows } = storeToRefs(store);
 
 const now = ref(Date.now());
 let clock: ReturnType<typeof setInterval> | undefined;
@@ -35,15 +35,30 @@ const syncFailureTitle = computed(() =>
 // on-demand recent runs / redacted failure) — the debugging surface.
 const selected = ref<WorkflowListItem | null>(null);
 
-const failing = computed(() => data.value?.failing ?? []);
-const degraded = computed(() => data.value?.degraded ?? []);
 const summary = computed(() => data.value?.summary ?? { failing: 0, degraded: 0, healthy: 0, idle: 0, unknown: 0 });
-const nothingWrong = computed(() => failing.value.length === 0 && degraded.value.length === 0);
 
-// Each feed is paginated client-side (an enterprise can have thousands failing/degraded).
+// The summary tiles double as the primary filter (same pattern as the Ownership
+// register): each tile switches the working set to that health state. Healthy / idle
+// are browsable too; "unavailable" only appears when an instance's executions can't be read.
+// Literal testids (not `health-tile-${view}`) so each survives as a static string in
+// the built bundle for the rule-11 presence grep, mirroring the Ownership register.
+type Tile = { view: HealthView; label: string; tone: 'danger' | 'warn' | 'ok' | 'muted'; testid: string; show: boolean };
+const tiles = computed<Tile[]>(() =>
+  [
+    { view: 'failing', label: 'failing', tone: 'danger', testid: 'health-tile-failing', show: true },
+    { view: 'degraded', label: 'degraded', tone: 'warn', testid: 'health-tile-degraded', show: true },
+    { view: 'healthy', label: 'healthy', tone: 'ok', testid: 'health-tile-healthy', show: true },
+    { view: 'idle', label: 'idle', tone: 'muted', testid: 'health-tile-idle', show: true },
+    { view: 'unknown', label: 'unavailable', tone: 'muted', testid: 'health-tile-unknown', show: summary.value.unknown > 0 },
+  ].filter((t) => t.show) as Tile[],
+);
+
+// The list is the active tile's set, paginated client-side (any one state can be large).
 const PAGE_SIZE = 50;
-const failingPage = usePaged(failing, PAGE_SIZE);
-const degradedPage = usePaged(degraded, PAGE_SIZE);
+const paged = usePaged(rows, PAGE_SIZE);
+
+// Empty is reassuring for the problem views ("Nothing failing"), neutral otherwise.
+const isProblemView = computed(() => view.value === 'failing' || view.value === 'degraded');
 
 function pct(w: WorkflowListItem): string {
   const r = w.health?.failureRate;
@@ -98,69 +113,50 @@ onUnmounted(() => {
       the connection's API key may lack <code>execution:list</code>. Those workflows read “health unavailable”, never healthy.
     </div>
 
-    <!-- Summary strip across every health state. -->
+    <!-- Summary strip = every health state, and the primary filter (tiles are buttons). -->
     <div class="summary" data-testid="health-summary">
-      <div class="stat stat--danger"><span class="n">{{ summary.failing }}</span><span class="lbl">failing</span></div>
-      <div class="stat stat--warn"><span class="n">{{ summary.degraded }}</span><span class="lbl">degraded</span></div>
-      <div class="stat stat--ok"><span class="n">{{ summary.healthy }}</span><span class="lbl">healthy</span></div>
-      <div class="stat stat--muted"><span class="n">{{ summary.idle }}</span><span class="lbl">idle</span></div>
-      <div v-if="summary.unknown > 0" class="stat stat--muted"><span class="n">{{ summary.unknown }}</span><span class="lbl">unavailable</span></div>
+      <button
+        v-for="t in tiles"
+        :key="t.view"
+        class="stat stat--btn"
+        :class="[`stat--${t.tone}`, { on: view === t.view }]"
+        :data-testid="t.testid"
+        :aria-pressed="view === t.view"
+        @click="store.setView(t.view)"
+      >
+        <span class="n">{{ summary[t.view] }}</span><span class="lbl">{{ t.label }}</span>
+      </button>
     </div>
 
     <p v-if="state === 'loading'" class="muted pad">Loading estate health…</p>
     <p v-else-if="state === 'error'" class="err pad" role="alert">Couldn’t load estate health — {{ error }}.</p>
 
-    <div v-else-if="nothingWrong" class="card empty" data-testid="health-empty">
-      <p>Nothing failing right now — {{ summary.healthy }} healthy, {{ summary.idle }} idle across the estate.</p>
+    <div v-else-if="rows.length === 0" class="card empty" data-testid="health-empty">
+      <p v-if="isProblemView">Nothing {{ view }} right now — {{ summary.healthy }} healthy, {{ summary.idle }} idle across the estate.</p>
+      <p v-else>No {{ view === 'unknown' ? 'unavailable' : view }} workflows in the last ~{{ windowDays }} days.</p>
     </div>
 
+    <!-- One table, filtered to the active tile's health state, most-critical first. -->
     <template v-else>
-      <!-- Failing then degraded, most-critical first. -->
-      <section v-if="failing.length" class="group">
-        <h2 class="group-title">Failing <span class="count">{{ failing.length }}</span></h2>
-        <div class="table-wrap" data-testid="health-failing-list">
-          <table class="wf">
-            <thead>
-              <tr><th class="c-name">Workflow</th><th class="c-crit">Criticality</th><th class="c-owner">Owner</th><th class="c-inst">Instance</th><th class="c-health">Health</th><th class="c-rate">Failure rate</th><th class="c-last">Last run</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="w in failingPage.paged.value" :key="w.instanceId + '/' + w.id" class="row" tabindex="0" @click="selected = w" @keydown.enter="selected = w">
-                <td class="c-name" data-label="Workflow">{{ w.name }}</td>
-                <td class="c-crit" data-label="Criticality"><EnrichmentBadges :enrichment="w.enrichment" /><span v-if="!w.enrichment?.criticality" class="muted">—</span></td>
-                <td class="c-owner" data-label="Owner" data-testid="incident-owner"><OwnerBadge :owner="w.owner" /></td>
-                <td class="c-inst" data-label="Instance"><span class="instance"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span></td>
-                <td class="c-health" data-label="Health"><WorkflowHealthBadge :health="w.health" /></td>
-                <td class="c-rate" data-label="Failure rate">{{ pct(w) }} <span class="muted">({{ w.health?.failuresInWindow ?? 0 }}/{{ w.health?.runsInWindow ?? 0 }})</span></td>
-                <td class="c-last muted" data-label="Last run">{{ relativeTime(w.health?.lastRunAt ?? null, now) }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <ListPager :page="failingPage.page.value" :page-size="PAGE_SIZE" :total="failingPage.total.value" label="Failing pages" @go="failingPage.go($event)" />
-      </section>
-
-      <section v-if="degraded.length" class="group">
-        <h2 class="group-title">Degraded <span class="count">{{ degraded.length }}</span></h2>
-        <div class="table-wrap" data-testid="health-degraded-list">
-          <table class="wf">
-            <thead>
-              <tr><th class="c-name">Workflow</th><th class="c-crit">Criticality</th><th class="c-owner">Owner</th><th class="c-inst">Instance</th><th class="c-health">Health</th><th class="c-rate">Failure rate</th><th class="c-last">Last run</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="w in degradedPage.paged.value" :key="w.instanceId + '/' + w.id" class="row" tabindex="0" @click="selected = w" @keydown.enter="selected = w">
-                <td class="c-name" data-label="Workflow">{{ w.name }}</td>
-                <td class="c-crit" data-label="Criticality"><EnrichmentBadges :enrichment="w.enrichment" /><span v-if="!w.enrichment?.criticality" class="muted">—</span></td>
-                <td class="c-owner" data-label="Owner"><OwnerBadge :owner="w.owner" /></td>
-                <td class="c-inst" data-label="Instance"><span class="instance"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span></td>
-                <td class="c-health" data-label="Health"><WorkflowHealthBadge :health="w.health" /></td>
-                <td class="c-rate" data-label="Failure rate">{{ pct(w) }} <span class="muted">({{ w.health?.failuresInWindow ?? 0 }}/{{ w.health?.runsInWindow ?? 0 }})</span></td>
-                <td class="c-last muted" data-label="Last run">{{ relativeTime(w.health?.lastRunAt ?? null, now) }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <ListPager :page="degradedPage.page.value" :page-size="PAGE_SIZE" :total="degradedPage.total.value" label="Degraded pages" @go="degradedPage.go($event)" />
-      </section>
+      <div class="table-wrap" data-testid="health-failing-list">
+        <table class="wf">
+          <thead>
+            <tr><th class="c-name">Workflow</th><th class="c-crit">Criticality</th><th class="c-owner">Owner</th><th class="c-inst">Instance</th><th class="c-health">Health</th><th class="c-rate">Failure rate</th><th class="c-last">Last run</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="w in paged.paged.value" :key="w.instanceId + '/' + w.id" class="row" tabindex="0" @click="selected = w" @keydown.enter="selected = w">
+              <td class="c-name" data-label="Workflow">{{ w.name }}</td>
+              <td class="c-crit" data-label="Criticality"><EnrichmentBadges :enrichment="w.enrichment" /><span v-if="!w.enrichment?.criticality" class="muted">—</span></td>
+              <td class="c-owner" data-label="Owner" data-testid="incident-owner"><OwnerBadge :owner="w.owner" /></td>
+              <td class="c-inst" data-label="Instance"><span class="instance"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span></td>
+              <td class="c-health" data-label="Health"><WorkflowHealthBadge :health="w.health" /></td>
+              <td class="c-rate" data-label="Failure rate">{{ pct(w) }} <span class="muted">({{ w.health?.failuresInWindow ?? 0 }}/{{ w.health?.runsInWindow ?? 0 }})</span></td>
+              <td class="c-last muted" data-label="Last run">{{ relativeTime(w.health?.lastRunAt ?? null, now) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ListPager :page="paged.page.value" :page-size="PAGE_SIZE" :total="paged.total.value" label="Health pages" @go="paged.go($event)" />
     </template>
 
     <WorkflowDetailDrawer :selected="selected" @close="selected = null" />
@@ -182,22 +178,24 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 }
 .warnbar code { font-family: var(--font-family--monospace); }
 
-.summary { display: flex; flex-wrap: wrap; gap: var(--spacing--2xs); }
+/* Summary strip = posture + the primary filter (tiles are buttons). Matches the
+   Ownership register's stat tiles exactly, so the two Estate views read as one system. */
+.summary { display: flex; gap: var(--spacing--2xs); flex-wrap: wrap; }
 .stat {
-  display: flex; flex-direction: column; align-items: flex-start;
-  min-width: 5.5rem; padding: var(--spacing--2xs) var(--spacing--sm);
+  flex: 1 1 8rem; min-width: 7.5rem; display: flex; flex-direction: column; gap: var(--spacing--5xs);
+  padding: var(--spacing--2xs) var(--spacing--sm);
   border: 1px solid var(--border-color--subtle); border-radius: var(--radius--lg);
-  background: var(--background--subtle);
+  background: var(--background--surface); text-align: left;
 }
-.stat .n { font-size: var(--font-size--lg); font-weight: var(--font-weight--bold); font-variant-numeric: tabular-nums; line-height: 1.1; }
-.stat .lbl { font-size: var(--font-size--3xs); text-transform: uppercase; letter-spacing: var(--letter-spacing--wide); opacity: 0.7; }
+.stat--btn { appearance: none; font: inherit; cursor: pointer; transition: border-color var(--duration--snappy, 0.12s) ease; }
+.stat--btn:hover { border-color: var(--border-color--strong, var(--border-color)); }
+.stat--btn.on { border-color: var(--background--brand); box-shadow: inset 0 0 0 1px var(--background--brand); }
+.stat .n { font-size: var(--font-size--xl); font-weight: var(--font-weight--bold); line-height: 1; font-variant-numeric: tabular-nums; }
+.stat .lbl { font-size: var(--font-size--3xs); color: var(--color--text--shade-1); opacity: 0.7; }
+.stat--ok .n { color: var(--color--success); }
 .stat--danger .n { color: var(--color--danger); }
 .stat--warn .n { color: var(--color--warning); }
-.stat--ok .n { color: var(--color--success); }
-
-.group { display: flex; flex-direction: column; gap: var(--spacing--2xs); }
-.group-title { margin: var(--spacing--2xs) 0 0; font-size: var(--font-size--md); font-weight: var(--font-weight--bold); }
-.group-title .count { font-size: var(--font-size--2xs); font-weight: var(--font-weight--medium); opacity: 0.6; font-variant-numeric: tabular-nums; }
+.stat--muted .n { color: var(--color--text--shade-1); opacity: 0.6; }
 
 .table-wrap { border: 1px solid var(--border-color--subtle); border-radius: var(--radius--lg); overflow-x: auto; }
 .wf { width: 100%; border-collapse: collapse; font-size: var(--font-size--sm); }

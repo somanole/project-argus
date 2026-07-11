@@ -96,6 +96,9 @@ export interface HealthWindow {
 export interface HealthEstate {
   failing: WorkflowListItem[];
   degraded: WorkflowListItem[];
+  healthy: WorkflowListItem[];
+  idle: WorkflowListItem[];
+  unknown: WorkflowListItem[];
   summary: { failing: number; degraded: number; healthy: number; idle: number; unknown: number };
   windows: HealthWindow[];
 }
@@ -122,6 +125,11 @@ function triage(items: WorkflowListItem[]): WorkflowListItem[] {
 export function healthEstate(db: Database.Database): HealthEstate {
   const failing = triage(listWorkflows(db, { health: ['failing'] }));
   const degraded = triage(listWorkflows(db, { health: ['degraded'] }));
+  // Healthy + idle are browsable too (so every summary tile filters a real list);
+  // they carry no failure rate, so triage falls through to criticality-then-name.
+  const healthy = triage(listWorkflows(db, { health: ['healthy'] }));
+  const idle = triage(listWorkflows(db, { health: ['idle'] }));
+  const unknown = triage(listWorkflows(db, { health: ['unknown'] }));
 
   const counts = db
     .prepare('SELECT status, COUNT(*) AS n FROM workflow_health GROUP BY status')
@@ -157,5 +165,5 @@ export function healthEstate(db: Database.Database): HealthEstate {
     available: !(r.total > 0 && r.unknownCount === r.total),
   }));
 
-  return { failing, degraded, summary, windows };
+  return { failing, degraded, healthy, idle, unknown, summary, windows };
 }

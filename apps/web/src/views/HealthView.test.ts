@@ -18,10 +18,18 @@ const item = (over: Record<string, unknown>) => ({
   ...over,
 });
 
+const healthyItem = (id: string, name: string) => item({ id, name, enrichment: null,
+  health: { status: 'healthy', failureRate: 0, runsInWindow: 10, failuresInWindow: 0, lastRunAt: '2026-07-05T00:00:00.000Z', lastStatus: 'success', avgDurationMs: 5, windowHours: 336, computedAt: '2026-07-05T00:00:00.000Z', unavailableReason: null } });
+const idleItem = (id: string, name: string) => item({ id, name, enrichment: null,
+  health: { status: 'idle', failureRate: null, runsInWindow: 0, failuresInWindow: 0, lastRunAt: null, lastStatus: null, avgDurationMs: null, windowHours: 336, computedAt: '2026-07-05T00:00:00.000Z', unavailableReason: null } });
+
 const failingBody = {
   failing: [item({})],
   degraded: [item({ id: 'w2', name: 'Zendesk Sync', health: { status: 'degraded', failureRate: 0.5, runsInWindow: 6, failuresInWindow: 3, lastRunAt: '2026-07-05T00:00:00.000Z', lastStatus: 'error', avgDurationMs: 5, windowHours: 336, computedAt: '2026-07-05T00:00:00.000Z', unavailableReason: null } })],
-  summary: { failing: 1, degraded: 1, healthy: 3, idle: 2, unknown: 0 },
+  healthy: [healthyItem('w3', 'Order Intake'), healthyItem('w4', 'Nightly Backup')],
+  idle: [idleItem('w5', 'Send Slack Alert')],
+  unknown: [],
+  summary: { failing: 1, degraded: 1, healthy: 2, idle: 1, unknown: 0 },
   windows: [{ instanceId: 'a', instanceLabel: 'prod', windowHours: 336, available: true }],
   generatedAt: '2026-07-05T00:00:00.000Z',
 };
@@ -79,13 +87,38 @@ describe('Health view — UI-presence (rule 11)', () => {
     w.unmount();
   });
 
-  it('shows an empty state when nothing is failing or degraded', async () => {
-    stubFetch({ failing: [], degraded: [], summary: { failing: 0, degraded: 0, healthy: 5, idle: 2, unknown: 0 },
+  it('shows a reassuring empty state when nothing is failing (default view)', async () => {
+    stubFetch({ failing: [], degraded: [], healthy: [healthyItem('w3', 'Order Intake')], idle: [], unknown: [],
+      summary: { failing: 0, degraded: 0, healthy: 5, idle: 2, unknown: 0 },
       windows: [{ instanceId: 'a', instanceLabel: 'prod', windowHours: 336, available: true }], generatedAt: '2026-07-05T00:00:00.000Z' });
     const w = mountView();
     await flushPromises();
     expect(w.find('[data-testid="health-empty"]').exists()).toBe(true);
     expect(w.find('[data-testid="health-empty"]').text()).toContain('Nothing failing');
+    w.unmount();
+  });
+
+  it('summary tiles are clickable filters — every state (incl. healthy/idle) browses its list', async () => {
+    stubFetch();
+    const w = mountView();
+    await flushPromises();
+    const tid = (id: string) => w.find(`[data-testid="${id}"]`);
+    const list = () => tid('health-failing-list');
+
+    // Default view = failing; the failing tile is pressed and its row shows.
+    expect(tid('health-tile-failing').attributes('aria-pressed')).toBe('true');
+    expect(list().text()).toContain('Daily Stripe Reconciliation');
+
+    // Click "healthy" → the list switches to the healthy workflows (browsable now).
+    await tid('health-tile-healthy').trigger('click');
+    expect(tid('health-tile-healthy').attributes('aria-pressed')).toBe('true');
+    expect(tid('health-tile-failing').attributes('aria-pressed')).toBe('false');
+    expect(list().text()).toContain('Order Intake');
+    expect(list().text()).not.toContain('Daily Stripe Reconciliation');
+
+    // Click "idle" → the idle set, which failing-only used to hide entirely.
+    await tid('health-tile-idle').trigger('click');
+    expect(list().text()).toContain('Send Slack Alert');
     w.unmount();
   });
 

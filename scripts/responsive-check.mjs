@@ -50,6 +50,9 @@ const WORKFLOWS = [
 const failingBody = {
   failing: [WORKFLOWS[0]],
   degraded: [WORKFLOWS[1]],
+  healthy: [],
+  idle: [WORKFLOWS[2]],
+  unknown: [],
   summary: { failing: 1, degraded: 1, healthy: 1, idle: 1, unknown: 0 },
   windows: [{ instanceId: 'prod', instanceLabel: 'prod', windowHours: 336, available: true }],
   generatedAt: '2026-07-05T00:00:00.000Z',

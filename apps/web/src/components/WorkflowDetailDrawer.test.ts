@@ -68,6 +68,30 @@ describe('WorkflowDetailDrawer — execution debug (rule 11)', () => {
     expect(sec.find('[data-testid="ownership-assign-button"]').exists()).toBe(true);
   });
 
+  it('shows the at-a-glance strip with the four governance tiles, honest when unknown (rule 5/11)', async () => {
+    const w = mount(WorkflowDetailDrawer, { props: { selected: item } });
+    await flushPromises();
+    const glance = w.find('[data-testid="drawer-glance"]');
+    expect(glance.exists()).toBe(true);
+    const text = glance.text();
+    expect(text).toContain('Criticality');
+    expect(text).toContain('Health');
+    expect(text).toContain('Owner');
+    expect(text).toContain('Risk');
+    // This item is un-enriched: criticality + risk must read "not analyzed", never a fabricated level.
+    expect(text.toLowerCase()).toContain('not analyzed');
+    // Health is failing (has data) → the health badge renders inside the strip.
+    expect(glance.find('[data-testid="health-badge"]').exists()).toBe(true);
+  });
+
+  it('promotes the "Open in n8n" deep-link into the header', async () => {
+    const w = mount(WorkflowDetailDrawer, { props: { selected: item } });
+    await flushPromises();
+    const link = w.find('.d-head a.open');
+    expect(link.exists()).toBe(true);
+    expect(link.attributes('href')).toBe('http://localhost:5678/workflow/w1');
+  });
+
   it('degrades honestly when executions are unavailable (no fabricated runs)', async () => {
     stubFetch({ runs: [], failure: null, unavailable: true, unavailableReason: 'executions unavailable — the API key may lack execution:list', generatedAt: '2026-07-05T00:00:00.000Z' });
     const w = mount(WorkflowDetailDrawer, { props: { selected: item } });

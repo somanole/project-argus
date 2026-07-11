@@ -73,6 +73,21 @@ public templates and the coverage reported honestly.
 - Opening any workflow shows its facts and its **outbound direct dependencies with
   their resolution state**, without leaving Argus, plus an **"Open in n8n"**
   deep-link to that workflow in its instance's editor.
+- **Layout (organised to scan, not to read top-to-bottom).** The drawer opens
+  **wider** (~720px on desktop; still full-width at 375px) so the estate list stays
+  visible behind it and the content can breathe in two columns. A **sticky header**
+  carries identity (name, instance·project, state/MCP/broken-ref badges) and the
+  **"Open in n8n" action** — the deep-link is promoted to the top, not buried at the
+  bottom. Directly under it, an **at-a-glance strip** answers the four governance
+  questions in one look — **criticality · health · owner · risk** — each honest
+  (rule 5): "not analyzed" / "—" when the underlying value is unknown, never a
+  fabricated default. Below, a **two-column body**: the left column is *what &amp; why*
+  (sense-making summary + risk flags, with the longer business-context prose behind a
+  "More context" disclosure; then facts, direct dependencies, and honest gaps); the
+  right column is *who &amp; how it's doing* (ownership with its audited controls and the
+  advisory **suggested-owner** hint shown right where you assign; then health with its
+  numbers and recent runs). Below ~760px the two columns stack into one; nothing is
+  removed or clipped at any width.
 
 **Coverage (the trust number).**
 - The verify report prints **"understands X% of the real-template corpus, the rest
@@ -153,6 +168,9 @@ public templates and the coverage reported honestly.
       MCP-exposed — combinable — server-side.
 - [x] Opening a workflow shows its facts + outbound direct deps with resolution
       state + an "Open in n8n" deep-link.
+- [x] The drawer's **at-a-glance strip** surfaces criticality, health, owner, and
+      risk in one scannable row, each honest when unknown (rule 5) — "not analyzed"
+      for un-enriched criticality/risk, never a fabricated level or a false "none".
 - [x] The verify report prints "understands X% of the real-template corpus, rest
       explicitly unparsed, zero false broken-refs", with a ranked breakdown of
       unknown node types.
@@ -174,6 +192,9 @@ renders with its key text/state (not appearance), and a `pnpm verify` row.
       component test (both states) and a `pnpm verify` row.
 - [x] The catalog shows every **filter control** — search, state (All/Active/
       Archived), MCP-exposed, instance, system, trigger.
+- [x] The **detail drawer** shows the **at-a-glance summary strip**
+      (`drawer-glance`) and promotes the **"Open in n8n"** action into the sticky
+      header (asserted present, not by pixel position).
 - [x] The **connection-health indicator** renders on the Connections screen (a
       signed-off S1a element; it lives there, not in the catalog header).
 

@@ -164,12 +164,16 @@ with its key text/state (not appearance), and a `pnpm verify` row.
 - [ ] The **catalog** shows a **health badge** per workflow
       (`health-badge`: failing/degraded/healthy/idle/unknown) and a **health facet**
       (`filter-health`).
-- [ ] The **Health view** (`health-view`) shows the **failing list**
-      (`health-failing-list`) with criticality, a summary strip, the **retention
-      window** (`health-window`), and a **poll-fresh/honest-stale** indicator
-      (`health-freshness`). Empty state: "Nothing failing right now." The failing and
-      degraded feeds are each **paginated** (the shared `ListPager`, 50/page) — an
-      enterprise can have thousands failing.
+- [ ] The **Health view** (`health-view`) shows a **summary strip whose tiles are the
+      primary filter** (`health-tile-failing` / `-degraded` / `-healthy` / `-idle`, plus
+      `-unknown` when any instance's executions are unreadable) — same stat-tile style and
+      click-to-filter behaviour as the Ownership register, so the two Estate views read as
+      one system. Clicking a tile switches the single **list** (`health-failing-list`) to
+      that health state (default **failing**); **healthy and idle are browsable too**, not
+      just counts. Criticality rides along, the **retention window** (`health-window`) and a
+      **poll-fresh/honest-stale** indicator (`health-freshness`) are shown, and the list is
+      **paginated** (the shared `ListPager`, 50/page). Empty state is reassuring for the
+      problem views ("Nothing failing right now"), neutral otherwise ("No idle workflows…").
 - [ ] The **detail drawer** shows a **health section** (`health-section`): status,
       failure rate, last run, average duration, window, and checked-N-ago — and, on
       demand, the **recent-runs list** (`execution-runs`) + the **redacted failure

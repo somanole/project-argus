@@ -1,7 +1,10 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import { healthEstateResponseSchema, type HealthEstateResponse } from '@argus/shared';
+import { healthEstateResponseSchema, type HealthEstateResponse, type WorkflowListItem } from '@argus/shared';
 import { api } from '../lib/api';
+
+/** Which health state's list the view is showing (also which summary tile is active). */
+export type HealthView = 'failing' | 'degraded' | 'healthy' | 'idle' | 'unknown';
 
 /**
  * The S3 "what's failing right now" feed (`GET /api/workflows/failing`): failing then
@@ -14,6 +17,12 @@ export const useEstateHealthStore = defineStore('estateHealth', () => {
   const state = ref<'idle' | 'loading' | 'ok' | 'error'>('idle');
   const error = ref<string | null>(null);
   const lastUpdated = ref<string | null>(null);
+
+  // The summary tiles double as the primary filter — each one switches the working
+  // set to that health state (default 'failing': the view's whole purpose).
+  const view = ref<HealthView>('failing');
+  function setView(v: HealthView): void { view.value = v; }
+  const rows = computed<WorkflowListItem[]>(() => data.value?.[view.value] ?? []);
 
   /** The single retention window to headline (all instances share n8n's default). */
   const windowHours = computed(() => data.value?.windows[0]?.windowHours ?? 336);
@@ -35,5 +44,5 @@ export const useEstateHealthStore = defineStore('estateHealth', () => {
     }
   }
 
-  return { data, state, error, lastUpdated, windowHours, windowDays, unavailableInstances, refresh };
+  return { data, state, error, lastUpdated, windowHours, windowDays, unavailableInstances, view, setView, rows, refresh };
 });

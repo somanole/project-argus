@@ -211,6 +211,11 @@ try {
   add('Connections screen shows the connection-health indicator', has('connection-health'),
     has('connection-health') ? 'connection-health present' : 'connection-health MISSING');
 
+  // The detail drawer's at-a-glance strip: criticality/health/owner/risk in one scan,
+  // each honest when unknown. Component test in WorkflowDetailDrawer.test.ts; presence here.
+  add('Detail drawer shows the at-a-glance summary strip (criticality/health/owner/risk)', has('drawer-glance'),
+    has('drawer-glance') ? 'drawer-glance present' : 'drawer-glance MISSING');
+
   // S6.1: analyzer-freshness drift notice (core-drift + community-only variants; nothing
   // when current). Component test asserts each variant's text/state; this is the presence row.
   add('Connections screen shows the analyzer-freshness drift notice (S6.1)', has('analyzer-drift'),
@@ -231,7 +236,7 @@ try {
   // S3: health chrome — the catalog badge + health facet, the "what's failing" view
   // (failing list, summary, retention window, poll-fresh/honest-stale indicator), and
   // the drawer health section. Each has a component test; this is the presence counterpart.
-  const healthUi = ['health-badge', 'filter-health', 'health-view', 'health-failing-list', 'health-window', 'health-freshness', 'health-section', 'health-summary', 'execution-runs', 'execution-failure'];
+  const healthUi = ['health-badge', 'filter-health', 'health-view', 'health-failing-list', 'health-window', 'health-freshness', 'health-section', 'health-summary', 'health-tile-failing', 'health-tile-healthy', 'health-tile-idle', 'execution-runs', 'execution-failure'];
   const hMissing = missing(healthUi);
   add('Health UI ships (catalog badge+facet, failing view, drawer health + runs/failure)', hMissing.length === 0,
     hMissing.length === 0 ? `${healthUi.length} health UI elements present` : `MISSING: ${hMissing.join(', ')}`);
@@ -240,7 +245,7 @@ try {
   // assign dialog, the Ownership register (accountability table + clickable summary
   // filters), and the incident owner on the failing surface. Each has a component test.
   const ownUi = [
-    'owner-badge', 'ownership-section', 'ownership-assign-button', 'assign-owner-dialog', 'assign-owner-picker', 'assign-owner-suggestion',
+    'owner-badge', 'ownership-section', 'ownership-assign-button', 'ownership-suggested-owner', 'assign-owner-dialog', 'assign-owner-picker', 'assign-owner-suggestion',
     'governance-view', 'ownership-summary', 'ownership-register', 'ownership-confirmed',
     'ownership-filter-needs-owner', 'ownership-filter-critical-at-risk', 'ownership-scope', 'ownership-search',
     'incident-owner',
@@ -1310,6 +1315,13 @@ async function s3Checks() {
     add('Failing feed summary counts + instances report available (executions readable)',
       (sum.failing ?? 0) >= 1 && (sum.degraded ?? 0) >= 2 && (feed.windows ?? []).every((w) => w.available === true),
       `summary failing ${sum.failing}, degraded ${sum.degraded}, healthy ${sum.healthy}, idle ${sum.idle}; all available`);
+    // Every health state is a browsable list (the summary tiles all filter a real set),
+    // and each list length equals its summary count — no state is a dead-end number.
+    const listLen = (k) => (feed[k] ?? []).length;
+    const listsMatchCounts = ['failing', 'degraded', 'healthy', 'idle', 'unknown'].every((k) => listLen(k) === (sum[k] ?? 0));
+    add('Health feed exposes every state as a browsable list (healthy/idle too), lists == counts',
+      Array.isArray(feed.healthy) && Array.isArray(feed.idle) && listLen('idle') >= 1 && listsMatchCounts,
+      `lists failing ${listLen('failing')}/degraded ${listLen('degraded')}/healthy ${listLen('healthy')}/idle ${listLen('idle')}/unknown ${listLen('unknown')} == counts=${listsMatchCounts}`);
 
     // On-demand redacted execution debug: the drawer's failing-workflow endpoint returns
     // the failing NODE + error type/code (redacted, no message) + per-run n8n deep links.

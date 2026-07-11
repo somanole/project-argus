@@ -85,14 +85,18 @@ export const coverageResponseSchema = coverageReportSchema;
 export type CoverageResponse = z.infer<typeof coverageReportSchema>;
 
 /**
- * The S3 "what's failing right now" view feed. Failing then degraded workflows
- * (each a full list item, so its S2 criticality rides along), a summary count of
- * every health state, and the per-instance retention window (shown honestly, and
- * flagged `available: false` when executions couldn't be read for that instance).
+ * The S3 "what's failing right now" view feed. Every health state as its own list
+ * of full list items (so each carries its S2 criticality) — failing/degraded lead,
+ * healthy/idle browsable behind their tiles — a summary count of every health state,
+ * and the per-instance retention window (shown honestly, and flagged
+ * `available: false` when executions couldn't be read for that instance).
  */
 export const healthEstateResponseSchema = z.object({
   failing: z.array(workflowListItemSchema),
   degraded: z.array(workflowListItemSchema),
+  healthy: z.array(workflowListItemSchema),
+  idle: z.array(workflowListItemSchema),
+  unknown: z.array(workflowListItemSchema),
   summary: z.object({
     failing: z.number().int().min(0),
     degraded: z.number().int().min(0),
