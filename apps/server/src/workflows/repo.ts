@@ -56,6 +56,10 @@ export interface WorkflowFilters {
   /** Only workflows whose stored analysis is stale (enrichment exists but its input hash drifted). */
   stale?: boolean | undefined;
   q?: string | undefined;
+  /** Page size — when set, the list is LIMIT/OFFSET paginated (else the full filtered set). */
+  limit?: number | undefined;
+  /** Rows to skip before the page (pagination). */
+  offset?: number | undefined;
 }
 
 interface WorkflowRow {
@@ -333,12 +337,8 @@ const LIST_SELECT = `
     LEFT JOIN workflow_ownership o ON o.instance_id = w.instance_id AND o.workflow_id = w.id
     LEFT JOIN workflow_inferred_owner io ON io.instance_id = w.instance_id AND io.workflow_id = w.id`;
 
-/**
- * The estate-wide inventory with S1b facts, filtered server-side. `instanceId` is a
- * filter, the list is one estate. Multiple systems/triggers are OR within the facet;
- * different facets AND together (standard faceted search).
- */
-export function listWorkflows(db: Database.Database, filters: WorkflowFilters = {}): WorkflowListItem[] {
+/** Build the shared WHERE clause + params so `listWorkflows` and `countWorkflows` filter identically. */
+function buildWorkflowWhere(filters: WorkflowFilters): { clause: string; params: unknown[] } {
   const where: string[] = [];
   const params: unknown[] = [];
 
@@ -397,9 +397,34 @@ export function listWorkflows(db: Database.Database, filters: WorkflowFilters = 
     params.push(`%${filters.q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`);
   }
 
-  const sql = `${LIST_SELECT}${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY c.label, w.name`;
+  return { clause: where.length ? ` WHERE ${where.join(' AND ')}` : '', params };
+}
+
+/**
+ * The estate-wide inventory with S1b facts, filtered server-side, ORDER BY instance+name,
+ * and LIMIT/OFFSET paginated (an estate can have thousands). `instanceId` is a filter, the
+ * list is one estate. Multiple systems/triggers are OR within the facet; different facets
+ * AND together (standard faceted search).
+ */
+export function listWorkflows(db: Database.Database, filters: WorkflowFilters = {}): WorkflowListItem[] {
+  const { clause, params } = buildWorkflowWhere(filters);
+  let sql = `${LIST_SELECT}${clause} ORDER BY c.label, w.name`;
+  if (filters.limit !== undefined) {
+    const limit = Math.min(Math.max(filters.limit, 1), 5000);
+    const offset = Math.max(filters.offset ?? 0, 0);
+    sql += ` LIMIT ${limit} OFFSET ${offset}`;
+  }
   const rows = db.prepare(sql).all(...params) as WorkflowRow[];
   return rows.map(toListItem);
+}
+
+/** Total workflows matching the filters (ignores limit/offset) — the pagination denominator. */
+export function countWorkflows(db: Database.Database, filters: WorkflowFilters = {}): number {
+  const { clause, params } = buildWorkflowWhere(filters);
+  const row = db.prepare(`SELECT COUNT(*) AS n FROM workflows w JOIN connections c ON c.id = w.instance_id
+    LEFT JOIN workflow_enrichments e ON e.instance_id = w.instance_id AND e.workflow_id = w.id
+    LEFT JOIN workflow_health h ON h.instance_id = w.instance_id AND h.workflow_id = w.id${clause}`).get(...params) as { n: number };
+  return row.n;
 }
 
 /** One workflow's full facts + connection base URL, for the detail drawer. */

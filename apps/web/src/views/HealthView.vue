@@ -8,8 +8,10 @@ import WorkflowHealthBadge from '../components/WorkflowHealthBadge.vue';
 import EnrichmentBadges from '../components/EnrichmentBadges.vue';
 import OwnerBadge from '../components/OwnerBadge.vue';
 import WorkflowDetailDrawer from '../components/WorkflowDetailDrawer.vue';
+import ListPager from '../components/ListPager.vue';
 import { instanceColor } from '../lib/instanceColor';
 import { relativeTime } from '../lib/time';
+import { usePaged } from '../lib/paginate';
 
 const store = useEstateHealthStore();
 const connections = useConnectionsStore();
@@ -37,6 +39,11 @@ const failing = computed(() => data.value?.failing ?? []);
 const degraded = computed(() => data.value?.degraded ?? []);
 const summary = computed(() => data.value?.summary ?? { failing: 0, degraded: 0, healthy: 0, idle: 0, unknown: 0 });
 const nothingWrong = computed(() => failing.value.length === 0 && degraded.value.length === 0);
+
+// Each feed is paginated client-side (an enterprise can have thousands failing/degraded).
+const PAGE_SIZE = 50;
+const failingPage = usePaged(failing, PAGE_SIZE);
+const degradedPage = usePaged(degraded, PAGE_SIZE);
 
 function pct(w: WorkflowListItem): string {
   const r = w.health?.failureRate;
@@ -117,7 +124,7 @@ onUnmounted(() => {
               <tr><th class="c-name">Workflow</th><th class="c-crit">Criticality</th><th class="c-owner">Owner</th><th class="c-inst">Instance</th><th class="c-health">Health</th><th class="c-rate">Failure rate</th><th class="c-last">Last run</th></tr>
             </thead>
             <tbody>
-              <tr v-for="w in failing" :key="w.instanceId + '/' + w.id" class="row" tabindex="0" @click="selected = w" @keydown.enter="selected = w">
+              <tr v-for="w in failingPage.paged.value" :key="w.instanceId + '/' + w.id" class="row" tabindex="0" @click="selected = w" @keydown.enter="selected = w">
                 <td class="c-name" data-label="Workflow">{{ w.name }}</td>
                 <td class="c-crit" data-label="Criticality"><EnrichmentBadges :enrichment="w.enrichment" /><span v-if="!w.enrichment?.criticality" class="muted">—</span></td>
                 <td class="c-owner" data-label="Owner" data-testid="incident-owner"><OwnerBadge :owner="w.owner" /></td>
@@ -129,6 +136,7 @@ onUnmounted(() => {
             </tbody>
           </table>
         </div>
+        <ListPager :page="failingPage.page.value" :page-size="PAGE_SIZE" :total="failingPage.total.value" label="Failing pages" @go="failingPage.go($event)" />
       </section>
 
       <section v-if="degraded.length" class="group">
@@ -139,7 +147,7 @@ onUnmounted(() => {
               <tr><th class="c-name">Workflow</th><th class="c-crit">Criticality</th><th class="c-owner">Owner</th><th class="c-inst">Instance</th><th class="c-health">Health</th><th class="c-rate">Failure rate</th><th class="c-last">Last run</th></tr>
             </thead>
             <tbody>
-              <tr v-for="w in degraded" :key="w.instanceId + '/' + w.id" class="row" tabindex="0" @click="selected = w" @keydown.enter="selected = w">
+              <tr v-for="w in degradedPage.paged.value" :key="w.instanceId + '/' + w.id" class="row" tabindex="0" @click="selected = w" @keydown.enter="selected = w">
                 <td class="c-name" data-label="Workflow">{{ w.name }}</td>
                 <td class="c-crit" data-label="Criticality"><EnrichmentBadges :enrichment="w.enrichment" /><span v-if="!w.enrichment?.criticality" class="muted">—</span></td>
                 <td class="c-owner" data-label="Owner"><OwnerBadge :owner="w.owner" /></td>
@@ -151,6 +159,7 @@ onUnmounted(() => {
             </tbody>
           </table>
         </div>
+        <ListPager :page="degradedPage.page.value" :page-size="PAGE_SIZE" :total="degradedPage.total.value" label="Degraded pages" @go="degradedPage.go($event)" />
       </section>
     </template>
 

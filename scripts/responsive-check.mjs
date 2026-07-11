@@ -61,6 +61,9 @@ const workflowsBody = {
     triggers: [{ value: 'n8n-nodes-base.webhook', label: 'Webhook', count: 1 }, { value: 'n8n-nodes-base.scheduleTrigger', label: 'Schedule Trigger', count: 1 }, { value: 'n8n-nodes-base.manualTrigger', label: 'Manual Trigger', count: 1 }],
     instances: [{ id: 'prod', label: 'prod', count: 3 }],
   },
+  total: WORKFLOWS.length,
+  limit: 50,
+  offset: 0,
   generatedAt: '2026-07-05T00:00:00.000Z',
 };
 const coverageBody = { total: 3, understood: 2, understoodPct: 66.7, gapsByKind: {}, unknownNodeTypes: [], unresolvedRefTotal: 0, dynamicRefTotal: 0, brokenRefTotal: 1, perInstance: [] };

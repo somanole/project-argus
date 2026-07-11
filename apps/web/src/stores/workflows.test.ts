@@ -24,13 +24,16 @@ function item(id: string, instanceId: string, instanceLabel: string) {
   };
 }
 
-function okResponse(workflows: ReturnType<typeof item>[]) {
+function okResponse(workflows: ReturnType<typeof item>[], total = workflows.length) {
   return {
     ok: true,
     status: 200,
     json: async () => ({
       workflows,
       facets: { systems: [{ value: 'Salesforce', count: 2 }], triggers: [], instances: [{ id: 'a', label: 'prod', count: 2 }] },
+      total,
+      limit: 50,
+      offset: 0,
       generatedAt: '2026-07-05T00:00:00.000Z',
     }),
   };
@@ -95,6 +98,32 @@ describe('workflows store (server-side filtering)', () => {
     expect(store.health).toEqual([]);
     expect(store.stateFilter).toBe('all');
     expect(store.activeFilterCount).toBe(1); // exactly the one deep-linked filter
+  });
+
+  it('paginates server-side: sends limit/offset, exposes total, and resets to page 1 on a filter change', async () => {
+    const fetchMock = vi.fn(async (_url: string) => okResponse([item('1', 'a', 'prod')], 320));
+    vi.stubGlobal('fetch', fetchMock);
+    const store = useWorkflowsStore();
+    await store.refresh();
+
+    let lastUrl = String(fetchMock.mock.calls.at(-1)?.[0] ?? '');
+    expect(lastUrl).toContain('limit=50');
+    expect(lastUrl).toContain('offset=0');
+    expect(store.total).toBe(320); // full match count, not the page length
+
+    // Page forward → offset advances, page kept.
+    store.goToPage(2);
+    await Promise.resolve();
+    lastUrl = String(fetchMock.mock.calls.at(-1)?.[0] ?? '');
+    expect(lastUrl).toContain('offset=100'); // page 2 (0-based) * 50
+    expect(store.page).toBe(2);
+
+    // Any filter change resets to page 1 (a new filter set has its own pages).
+    store.setMcpOnly(true);
+    await Promise.resolve();
+    lastUrl = String(fetchMock.mock.calls.at(-1)?.[0] ?? '');
+    expect(lastUrl).toContain('offset=0');
+    expect(store.page).toBe(0);
   });
 
   it('reports an honest error when the server is unreachable', async () => {

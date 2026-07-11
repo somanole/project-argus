@@ -167,7 +167,9 @@ with its key text/state (not appearance), and a `pnpm verify` row.
 - [ ] The **Health view** (`health-view`) shows the **failing list**
       (`health-failing-list`) with criticality, a summary strip, the **retention
       window** (`health-window`), and a **poll-fresh/honest-stale** indicator
-      (`health-freshness`). Empty state: "Nothing failing right now."
+      (`health-freshness`). Empty state: "Nothing failing right now." The failing and
+      degraded feeds are each **paginated** (the shared `ListPager`, 50/page) — an
+      enterprise can have thousands failing.
 - [ ] The **detail drawer** shows a **health section** (`health-section`): status,
       failure rate, last run, average duration, window, and checked-N-ago — and, on
       demand, the **recent-runs list** (`execution-runs`) + the **redacted failure

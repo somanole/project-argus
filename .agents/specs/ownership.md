@@ -192,7 +192,8 @@ with its key text/state, and a `pnpm verify` row.
       (`governance-view`); existing chrome is unchanged (additive only, rule 11).
 - [ ] The Governance view shows the **governance-gaps** panel (`governance-gaps`:
       unowned-critical, single-owner-critical, personal-space-critical, no-backup) with
-      counts + criticality.
+      counts + criticality. Each gap group is **paginated** (the shared `ListPager`, 50/page)
+      — the unowned list can be the whole estate.
 - [ ] A side-panel **"Activity"** item routes to the **Activity view** (`activity-view`),
       which shows the **audit timeline** (`governance-audit-timeline`) with filter controls
       (`audit-filter-action`, `audit-filter-actor` — partial name-or-email match), a **pager**

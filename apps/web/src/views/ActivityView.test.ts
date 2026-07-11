@@ -59,9 +59,9 @@ describe('Activity view — UI-presence (rule 11)', () => {
     expect(exportLink.attributes('href')).toContain('/api/ownership/audit/export.csv');
     expect(exportLink.attributes('href')).not.toContain('offset');
 
-    // Pager shows the range + of-total; the first page fetched offset=0.
-    expect(tid('audit-pager').exists()).toBe(true);
-    expect(tid('audit-pager-range').text()).toContain('1–1 of 120');
+    // Pager shows the page window + of-total; the first page fetched offset=0.
+    expect(tid('pager').exists()).toBe(true);
+    expect(tid('pager-range').text()).toContain('1–50 of 120');
     expect(fetched.some((u) => u.includes('limit=50') && u.includes('offset=0'))).toBe(true);
     w.unmount();
   });
@@ -73,10 +73,10 @@ describe('Activity view — UI-presence (rule 11)', () => {
     const tid = (id: string) => w.find(`[data-testid="${id}"]`);
 
     // 120 total, 50/page → Previous disabled on page 1, Next enabled.
-    expect(tid('audit-pager-prev').attributes('disabled')).toBeDefined();
-    expect(tid('audit-pager-next').attributes('disabled')).toBeUndefined();
+    expect(tid('pager-prev').attributes('disabled')).toBeDefined();
+    expect(tid('pager-next').attributes('disabled')).toBeUndefined();
 
-    await tid('audit-pager-next').trigger('click');
+    await tid('pager-next').trigger('click');
     await flushPromises();
     expect(fetched.some((u) => u.includes('offset=50'))).toBe(true);
     w.unmount();
@@ -87,7 +87,7 @@ describe('Activity view — UI-presence (rule 11)', () => {
     const w = mountView();
     await flushPromises();
     expect(w.find('[data-testid="governance-audit-timeline"]').text()).toContain('No audit entries match');
-    expect(w.find('[data-testid="audit-pager"]').exists()).toBe(false);
+    expect(w.find('[data-testid="pager"]').exists()).toBe(false);
     w.unmount();
   });
 });

@@ -11,6 +11,7 @@ import {
 } from '@argus/shared';
 import {
   listWorkflows,
+  countWorkflows,
   getWorkflowDetail,
   facets,
   listCoverageEntries,
@@ -48,7 +49,11 @@ export function workflowsRouter(db: Database.Database, worker: EnrichmentWorker,
 
   router.get('/', (req, res) => {
     const filters = parseFilters(req.query);
-    const workflows = listWorkflows(db, filters);
+    // Server-side pagination: an estate can have thousands, so serve one page (default 50).
+    const limit = filters.limit ?? WORKFLOWS_PAGE_SIZE;
+    const offset = filters.offset ?? 0;
+    const workflows = listWorkflows(db, { ...filters, limit, offset });
+    const total = countWorkflows(db, filters);
 
     // Facets are computed over the WHOLE estate (unfiltered) so chips stay stable.
     const raw = facets(db);
@@ -59,7 +64,7 @@ export function workflowsRouter(db: Database.Database, worker: EnrichmentWorker,
     };
 
     res.json(
-      workflowsResponseSchema.parse({ workflows, facets: facetPayload, generatedAt: new Date().toISOString() }),
+      workflowsResponseSchema.parse({ workflows, facets: facetPayload, total, limit, offset, generatedAt: new Date().toISOString() }),
     );
   });
 
@@ -133,11 +138,22 @@ export function workflowsRouter(db: Database.Database, worker: EnrichmentWorker,
   return router;
 }
 
+/** Default catalog page size when the request doesn't specify a `limit`. */
+const WORKFLOWS_PAGE_SIZE = 50;
+
 /** '?flag=true|false' → boolean | undefined (absent/other → no filter). */
 function parseBool(v: unknown): boolean | undefined {
   if (v === 'true') return true;
   if (v === 'false') return false;
   return undefined;
+}
+
+/** Parse a non-negative integer query param, or undefined if absent/invalid. */
+function parseNonNegInt(v: unknown): number | undefined {
+  const s = typeof v === 'string' ? v : undefined;
+  if (!s) return undefined;
+  const n = Number(s);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : undefined;
 }
 
 /** Repeatable param → string[] ( ?system=A&system=B  or  ?system=A ). */
@@ -162,5 +178,7 @@ function parseFilters(query: Record<string, unknown>): WorkflowFilters {
     criticality: parseList(query.criticality),
     health: parseList(query.health),
     q,
+    limit: parseNonNegInt(query.limit),
+    offset: parseNonNegInt(query.offset),
   };
 }

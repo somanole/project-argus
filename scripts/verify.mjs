@@ -250,7 +250,7 @@ try {
 
   // The Argus self-audit timeline lives in its own Activity view — the filterable,
   // CSV-exportable action log. Component test in ActivityView.test.ts; presence here.
-  const activityUi = ['activity-view', 'governance-audit-timeline', 'governance-audit-export', 'audit-filter-action', 'audit-filter-actor', 'audit-pager', 'audit-pager-prev', 'audit-pager-next'];
+  const activityUi = ['activity-view', 'governance-audit-timeline', 'governance-audit-export', 'audit-filter-action', 'audit-filter-actor', 'pager', 'pager-prev', 'pager-next'];
   const aMissing = missing(activityUi);
   add('Activity UI ships (audit timeline + filters + pagination + CSV export)', aMissing.length === 0,
     aMissing.length === 0 ? `${activityUi.length} activity UI elements present` : `MISSING: ${aMissing.join(', ')}`);
@@ -838,7 +838,9 @@ async function s1aChecks() {
     return { status: res.status, json, setCookies: res.headers.getSetCookie?.() ?? [] };
   }
   const rename = (c, wf, full, name) => c.api('PUT', `/workflows/${wf.id}`, { name, nodes: full.nodes, connections: full.connections, settings: full.settings });
-  const listNames = async () => ((await argus('/api/workflows')).json?.workflows ?? []).map((w) => w.name);
+  // The catalog is server-side paginated (default 50/page) — pass a big limit to scan the
+  // whole estate in these behavioural checks; `.total` carries the full match count.
+  const listNames = async () => ((await argus('/api/workflows?limit=5000')).json?.workflows ?? []).map((w) => w.name);
 
   let child = boot();
   try {
@@ -868,15 +870,26 @@ async function s1aChecks() {
     add('Register both seeded instances', r1.status === 201 && r2.status === 201 && conns.length === 2 && conns.every((c) => c.health.status === 'ok'),
       `${conns.length} connections registered, health ${healths || 'none'}`);
 
-    // The whole estate in one view.
-    const total = ((await argus('/api/workflows')).json?.workflows ?? []).length;
+    // The whole estate in one view — `.total` is the full match count (across all pages).
+    const listResp = (await argus('/api/workflows')).json ?? {};
+    const total = listResp.total;
     const expected = prodWfs.length + stagingWfs.length;
-    add('Whole estate lists in one view', total === expected, `Argus ${total} = prod ${prodWfs.length} + staging ${stagingWfs.length}`);
+    add('Whole estate lists in one view (paginated; total across pages)', total === expected && (listResp.workflows?.length ?? 0) === Math.min(expected, listResp.limit),
+      `Argus total ${total} = prod ${prodWfs.length} + staging ${stagingWfs.length}; page ${listResp.workflows?.length}/${listResp.limit}`);
 
-    // Filter by instance.
-    const pf = ((await argus(`/api/workflows?instanceId=${prodId}`)).json?.workflows ?? []).length;
-    const sf = ((await argus(`/api/workflows?instanceId=${stagingId}`)).json?.workflows ?? []).length;
+    // Filter by instance — compare the total, not the (paginated) page length.
+    const pf = (await argus(`/api/workflows?instanceId=${prodId}`)).json?.total ?? 0;
+    const sf = (await argus(`/api/workflows?instanceId=${stagingId}`)).json?.total ?? 0;
     add('Filter by instance', pf === prodWfs.length && sf === stagingWfs.length, `prod ${pf}, staging ${sf}`);
+
+    // Pagination: page 2 continues where page 1 stopped, and the pages don't overlap.
+    const p1 = (await argus('/api/workflows?limit=50&offset=0')).json ?? {};
+    const p2 = (await argus('/api/workflows?limit=50&offset=50')).json ?? {};
+    const ids = (r) => new Set((r.workflows ?? []).map((w) => `${w.instanceId}/${w.id}`));
+    const overlap = [...ids(p1)].some((k) => ids(p2).has(k));
+    add('Catalog is server-side paginated (distinct, non-overlapping pages)',
+      p1.workflows?.length === 50 && p2.workflows?.length === 50 && !overlap && p1.total === expected,
+      `page1 ${p1.workflows?.length}, page2 ${p2.workflows?.length}, overlap=${overlap}, total ${p1.total}`);
 
     // API keys are never exposed.
     const leak = JSON.stringify(conns).includes(prodC.apiKey) || JSON.stringify(conns).includes(stagingC.apiKey);
@@ -1128,24 +1141,24 @@ async function s1bChecks() {
         const expected = perInst.prod.items.length + perInst.staging.items.length;
         let synced = 0;
         for (let i = 0; i < 40; i++) {
-          synced = ((await argus('/api/workflows')).json?.workflows ?? []).length;
+          synced = (await argus('/api/workflows')).json?.total ?? 0;
           if (synced >= expected) break;
           await sleep(500);
         }
 
-        const sf = (await argus('/api/workflows?system=Salesforce')).json?.workflows ?? [];
+        const sf = (await argus('/api/workflows?system=Salesforce&limit=5000')).json?.workflows ?? [];
         const sfInstances = new Set(sf.map((w) => w.instanceLabel));
         add('Filter "touching Salesforce" returns both instances in one view', sf.length === 2 && sfInstances.size === 2,
           `${sf.length} workflow(s) across ${sfInstances.size} instance(s): ${sf.map((w) => `${w.instanceLabel}:${w.name}`).join(', ')}`);
 
-        const mcpList = (await argus('/api/workflows?mcp=true')).json?.workflows ?? [];
+        const mcpList = (await argus('/api/workflows?mcp=true&limit=5000')).json?.workflows ?? [];
         add('Filter "MCP-exposed" returns 2 per instance (4 total)', mcpList.length === 4, `${mcpList.length} MCP-exposed served`);
 
         const cov = (await argus('/api/workflows/coverage')).json;
         add('Coverage endpoint reports the trust number', cov?.understoodPct === 100 && cov?.brokenRefTotal === 2,
           `understands ${cov?.understoodPct}%, ${cov?.brokenRefTotal} broken across the estate`);
 
-        const all = (await argus('/api/workflows')).json?.workflows ?? [];
+        const all = (await argus('/api/workflows?limit=5000')).json?.workflows ?? [];
         const lead = all.find((w) => w.name === 'Lead Scorer');
         const detail = lead ? (await argus(`/api/workflows/${lead.instanceId}/${lead.id}`)).json : null;
         const dep = detail?.facts?.directDeps?.[0];
@@ -1250,7 +1263,7 @@ async function s3Checks() {
 
     // Wait until health has been computed for the seeded failing workflow.
     const healthByName = async () => {
-      const wfs = (await argus('/api/workflows')).json?.workflows ?? [];
+      const wfs = (await argus('/api/workflows?limit=5000')).json?.workflows ?? [];
       return new Map(wfs.map((w) => [w.name, w.health]));
     };
     let byName = new Map();
@@ -1299,7 +1312,7 @@ async function s3Checks() {
 
     // On-demand redacted execution debug: the drawer's failing-workflow endpoint returns
     // the failing NODE + error type/code (redacted, no message) + per-run n8n deep links.
-    const allWfs = (await argus('/api/workflows')).json?.workflows ?? [];
+    const allWfs = (await argus('/api/workflows?limit=5000')).json?.workflows ?? [];
     const stripe = allWfs.find((w) => w.name === 'Daily Stripe Reconciliation');
     const dbg = stripe ? (await argus(`/api/workflows/${stripe.instanceId}/${stripe.id}/executions`)).json : null;
     const runOk = (dbg?.runs ?? []).length > 0 && (dbg.runs ?? []).every((r) => typeof r.deepLink === 'string' && r.deepLink.includes('/executions/'));
@@ -1369,7 +1382,7 @@ async function s4Checks() {
     // Wait for inventory + ownership inference (owner present, resolved beyond unowned).
     let workflows = [];
     for (let i = 0; i < 60; i++) {
-      workflows = (await argus('/api/workflows')).json?.workflows ?? [];
+      workflows = (await argus('/api/workflows?limit=5000')).json?.workflows ?? [];
       if (workflows.length > 0 && workflows.some((w) => w.owner && w.owner.status === 'inferred')) break;
       await sleep(500);
     }
@@ -1392,7 +1405,7 @@ async function s4Checks() {
 
     // Guarantee (i): a full resync (the poll re-lists) does NOT wipe the assignment.
     await sleep(4000); // ≥ one poll cycle (3s)
-    const after = (await argus('/api/workflows')).json?.workflows ?? [];
+    const after = (await argus('/api/workflows?limit=5000')).json?.workflows ?? [];
     const stillAssigned = after.find((w) => w.instanceId === target.instanceId && w.id === target.id)?.owner?.status === 'assigned';
     add('A full resync does NOT wipe ownership (guarantee)', stillAssigned,
       stillAssigned ? 'assignment survived a poll/resync cycle' : 'assignment lost after resync');
@@ -1520,7 +1533,7 @@ async function s5Checks() {
     const nodeById = new Map((estate.nodes ?? []).map((n) => [n.id, n]));
     const conns = (await argus('/api/connections')).json?.connections ?? [];
     const prodId = conns.find((c) => c.label === 'prod')?.id;
-    const wfs = (await argus('/api/workflows')).json?.workflows ?? [];
+    const wfs = (await argus('/api/workflows?limit=5000')).json?.workflows ?? [];
     const prodSlack = wfs.find((w) => w.name === 'Send Slack Alert' && w.instanceId === prodId);
 
     // 1. Blast radius: "what breaks if Send Slack Alert fails" = exactly 5 callers.

@@ -116,6 +116,10 @@ slice and the foundation every later slice builds on.
 
 - [ ] Both seeded instances can be registered as connections (2 registered).
 - [ ] The estate lists every workflow across both instances in one view (N total).
+- [ ] The catalog is **server-side paginated** (an enterprise can have thousands): the
+      list serves one page (default 50/page, `?limit`/`?offset`), the response carries the
+      full match `total`, and the header/pager read from `total` not the page length. Every
+      filter change resets to page 1; the pages are distinct and non-overlapping.
 - [ ] The list can be filtered by instance (prod n / staging m; n + m = N).
 - [ ] A workflow edited / archived / deleted in n8n is reflected within a minute
       (measured seconds).

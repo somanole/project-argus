@@ -27,6 +27,9 @@ const workflowsBody = {
     triggers: [{ value: 'n8n-nodes-base.webhook', label: 'Webhook', count: 1 }],
     instances: [{ id: 'a', label: 'prod', count: 1 }],
   },
+  total: 1,
+  limit: 50,
+  offset: 0,
   generatedAt: '2026-07-05T00:00:00.000Z',
 };
 const coverageBody = {

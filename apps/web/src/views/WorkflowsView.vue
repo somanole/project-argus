@@ -8,6 +8,7 @@ import type { WorkflowListItem } from '@argus/shared';
 import StateBadge from '../components/StateBadge.vue';
 import FactBadge from '../components/FactBadge.vue';
 import EnrichmentBadges from '../components/EnrichmentBadges.vue';
+import ListPager from '../components/ListPager.vue';
 import WorkflowHealthBadge from '../components/WorkflowHealthBadge.vue';
 import OwnerBadge from '../components/OwnerBadge.vue';
 import WorkflowDetailDrawer from '../components/WorkflowDetailDrawer.vue';
@@ -16,8 +17,9 @@ import { relativeTime } from '../lib/time';
 
 const store = useWorkflowsStore();
 const connections = useConnectionsStore();
-const { workflows, facets, coverage, enrichmentProgress, state, error, lastUpdated, instanceId, systems, triggers, criticality, health, mcpOnly, brokenOnly, staleOnly, stateFilter, activeFilterCount, triggerLabels } =
+const { workflows, facets, coverage, enrichmentProgress, state, error, lastUpdated, instanceId, systems, triggers, criticality, health, mcpOnly, brokenOnly, staleOnly, stateFilter, activeFilterCount, triggerLabels, page, total } =
   storeToRefs(store);
+const pageSize = store.pageSize;
 const route = useRoute();
 
 // Criticality filter levels, most-severe first (from the enrichment enum).
@@ -82,7 +84,7 @@ watch(qInput, (v) => {
   qTimer = setTimeout(() => store.setQuery(v), 250);
 });
 
-const total = computed(() => workflows.value.length);
+// `total` (match count across all pages) comes from the store now — the table shows one page.
 const estateSize = computed(() => coverage.value?.total ?? null);
 // "synced Ns ago", advancing between refreshes via the ticking clock.
 const syncedAgo = computed(() => relativeTime(lastUpdated.value, now.value));
@@ -358,6 +360,8 @@ onUnmounted(() => {
         </tbody>
       </table>
     </div>
+
+    <ListPager :page="page" :page-size="pageSize" :total="total" label="Catalog pages" @go="store.goToPage($event)" />
 
     <WorkflowDetailDrawer :selected="selected" @close="selected = null" />
   </section>

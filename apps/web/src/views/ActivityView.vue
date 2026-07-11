@@ -7,6 +7,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useOwnershipStore } from '../stores/ownership';
+import ListPager from '../components/ListPager.vue';
 import { relativeTime } from '../lib/time';
 
 const store = useOwnershipStore();
@@ -16,25 +17,13 @@ const pageSize = store.auditPageSize;
 const now = ref(Date.now());
 let clock: ReturnType<typeof setInterval> | undefined;
 
-// Pagination readouts — a plain-English "Showing X–Y of N" plus prev/next gating.
 const total = computed(() => audit.value?.total ?? 0);
-const shown = computed(() => audit.value?.entries.length ?? 0);
-const rangeStart = computed(() => (total.value === 0 ? 0 : auditPage.value * pageSize + 1));
-const rangeEnd = computed(() => auditPage.value * pageSize + shown.value);
-const hasPrev = computed(() => auditPage.value > 0);
-const hasNext = computed(() => rangeEnd.value < total.value);
 
 async function refresh(): Promise<void> {
   await store.applyAuditFilters();
 }
 function applyFilters(): void {
   void store.applyAuditFilters();
-}
-function prevPage(): void {
-  void store.goToAuditPage(auditPage.value - 1);
-}
-function nextPage(): void {
-  void store.goToAuditPage(auditPage.value + 1);
 }
 
 onMounted(async () => {
@@ -85,13 +74,7 @@ onUnmounted(() => { if (clock) clearInterval(clock); });
       </table>
     </div>
 
-    <nav v-if="auditState === 'ok' && total > 0" class="pager" aria-label="Audit timeline pages" data-testid="audit-pager">
-      <span class="muted range" data-testid="audit-pager-range">{{ rangeStart }}–{{ rangeEnd }} of {{ total }}</span>
-      <div class="pager-btns">
-        <button class="btn btn--secondary btn--sm" :disabled="!hasPrev" data-testid="audit-pager-prev" @click="prevPage">Previous</button>
-        <button class="btn btn--secondary btn--sm" :disabled="!hasNext" data-testid="audit-pager-next" @click="nextPage">Next</button>
-      </div>
-    </nav>
+    <ListPager :page="auditPage" :page-size="pageSize" :total="total" label="Audit timeline pages" @go="store.goToAuditPage($event)" />
   </section>
 </template>
 
@@ -128,10 +111,6 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 .pad { padding: var(--spacing--md); }
 .err { color: var(--color--danger); }
 
-.pager { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing--sm); flex-wrap: wrap; }
-.pager .range { font-size: var(--font-size--2xs); font-variant-numeric: tabular-nums; }
-.pager-btns { display: flex; gap: var(--spacing--2xs); }
-.pager-btns .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* Mobile (≤720px): the audit table reflows to stacked cards; no horizontal scroll. */
 @media (max-width: 720px) {

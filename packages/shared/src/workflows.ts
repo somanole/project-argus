@@ -57,9 +57,15 @@ export const workflowFacetsSchema = z.object({
 export type WorkflowFacets = z.infer<typeof workflowFacetsSchema>;
 
 export const workflowsResponseSchema = z.object({
+  /** One page of the filtered estate (server-side paginated — an estate can have thousands). */
   workflows: z.array(workflowListItemSchema),
   /** Facets across the WHOLE estate (unfiltered), so chips are stable while filtering. */
   facets: workflowFacetsSchema,
+  /** Total workflows matching the current filters (across all pages) — the "N match" number. */
+  total: z.number().int().nonnegative(),
+  /** Page size and the row offset this page started at (echoed back so the client can page). */
+  limit: z.number().int().positive(),
+  offset: z.number().int().nonnegative(),
   /** When the server built this response (the list is served from cache). */
   generatedAt: z.string().datetime(),
 });

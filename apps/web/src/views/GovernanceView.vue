@@ -3,13 +3,15 @@
 // assignment happens in the workflow drawer. Honest states only (rule 5): empty gaps
 // read as "nothing here", errors show a reason. (The Argus self-audit timeline lives
 // in its own Activity view.)
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useOwnershipStore } from '../stores/ownership';
 import type { Criticality, GapWorkflow } from '@argus/shared';
 import FactBadge from '../components/FactBadge.vue';
+import ListPager from '../components/ListPager.vue';
 import { instanceColor } from '../lib/instanceColor';
+import { usePaged } from '../lib/paginate';
 
 const store = useOwnershipStore();
 const { gaps, gapsState, gapsError } = storeToRefs(store);
@@ -18,17 +20,19 @@ const route = useRoute();
 const CRIT_TONE: Record<Criticality, 'danger' | 'warn' | 'muted' | 'faint'> = { critical: 'danger', high: 'warn', medium: 'muted', low: 'faint' };
 const critTone = (c: Criticality | null): 'danger' | 'warn' | 'muted' | 'faint' => (c ? CRIT_TONE[c] : 'muted');
 
+// Each gap group is paginated client-side — the unowned list can be the whole estate
+// (thousands), and the others can grow large too. 50/page, most-critical first.
+const PAGE_SIZE = 50;
 const unowned = computed(() => gaps.value?.unowned ?? []);
-// The unowned list can be the whole estate (hundreds). Show the most-critical first
-// N and let the owner expand — so the audit timeline below stays reachable without a
-// 20,000px scroll. Nothing is hidden: the full count sits in the section header.
-const UNOWNED_PREVIEW = 25;
-const showAllUnowned = ref(false);
-const unownedShown = computed(() => (showAllUnowned.value ? unowned.value : unowned.value.slice(0, UNOWNED_PREVIEW)));
 const singleOwner = computed(() => gaps.value?.singleOwnerCritical ?? []);
 const personalSpace = computed(() => gaps.value?.personalSpaceCritical ?? []);
 const noBackup = computed(() => gaps.value?.noBackupOwner ?? []);
 const gapTotal = computed(() => unowned.value.length + singleOwner.value.length + personalSpace.value.length + noBackup.value.length);
+
+const unownedPage = usePaged(unowned, PAGE_SIZE);
+const singleOwnerPage = usePaged(singleOwner, PAGE_SIZE);
+const personalSpacePage = usePaged(personalSpace, PAGE_SIZE);
+const noBackupPage = usePaged(noBackup, PAGE_SIZE);
 
 const wfLabel = (w: GapWorkflow): string => w.name;
 
@@ -71,21 +75,14 @@ onMounted(async () => {
           <h2 class="gap-title">What has no owner <span class="count">{{ unowned.length }}</span></h2>
           <p class="gap-why muted">Workflows with no assigned owner — critical first. Assign one from the workflow drawer.</p>
           <ul class="rows">
-            <li v-for="w in unownedShown" :key="w.instanceId + '/' + w.workflowId" class="grow">
+            <li v-for="w in unownedPage.paged.value" :key="w.instanceId + '/' + w.workflowId" class="grow">
               <FactBadge :label="w.criticality ?? 'unlabeled'" :tone="critTone(w.criticality)" />
               <span class="wf">{{ wfLabel(w) }}</span>
               <span class="inst muted"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span>
               <span v-if="w.inferred?.status === 'inferred'" class="muted small">{{ w.inferred.owner?.name ?? w.inferred.owner?.email }} · inferred</span>
             </li>
           </ul>
-          <button
-            v-if="unowned.length > UNOWNED_PREVIEW"
-            class="btn btn--secondary btn--sm show-more"
-            data-testid="gap-unowned-toggle"
-            @click="showAllUnowned = !showAllUnowned"
-          >
-            {{ showAllUnowned ? 'Show fewer' : `Show all ${unowned.length}` }}
-          </button>
+          <ListPager :page="unownedPage.page.value" :page-size="PAGE_SIZE" :total="unownedPage.total.value" label="Unowned pages" @go="unownedPage.go($event)" />
         </section>
 
         <!-- Single-owner-critical (cross-instance SPOF) -->
@@ -93,7 +90,7 @@ onMounted(async () => {
           <h2 class="gap-title">Single owner of multiple criticals <span class="count">{{ singleOwner.length }}</span></h2>
           <p class="gap-why muted">One person is the sole owner of several critical workflows — a single point of failure.</p>
           <ul class="rows">
-            <li v-for="(g, i) in singleOwner" :key="i" class="spof">
+            <li v-for="(g, i) in singleOwnerPage.paged.value" :key="i" class="spof">
               <div class="spof-head">
                 <strong>{{ g.owner.name ?? g.owner.email }}</strong>
                 <span class="muted small">{{ g.owner.email }}</span>
@@ -108,6 +105,7 @@ onMounted(async () => {
               </ul>
             </li>
           </ul>
+          <ListPager :page="singleOwnerPage.page.value" :page-size="PAGE_SIZE" :total="singleOwnerPage.total.value" label="Single-owner pages" @go="singleOwnerPage.go($event)" />
         </section>
 
         <!-- Personal-space-critical -->
@@ -115,13 +113,14 @@ onMounted(async () => {
           <h2 class="gap-title">Critical work in a personal space <span class="count">{{ personalSpace.length }}</span></h2>
           <p class="gap-why muted">Business-critical workflows living in someone’s personal project, not a shared team project.</p>
           <ul class="rows">
-            <li v-for="w in personalSpace" :key="w.instanceId + '/' + w.workflowId" class="grow">
+            <li v-for="w in personalSpacePage.paged.value" :key="w.instanceId + '/' + w.workflowId" class="grow">
               <FactBadge :label="w.criticality ?? 'critical'" :tone="critTone(w.criticality)" />
               <span class="wf">{{ w.name }}</span>
               <span class="inst muted"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span>
               <span v-if="w.person" class="muted small">{{ w.person.name ?? w.person.email }}’s space</span>
             </li>
           </ul>
+          <ListPager :page="personalSpacePage.page.value" :page-size="PAGE_SIZE" :total="personalSpacePage.total.value" label="Personal-space pages" @go="personalSpacePage.go($event)" />
         </section>
 
         <!-- No backup owner -->
@@ -129,13 +128,14 @@ onMounted(async () => {
           <h2 class="gap-title">Critical, no backup owner <span class="count">{{ noBackup.length }}</span></h2>
           <p class="gap-why muted">Assigned critical workflows with no backup owner — one person away from unowned.</p>
           <ul class="rows">
-            <li v-for="w in noBackup" :key="w.instanceId + '/' + w.workflowId" class="grow">
+            <li v-for="w in noBackupPage.paged.value" :key="w.instanceId + '/' + w.workflowId" class="grow">
               <FactBadge :label="w.criticality ?? 'critical'" :tone="critTone(w.criticality)" />
               <span class="wf">{{ w.name }}</span>
               <span class="inst muted"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span>
               <span class="muted small">owner: {{ w.owner.name ?? w.owner.email }}</span>
             </li>
           </ul>
+          <ListPager :page="noBackupPage.page.value" :page-size="PAGE_SIZE" :total="noBackupPage.total.value" label="No-backup pages" @go="noBackupPage.go($event)" />
         </section>
       </template>
     </div>

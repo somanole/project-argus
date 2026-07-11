@@ -5,7 +5,7 @@ import Database from 'better-sqlite3';
 import type { SessionActor, WorkflowFacts } from '@argus/shared';
 import { governanceOverviewResponseSchema } from '@argus/shared';
 import { migrate } from '../db/migrate.js';
-import { replaceInstanceWorkflows, listWorkflows, type CacheWorkflow } from '../workflows/repo.js';
+import { replaceInstanceWorkflows, listWorkflows, countWorkflows, type CacheWorkflow } from '../workflows/repo.js';
 import { assignOwner, governanceGaps } from '../ownership/repo.js';
 import { healthEstate } from '../health/repo.js';
 import { replaceAllEdges } from '../graph/repo.js';
@@ -168,6 +168,20 @@ describe('S6 governance overview — composition never diverges', () => {
     expect(o.exposure.mcpExposed).toBe(o.exposure.surfaces.length);
     // activeNoExecutions drills to exactly the idle-but-active workflow.
     expect(o.hygiene.activeNoExecutions.workflows.map((w) => w.id)).toEqual(['sens']);
+  });
+
+  it('the catalog is server-side paginated: LIMIT/OFFSET pages are distinct and countWorkflows is the total', () => {
+    const total = countWorkflows(db);
+    expect(total).toBe(5); // the seeded estate
+    const p1 = listWorkflows(db, { limit: 2, offset: 0 });
+    const p2 = listWorkflows(db, { limit: 2, offset: 2 });
+    expect(p1).toHaveLength(2);
+    expect(p2).toHaveLength(2);
+    expect(p1.map((w) => w.id)).not.toEqual(p2.map((w) => w.id)); // no overlap across pages
+    // No limit → the full set (existing callers like the score compute over everything).
+    expect(listWorkflows(db)).toHaveLength(5);
+    // A filter's count matches its paginated total.
+    expect(countWorkflows(db, { stale: true })).toBe(listWorkflows(db, { stale: true }).length);
   });
 
   it('the Overview tiles deep-link to catalog filters that return the SAME exact set', () => {

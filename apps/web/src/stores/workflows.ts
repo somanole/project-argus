@@ -43,6 +43,11 @@ export const useWorkflowsStore = defineStore('workflows', () => {
   const stateFilter = ref<StateFilter>('all');
   const q = ref<string>('');
 
+  // ---- server-side pagination (an estate can have thousands) ----
+  const PAGE_SIZE = 50;
+  const page = ref(0); // 0-based
+  const total = ref(0); // total matching the filters, across all pages
+
   const activeFilterCount = computed(
     () =>
       (instanceId.value !== 'all' ? 1 : 0) +
@@ -76,6 +81,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     if (stateFilter.value === 'archived') p.set('archived', 'true');
     const query = q.value.trim();
     if (query) p.set('q', query);
+    p.set('limit', String(PAGE_SIZE));
+    p.set('offset', String(page.value * PAGE_SIZE));
     const s = p.toString();
     return s ? `?${s}` : '';
   }
@@ -86,6 +93,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
       const res = await api(`/api/workflows${buildQuery()}`, {}, workflowsResponseSchema);
       workflows.value = res.workflows;
       facets.value = res.facets;
+      total.value = res.total;
       lastUpdated.value = res.generatedAt;
       state.value = 'ok';
       error.value = null;
@@ -93,6 +101,21 @@ export const useWorkflowsStore = defineStore('workflows', () => {
       state.value = 'error';
       error.value = err instanceof Error ? err.message : 'could not load the catalog';
     }
+  }
+
+  /** Re-query from page 1 — every filter change resets pagination (a new filter set has its own pages). */
+  function refreshResetPage(): void {
+    page.value = 0;
+    void refresh();
+  }
+
+  /** Jump to a 0-based page (clamped) and reload that page. */
+  function goToPage(next: number): void {
+    const lastPage = Math.max(Math.ceil(total.value / PAGE_SIZE) - 1, 0);
+    const clamped = Math.min(Math.max(next, 0), lastPage);
+    if (clamped === page.value) return;
+    page.value = clamped;
+    void refresh();
   }
 
   async function refreshCoverage(): Promise<void> {
@@ -111,14 +134,14 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     }
   }
 
-  // ---- filter mutations (each re-queries) ----
+  // ---- filter mutations (each re-queries FROM PAGE 1 — a new filter set has its own pages) ----
   const toggle = (list: typeof systems, value: string) => {
     list.value = list.value.includes(value) ? list.value.filter((v) => v !== value) : [...list.value, value];
-    void refresh();
+    refreshResetPage();
   };
   const setInstance = (id: string) => {
     instanceId.value = id;
-    void refresh();
+    refreshResetPage();
   };
   const toggleSystem = (s: string) => toggle(systems, s);
   const toggleTrigger = (t: string) => toggle(triggers, t);
@@ -126,28 +149,28 @@ export const useWorkflowsStore = defineStore('workflows', () => {
   const toggleHealth = (h: string) => toggle(health, h);
   const setMcpOnly = (v: boolean) => {
     mcpOnly.value = v;
-    void refresh();
+    refreshResetPage();
   };
   const setBrokenOnly = (v: boolean) => {
     brokenOnly.value = v;
-    void refresh();
+    refreshResetPage();
   };
   const setStaleOnly = (v: boolean) => {
     staleOnly.value = v;
-    void refresh();
+    refreshResetPage();
   };
   const setStateFilter = (v: StateFilter) => {
     stateFilter.value = v;
-    void refresh();
+    refreshResetPage();
   };
   // Clear a single facet in one shot — backs the removable "applied filter" tokens.
-  const clearSystems = () => { systems.value = []; void refresh(); };
-  const clearTriggers = () => { triggers.value = []; void refresh(); };
-  const clearCriticality = () => { criticality.value = []; void refresh(); };
-  const clearHealth = () => { health.value = []; void refresh(); };
+  const clearSystems = () => { systems.value = []; refreshResetPage(); };
+  const clearTriggers = () => { triggers.value = []; refreshResetPage(); };
+  const clearCriticality = () => { criticality.value = []; refreshResetPage(); };
+  const clearHealth = () => { health.value = []; refreshResetPage(); };
   const setQuery = (v: string) => {
     q.value = v;
-    void refresh();
+    refreshResetPage();
   };
   // Reset every filter to its default WITHOUT re-querying — the shared body of both the
   // "Clear filters" action and the deep-link apply (which refreshes once, itself).
@@ -165,7 +188,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
   };
   const clearFilters = () => {
     resetFilters();
-    void refresh();
+    refreshResetPage();
   };
 
   /**
@@ -180,6 +203,7 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     const list = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : str(v) ? [str(v) as string] : []);
     const bool = (v: unknown): boolean => str(v) === 'true' || str(v) === '1';
     resetFilters();
+    page.value = 0; // a deep-link lands on page 1 of its set
     if (str(query.instanceId)) instanceId.value = str(query.instanceId) as string;
     if (query.system !== undefined) systems.value = list(query.system);
     if (query.trigger !== undefined) triggers.value = list(query.trigger);
@@ -211,9 +235,13 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     staleOnly,
     stateFilter,
     q,
+    page,
+    total,
+    pageSize: PAGE_SIZE,
     activeFilterCount,
     triggerLabels,
     refresh,
+    goToPage,
     applyFromQuery,
     refreshCoverage,
     refreshEnrichmentProgress,
