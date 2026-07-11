@@ -6,8 +6,9 @@ import {
   governanceGapsResponseSchema,
   assignableUsersResponseSchema,
   auditTimelineResponseSchema,
+  ownershipRegisterResponseSchema,
 } from '@argus/shared';
-import { assignOwner, setBackupOwner, removeOwner, resolveOwner, governanceGaps } from '../ownership/repo.js';
+import { assignOwner, setBackupOwner, removeOwner, resolveOwner, governanceGaps, ownershipRegister, type OwnershipRegisterFilters } from '../ownership/repo.js';
 import { listAudit, countAudit, distinctAuditActions, auditToCsv, type AuditFilters } from '../audit/read.js';
 import { getConnectionRow, decryptApiKey } from '../connections/repo.js';
 import { createN8nClient, HttpError, reason as n8nReason } from '../n8n/client.js';
@@ -35,6 +36,16 @@ export function ownershipRouter(db: Database.Database, encryptionKey: string): R
   // Governance gaps (single segment — declared before the param routes).
   router.get('/gaps', (_req, res) => {
     res.json(governanceGapsResponseSchema.parse({ ...governanceGaps(db), generatedAt: new Date().toISOString() }));
+  });
+
+  // The ownership register — the paginated, filterable accountability table (the Ownership
+  // Estate view). Defaults to "needs a confirmed owner" (the actionable set), 50/page.
+  router.get('/register', (req, res) => {
+    const filters = parseRegisterFilters(req.query);
+    const limit = filters.limit ?? OWNERSHIP_PAGE_SIZE;
+    const offset = filters.offset ?? 0;
+    const { rows, summary, total } = ownershipRegister(db, { ...filters, limit, offset });
+    res.json(ownershipRegisterResponseSchema.parse({ rows, summary, total, limit, offset, generatedAt: new Date().toISOString() }));
   });
 
   // The Argus self-audit timeline, filterable + CSV-exportable. The CSV exports the whole
@@ -133,6 +144,24 @@ export function ownershipRouter(db: Database.Database, encryptionKey: string): R
 
 /** Default timeline page size when the request doesn't specify a `limit`. */
 const AUDIT_PAGE_SIZE = 50;
+/** Default register page size. */
+const OWNERSHIP_PAGE_SIZE = 50;
+
+const REGISTER_STATES = ['needs-owner', 'confirmed', 'inferred', 'unowned', 'all'] as const;
+const REGISTER_RISKS = ['no-confirmed-owner', 'spof', 'personal-space', 'no-backup'] as const;
+function parseRegisterFilters(query: Record<string, unknown>): OwnershipRegisterFilters {
+  const state = str(query.state);
+  const risk = str(query.risk);
+  return {
+    state: (REGISTER_STATES as readonly string[]).includes(state ?? '') ? (state as OwnershipRegisterFilters['state']) : undefined,
+    risk: (REGISTER_RISKS as readonly string[]).includes(risk ?? '') ? (risk as OwnershipRegisterFilters['risk']) : undefined,
+    criticalAtRisk: str(query.criticalAtRisk) === 'true' ? true : undefined,
+    instanceId: str(query.instanceId),
+    q: str(query.q),
+    limit: posInt(query.limit),
+    offset: posInt(query.offset),
+  };
+}
 
 /** Parse a positive integer query param, or undefined if absent/invalid. */
 function posInt(v: unknown): number | undefined {

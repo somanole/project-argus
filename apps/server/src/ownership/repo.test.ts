@@ -13,6 +13,7 @@ import {
   singleOwnerCritical,
   personalSpaceCritical,
   noBackupOwner,
+  ownershipRegister,
 } from './repo.js';
 
 const ISO = '2026-07-06T00:00:00.000Z';
@@ -181,6 +182,33 @@ describe('governance gaps', () => {
     expect(gaps).toHaveLength(1);
     expect(gaps[0]?.workflowId).toBe('s2');
     expect(gaps[0]?.person?.email).toBe('diana@n8n.io');
+  });
+
+  it('ownershipRegister composes owner + backup + risk flags with an honest posture summary (rule 12)', () => {
+    assignOwner(db, ACTOR, 'prod', 'p1', { ownerEmail: 'sam@corp.io', ownerName: 'Sam' }); // confirmed critical, no backup
+    // p2/p3/s1/s2 left with no assigned + no inferred → status 'unowned'.
+    const reg = ownershipRegister(db, {});
+    expect(reg.summary.total).toBe(5);
+    expect(reg.summary.confirmed).toBe(1); // only the explicit assignment is factual (rule 12)
+    expect(reg.summary.unowned).toBe(4);
+    expect(reg.summary.noBackup).toBe(1); // p1: assigned + critical + no backup
+    expect(reg.summary.criticalAtRisk).toBe(4); // p1 (no backup) + p2/s1/s2 (unowned criticals)
+
+    const byId = new Map(reg.rows.map((r) => [r.id, r]));
+    expect(byId.get('p1')?.risks).toContain('no-backup');
+    expect(byId.get('p1')?.risks).not.toContain('no-confirmed-owner'); // it IS assigned
+    expect(byId.get('p2')?.risks).toContain('no-confirmed-owner');
+
+    // Filter: needs-owner excludes the confirmed one; risk=no-backup returns exactly p1.
+    const needs = ownershipRegister(db, { state: 'needs-owner' });
+    expect(needs.total).toBe(4);
+    expect(needs.rows.every((r) => r.owner?.status !== 'assigned')).toBe(true);
+    expect(ownershipRegister(db, { risk: 'no-backup' }).rows.map((r) => r.id)).toEqual(['p1']);
+
+    // Pagination: limit slices, total is the FILTERED count.
+    const page = ownershipRegister(db, { state: 'all', limit: 2, offset: 0 });
+    expect(page.rows).toHaveLength(2);
+    expect(page.total).toBe(5);
   });
 
   it('no-backup-owner surfaces an assigned critical with no backup; adding a backup clears it', () => {

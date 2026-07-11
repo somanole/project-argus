@@ -83,19 +83,19 @@ const accountabilityTiles = computed<OverviewTileData[]>(() => {
       key: 'unowned', testid: 'overview-unowned', label: 'No assigned owner', count: v.unowned.total, tone: 'danger',
       context: unownedContext.value,
       info: `Workflows with no confirmed owner — the accountability gap that drives the ownership score.${advisoryCovered.value > 0 ? ` Argus can suggest an owner for ${advisoryCovered.value} of them from n8n membership, but inference is advisory — assign a person to actually close the gap.` : ''}`,
-      to: { path: '/estate/ownership', hash: '#gap-unowned' }, dest: 'Ownership',
+      to: { path: '/estate/ownership', query: { view: 'needs-owner' } }, dest: 'Ownership',
     },
     {
       key: 'spof', testid: 'overview-spof', label: 'Single-owner criticals', count: v.spofOwners.length, tone: 'danger',
       context: 'sole owner of ≥2 criticals',
       info: 'One person is the sole owner of several critical workflows — a single point of failure. Exact-email match; cross-instance identity is a later slice.',
-      to: { path: '/estate/ownership', hash: '#gap-single-owner' }, dest: 'Ownership',
+      to: { path: '/estate/ownership', query: { view: 'spof' } }, dest: 'Ownership',
     },
     {
       key: 'personal-space', testid: 'overview-personal-space', label: 'Critical in personal space', count: v.personalSpaceCritical.length, tone: 'danger',
       context: 'not in a team project',
       info: 'Business-critical workflows living in someone’s personal project rather than a shared team project.',
-      to: { path: '/estate/ownership', hash: '#gap-personal-space' }, dest: 'Ownership',
+      to: { path: '/estate/ownership', query: { view: 'personal-space' } }, dest: 'Ownership',
     },
   ];
 });

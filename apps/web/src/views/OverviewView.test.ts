@@ -134,10 +134,10 @@ describe('Governance overview — UI-presence (rule 11)', () => {
     await flushPromises();
     const linkTo = (id: string) => w.find(`[data-testid="${id}"]`).findComponent(RouterLinkStub).props('to');
 
-    // Accountability tiles deep-link to the matching Ownership gap section.
-    expect(linkTo('overview-unowned')).toEqual({ path: '/estate/ownership', hash: '#gap-unowned' });
-    expect(linkTo('overview-spof')).toEqual({ path: '/estate/ownership', hash: '#gap-single-owner' });
-    expect(linkTo('overview-personal-space')).toEqual({ path: '/estate/ownership', hash: '#gap-personal-space' });
+    // Accountability tiles deep-link to the matching Ownership register view.
+    expect(linkTo('overview-unowned')).toEqual({ path: '/estate/ownership', query: { view: 'needs-owner' } });
+    expect(linkTo('overview-spof')).toEqual({ path: '/estate/ownership', query: { view: 'spof' } });
+    expect(linkTo('overview-personal-space')).toEqual({ path: '/estate/ownership', query: { view: 'personal-space' } });
     // Operations tiles deep-link to Health / filtered Estate / Graph.
     expect(linkTo('overview-incidents')).toBe('/estate/health');
     expect(linkTo('overview-broken')).toEqual({ path: '/estate', query: { broken: 'true' } });

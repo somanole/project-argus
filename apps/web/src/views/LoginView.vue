@@ -14,6 +14,10 @@ const email = ref('');
 const submitting = ref(false);
 const error = ref<string | null>(null);
 
+// Keyboard flow: Enter advances to the next field; Enter on the last field submits.
+const nameInput = ref<HTMLInputElement | null>(null);
+const emailInput = ref<HTMLInputElement | null>(null);
+
 async function submit(): Promise<void> {
   submitting.value = true;
   error.value = null;
@@ -40,15 +44,15 @@ async function submit(): Promise<void> {
 
       <div class="field">
         <label for="pw">Admin password</label>
-        <input id="pw" v-model="password" class="input" type="password" autocomplete="current-password" required>
+        <input id="pw" v-model="password" class="input" type="password" autocomplete="current-password" required @keydown.enter.prevent="nameInput?.focus()">
       </div>
       <div class="field">
         <label for="nm">Your name</label>
-        <input id="nm" v-model="name" class="input" type="text" autocomplete="name" placeholder="Sam Rivers" required>
+        <input id="nm" ref="nameInput" v-model="name" class="input" type="text" autocomplete="name" placeholder="Sam Rivers" required @keydown.enter.prevent="emailInput?.focus()">
       </div>
       <div class="field">
         <label for="em">Your email</label>
-        <input id="em" v-model="email" class="input" type="email" autocomplete="email" placeholder="sam@acme.example" required>
+        <input id="em" ref="emailInput" v-model="email" class="input" type="email" autocomplete="email" placeholder="sam@acme.example" required>
         <span class="hint">Stamped on your session and every change you make — shown as <em>asserted</em>.</span>
       </div>
 

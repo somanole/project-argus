@@ -12,8 +12,12 @@ import type {
   PersonalSpaceCriticalGap,
   NoBackupOwnerGap,
   GovernanceGapsResponse,
+  OwnershipRegisterRow,
+  OwnershipRegisterSummary,
+  OwnershipRisk,
 } from '@argus/shared';
 import { withAudit } from '../db/audit.js';
+import { listWorkflows } from '../workflows/repo.js';
 
 /**
  * Data access for S4 ownership. Two provenances (spec .agents/specs/ownership.md):
@@ -460,6 +464,99 @@ export function governanceGaps(db: Database.Database): Omit<GovernanceGapsRespon
     personalSpaceCritical: personalSpaceCritical(db),
     noBackupOwner: noBackupOwner(db),
   };
+}
+
+// ── Ownership register (the Ownership Estate view) ────────────────────────────
+
+/** Filters for the ownership register (all optional; sane defaults in the route). */
+export interface OwnershipRegisterFilters {
+  /** Ownership state: needs-owner (not assigned) · confirmed · inferred · unowned · all. */
+  state?: 'needs-owner' | 'confirmed' | 'inferred' | 'unowned' | 'all' | undefined;
+  /** Only rows carrying this specific accountability risk (backs the SPOF / personal-space filters). */
+  risk?: OwnershipRisk | undefined;
+  /** Only critical workflows lacking resilient accountability. */
+  criticalAtRisk?: boolean | undefined;
+  instanceId?: string | undefined;
+  q?: string | undefined;
+  limit?: number | undefined;
+  offset?: number | undefined;
+}
+
+const wfKeyOf = (instanceId: string, workflowId: string): string => `${instanceId}/${workflowId}`;
+/** unowned/inferred sort before assigned; criticals before the rest. */
+const STATUS_RANK: Record<string, number> = { unowned: 0, inferred: 1, assigned: 2 };
+
+/**
+ * The estate's accountability register: every workflow with its resolved owner + the
+ * accountability RISKS that apply (no-confirmed-owner / SPOF / personal-space / no-backup),
+ * filtered, worst-first, and paginated. The risk flags reuse the exact gap logic
+ * (`singleOwnerCritical` / `personalSpaceCritical` / `noBackupOwner`) so the register can
+ * never diverge from the governance gaps. `summary` is the posture over ALL workflows;
+ * `total` is the FILTERED count (the pager denominator). Factual ownership = assigned (rule 12).
+ */
+export function ownershipRegister(
+  db: Database.Database,
+  filters: OwnershipRegisterFilters = {},
+): { rows: OwnershipRegisterRow[]; summary: OwnershipRegisterSummary; total: number } {
+  const all = listWorkflows(db); // full estate (no page) — the register composes + paginates in JS
+  // SPOF + personal-space reuse the exact gap logic (consistency by construction). "No backup"
+  // is broader than the critical-only governance gap: ANY confirmed owner with no backup is
+  // "one person away from unowned" — so we read it straight off each row's resolved owner.
+  const spofKeys = new Set(singleOwnerCritical(db).flatMap((g) => g.workflows.map((w) => wfKeyOf(w.instanceId, w.workflowId))));
+  const personalKeys = new Set(personalSpaceCritical(db).map((w) => wfKeyOf(w.instanceId, w.workflowId)));
+
+  const decorated = all.map((w) => {
+    const key = wfKeyOf(w.instanceId, w.id);
+    const status = w.owner?.status ?? 'unowned';
+    const noBackup = status === 'assigned' && !w.owner?.backupOwner; // confirmed owner, no backup
+    const risks: OwnershipRisk[] = [];
+    if (status !== 'assigned') risks.push('no-confirmed-owner');
+    if (spofKeys.has(key)) risks.push('spof');
+    if (personalKeys.has(key)) risks.push('personal-space');
+    if (noBackup) risks.push('no-backup');
+    const criticalAtRisk = w.enrichment?.criticality === 'critical' && (status !== 'assigned' || spofKeys.has(key) || noBackup);
+    return { row: { ...w, risks }, status, criticalAtRisk, noBackup };
+  });
+
+  const summary: OwnershipRegisterSummary = {
+    total: decorated.length,
+    confirmed: decorated.filter((d) => d.status === 'assigned').length,
+    inferred: decorated.filter((d) => d.status === 'inferred').length,
+    unowned: decorated.filter((d) => d.status === 'unowned').length,
+    criticalAtRisk: decorated.filter((d) => d.criticalAtRisk).length,
+    noBackup: decorated.filter((d) => d.noBackup).length,
+  };
+
+  const q = filters.q?.trim().toLowerCase();
+  const filtered = decorated.filter((d) => {
+    if (filters.instanceId && d.row.instanceId !== filters.instanceId) return false;
+    if (q && !d.row.name.toLowerCase().includes(q)) return false;
+    if (filters.criticalAtRisk && !d.criticalAtRisk) return false;
+    if (filters.risk && !d.row.risks.includes(filters.risk)) return false;
+    switch (filters.state) {
+      case 'needs-owner': return d.status !== 'assigned';
+      case 'confirmed': return d.status === 'assigned';
+      case 'inferred': return d.status === 'inferred';
+      case 'unowned': return d.status === 'unowned';
+      default: return true; // 'all' or undefined
+    }
+  });
+
+  const CRIT_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+  filtered.sort((a, b) => {
+    const ca = CRIT_ORDER[a.row.enrichment?.criticality ?? ''] ?? 4;
+    const cb = CRIT_ORDER[b.row.enrichment?.criticality ?? ''] ?? 4;
+    if (ca !== cb) return ca - cb; // criticals first
+    const sa = STATUS_RANK[a.status] ?? 3;
+    const sb = STATUS_RANK[b.status] ?? 3;
+    if (sa !== sb) return sa - sb; // unowned/inferred before assigned
+    return a.row.name.localeCompare(b.row.name);
+  });
+
+  const limit = Math.min(Math.max(filters.limit ?? 50, 1), 5000);
+  const offset = Math.max(filters.offset ?? 0, 0);
+  const rows = filtered.slice(offset, offset + limit).map((d) => d.row);
+  return { rows, summary, total: filtered.length };
 }
 
 // ── S7 chat: "what does X own / what if X leaves" ─────────────────────────────

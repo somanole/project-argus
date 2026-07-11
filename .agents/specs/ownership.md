@@ -188,12 +188,24 @@ events join when the deferred Log Streaming receiver lands.
 **UI presence (standing rule 11 — this chrome is guarded, not just built).**
 Each element carries a stable `data-testid`, a fast component test asserting it renders
 with its key text/state, and a `pnpm verify` row.
-- [ ] A new top-nav **"Governance"** item routes to the **Governance view**
-      (`governance-view`); existing chrome is unchanged (additive only, rule 11).
-- [ ] The Governance view shows the **governance-gaps** panel (`governance-gaps`:
-      unowned-critical, single-owner-critical, personal-space-critical, no-backup) with
-      counts + criticality. Each gap group is **paginated** (the shared `ListPager`, 50/page)
-      — the unowned list can be the whole estate.
+- [ ] The **Ownership** Estate lens (`governance-view`) is the estate's accountability
+      **register** — consistent with Explore/Health: a crisp one-line subtitle, a clickable
+      summary strip, and ONE clickable table (not grouped lists). *(Redesigned from the
+      four gap pill-lists after the owner asked for a table like the other Estate views,
+      with clickable rows and clearer titles.)*
+- [ ] The **summary strip** (`ownership-summary`) reads the posture — confirmed
+      (`ownership-confirmed`) of total — and doubles as the primary filter: clickable tiles
+      `ownership-filter-needs-owner` (default) · `-unowned` · `-critical-at-risk` · `-no-backup`.
+      Served by `GET /api/ownership/register` (server-composed + paginated); `summary` is the
+      posture over ALL workflows, `total` is the filtered page count.
+- [ ] The **register table** (`ownership-register`) shows, per workflow: name + criticality,
+      the resolved **owner** (`owner-badge`: confirmed / advisory-inferred / unowned), the
+      **backup** owner, the accountability **risk** chips (no-confirmed-owner / SPOF /
+      personal-space / no-backup — reusing the exact gap logic), and instance. It has an
+      instance **scope** (`ownership-scope`) + **search** (`ownership-search`), the shared
+      `ListPager`, and an honest empty state (`ownership-empty`). **Clicking a row opens the
+      shared detail drawer** — where the assign-owner dialog lives (this is where you FIX
+      accountability). Overview accountability tiles deep-link here via `?view=…`.
 - [ ] A side-panel **"Activity"** item routes to the **Activity view** (`activity-view`),
       which shows the **audit timeline** (`governance-audit-timeline`) with filter controls
       (`audit-filter-action`, `audit-filter-actor` — partial name-or-email match), a **pager**
@@ -216,7 +228,8 @@ with its key text/state, and a `pnpm verify` row.
 
 **Responsive (standing rule 10 — both themes AND both widths).** Each hero view is
 rendered at 375px + desktop, in light AND dark, asserted to have no horizontal overflow.
-- [ ] The **Governance view** (gaps) and the **Activity view** (audit timeline) are each
-      usable at 375px with no overflow, in both themes.
+- [ ] The **Ownership register** (summary strip + table) and the **Activity view** (audit
+      timeline) are each usable at 375px with no overflow, in both themes (the register table
+      reflows to stacked cards).
 - [ ] The **catalog with the owner badge/column** and the **assign-owner dialog** are
       usable at 375px with no overflow, in both themes.

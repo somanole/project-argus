@@ -1,178 +1,244 @@
 <script setup lang="ts">
-// The Governance view (S4): the ownership governance gaps. Read-only surface;
-// assignment happens in the workflow drawer. Honest states only (rule 5): empty gaps
-// read as "nothing here", errors show a reason. (The Argus self-audit timeline lives
-// in its own Activity view.)
-import { computed, nextTick, onMounted } from 'vue';
+// The Ownership Estate view (S4) — the estate's accountability REGISTER. Consistent with
+// Explore/Health: a crisp subtitle, a clickable summary strip, and one clickable table of
+// workflows focused on ownership (owner · backup · risk), server-paginated. Rows open the
+// shared detail drawer, where the assign-owner dialog lives — so this is where you FIX
+// accountability, not just view gaps. Honest by construction (rule 5 + rule 12): factual
+// ownership = an assigned owner; an inferred owner is advisory and reads "no confirmed owner".
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import { useOwnershipStore } from '../stores/ownership';
-import type { Criticality, GapWorkflow } from '@argus/shared';
+import { useOwnershipRegisterStore, type RegisterView } from '../stores/ownership-register';
+import { useConnectionsStore } from '../stores/connections';
+import type { OwnershipRisk, WorkflowListItem } from '@argus/shared';
+import EnrichmentBadges from '../components/EnrichmentBadges.vue';
+import OwnerBadge from '../components/OwnerBadge.vue';
 import FactBadge from '../components/FactBadge.vue';
+import WorkflowDetailDrawer from '../components/WorkflowDetailDrawer.vue';
 import ListPager from '../components/ListPager.vue';
 import { instanceColor } from '../lib/instanceColor';
-import { usePaged } from '../lib/paginate';
 
-const store = useOwnershipStore();
-const { gaps, gapsState, gapsError } = storeToRefs(store);
+const store = useOwnershipRegisterStore();
+const connections = useConnectionsStore();
+const { rows, summary, total, state, error, page, view, instanceId } = storeToRefs(store);
+const pageSize = store.pageSize;
 const route = useRoute();
 
-const CRIT_TONE: Record<Criticality, 'danger' | 'warn' | 'muted' | 'faint'> = { critical: 'danger', high: 'warn', medium: 'muted', low: 'faint' };
-const critTone = (c: Criticality | null): 'danger' | 'warn' | 'muted' | 'faint' => (c ? CRIT_TONE[c] : 'muted');
+// Clicking a row opens the shared detail drawer (owner section + assign dialog).
+const selected = ref<WorkflowListItem | null>(null);
 
-// Each gap group is paginated client-side — the unowned list can be the whole estate
-// (thousands), and the others can grow large too. 50/page, most-critical first.
-const PAGE_SIZE = 50;
-const unowned = computed(() => gaps.value?.unowned ?? []);
-const singleOwner = computed(() => gaps.value?.singleOwnerCritical ?? []);
-const personalSpace = computed(() => gaps.value?.personalSpaceCritical ?? []);
-const noBackup = computed(() => gaps.value?.noBackupOwner ?? []);
-const gapTotal = computed(() => unowned.value.length + singleOwner.value.length + personalSpace.value.length + noBackup.value.length);
+// The summary strip doubles as the primary filter — each tile switches the working set.
+// Literal testids (not built) so the verify presence-grep finds them in the bundle.
+const TILES: { view: RegisterView; testid: string; label: string; tone: 'danger' | 'warn' | 'muted' | 'ok'; count: (s: NonNullable<typeof summary.value>) => number }[] = [
+  { view: 'needs-owner', testid: 'ownership-filter-needs-owner', label: 'Needs a confirmed owner', tone: 'warn', count: (s) => s.inferred + s.unowned },
+  { view: 'unowned', testid: 'ownership-filter-unowned', label: 'No owner at all', tone: 'danger', count: (s) => s.unowned },
+  { view: 'critical-at-risk', testid: 'ownership-filter-critical-at-risk', label: 'Critical at risk', tone: 'danger', count: (s) => s.criticalAtRisk },
+  { view: 'no-backup', testid: 'ownership-filter-no-backup', label: 'No backup', tone: 'muted', count: (s) => s.noBackup },
+];
 
-const unownedPage = usePaged(unowned, PAGE_SIZE);
-const singleOwnerPage = usePaged(singleOwner, PAGE_SIZE);
-const personalSpacePage = usePaged(personalSpace, PAGE_SIZE);
-const noBackupPage = usePaged(noBackup, PAGE_SIZE);
+const RISK_LABEL: Record<OwnershipRisk, string> = {
+  'no-confirmed-owner': 'no confirmed owner',
+  spof: 'single point of failure',
+  'personal-space': 'personal space',
+  'no-backup': 'no backup',
+};
+const RISK_TONE: Record<OwnershipRisk, 'danger' | 'warn' | 'muted'> = {
+  'no-confirmed-owner': 'warn',
+  spof: 'danger',
+  'personal-space': 'warn',
+  'no-backup': 'muted',
+};
 
-const wfLabel = (w: GapWorkflow): string => w.name;
+const backupName = (w: WorkflowListItem): string =>
+  w.owner?.backupOwner?.name ?? w.owner?.backupOwner?.email ?? '—';
+
+const instances = computed(() => connections.connections.map((c) => ({ id: c.id, label: c.label })));
+
+// Debounced search.
+const qInput = ref('');
+let qTimer: ReturnType<typeof setTimeout> | undefined;
+watch(qInput, (v) => {
+  if (qTimer) clearTimeout(qTimer);
+  qTimer = setTimeout(() => store.setQuery(v), 250);
+});
 
 async function refresh(): Promise<void> {
-  await store.refreshGaps();
-}
-
-/** Deep-link support: scroll to the gap section named in the URL hash (e.g. #gap-unowned). */
-async function scrollToHash(): Promise<void> {
-  const id = (route?.hash ?? '').replace(/^#/, '');
-  if (!id) return;
-  await nextTick();
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  await Promise.all([store.refresh(), connections.refresh()]);
 }
 
 onMounted(async () => {
+  // Deep-links (e.g. Overview tiles) carry ?view=… — apply before the first load.
+  store.applyFromQuery(route?.query ?? {});
+  qInput.value = store.q;
   await refresh();
-  await scrollToHash();
 });
 </script>
 
 <template>
-  <section class="gov" data-testid="governance-view">
+  <section class="own" data-testid="governance-view">
     <header class="head">
       <div>
-        <p class="muted sub">Who is accountable across the estate — the ownership gaps that need a human owner.</p>
+        <p class="muted sub">Who owns what across the estate — assign owners and close accountability gaps.</p>
       </div>
       <button class="btn btn--secondary btn--sm" data-testid="refresh-button" @click="refresh">Refresh</button>
     </header>
 
-    <!-- ── Governance gaps ─────────────────────────────────────────────── -->
-    <div class="gaps" data-testid="governance-gaps">
-      <p v-if="gapsState === 'loading'" class="muted pad">Assessing governance gaps…</p>
-      <p v-else-if="gapsState === 'error'" class="err pad" role="alert">Couldn’t load governance gaps — {{ gapsError }}.</p>
-      <div v-else-if="gapTotal === 0" class="card empty"><p>No governance gaps — every critical workflow has an accountable, backed-up owner.</p></div>
-
-      <template v-else>
-        <!-- What has no owner -->
-        <section v-if="unowned.length" id="gap-unowned" class="gap" data-testid="gap-unowned">
-          <h2 class="gap-title">What has no owner <span class="count">{{ unowned.length }}</span></h2>
-          <p class="gap-why muted">Workflows with no assigned owner — critical first. Assign one from the workflow drawer.</p>
-          <ul class="rows">
-            <li v-for="w in unownedPage.paged.value" :key="w.instanceId + '/' + w.workflowId" class="grow">
-              <FactBadge :label="w.criticality ?? 'unlabeled'" :tone="critTone(w.criticality)" />
-              <span class="wf">{{ wfLabel(w) }}</span>
-              <span class="inst muted"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span>
-              <span v-if="w.inferred?.status === 'inferred'" class="muted small">{{ w.inferred.owner?.name ?? w.inferred.owner?.email }} · inferred</span>
-            </li>
-          </ul>
-          <ListPager :page="unownedPage.page.value" :page-size="PAGE_SIZE" :total="unownedPage.total.value" label="Unowned pages" @go="unownedPage.go($event)" />
-        </section>
-
-        <!-- Single-owner-critical (cross-instance SPOF) -->
-        <section v-if="singleOwner.length" id="gap-single-owner" class="gap" data-testid="gap-single-owner">
-          <h2 class="gap-title">Single owner of multiple criticals <span class="count">{{ singleOwner.length }}</span></h2>
-          <p class="gap-why muted">One person is the sole owner of several critical workflows — a single point of failure.</p>
-          <ul class="rows">
-            <li v-for="(g, i) in singleOwnerPage.paged.value" :key="i" class="spof">
-              <div class="spof-head">
-                <strong>{{ g.owner.name ?? g.owner.email }}</strong>
-                <span class="muted small">{{ g.owner.email }}</span>
-                <FactBadge :label="`${g.workflows.length} critical`" tone="danger" />
-                <FactBadge v-if="g.crossInstance" label="across instances" tone="warn" />
-              </div>
-              <ul class="spof-wfs">
-                <li v-for="w in g.workflows" :key="w.instanceId + '/' + w.workflowId">
-                  <span class="wf">{{ w.name }}</span>
-                  <span class="inst muted"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span>
-                </li>
-              </ul>
-            </li>
-          </ul>
-          <ListPager :page="singleOwnerPage.page.value" :page-size="PAGE_SIZE" :total="singleOwnerPage.total.value" label="Single-owner pages" @go="singleOwnerPage.go($event)" />
-        </section>
-
-        <!-- Personal-space-critical -->
-        <section v-if="personalSpace.length" id="gap-personal-space" class="gap" data-testid="gap-personal-space">
-          <h2 class="gap-title">Critical work in a personal space <span class="count">{{ personalSpace.length }}</span></h2>
-          <p class="gap-why muted">Business-critical workflows living in someone’s personal project, not a shared team project.</p>
-          <ul class="rows">
-            <li v-for="w in personalSpacePage.paged.value" :key="w.instanceId + '/' + w.workflowId" class="grow">
-              <FactBadge :label="w.criticality ?? 'critical'" :tone="critTone(w.criticality)" />
-              <span class="wf">{{ w.name }}</span>
-              <span class="inst muted"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span>
-              <span v-if="w.person" class="muted small">{{ w.person.name ?? w.person.email }}’s space</span>
-            </li>
-          </ul>
-          <ListPager :page="personalSpacePage.page.value" :page-size="PAGE_SIZE" :total="personalSpacePage.total.value" label="Personal-space pages" @go="personalSpacePage.go($event)" />
-        </section>
-
-        <!-- No backup owner -->
-        <section v-if="noBackup.length" class="gap" data-testid="gap-no-backup">
-          <h2 class="gap-title">Critical, no backup owner <span class="count">{{ noBackup.length }}</span></h2>
-          <p class="gap-why muted">Assigned critical workflows with no backup owner — one person away from unowned.</p>
-          <ul class="rows">
-            <li v-for="w in noBackupPage.paged.value" :key="w.instanceId + '/' + w.workflowId" class="grow">
-              <FactBadge :label="w.criticality ?? 'critical'" :tone="critTone(w.criticality)" />
-              <span class="wf">{{ w.name }}</span>
-              <span class="inst muted"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span>
-              <span class="muted small">owner: {{ w.owner.name ?? w.owner.email }}</span>
-            </li>
-          </ul>
-          <ListPager :page="noBackupPage.page.value" :page-size="PAGE_SIZE" :total="noBackupPage.total.value" label="No-backup pages" @go="noBackupPage.go($event)" />
-        </section>
-      </template>
+    <!-- ── Accountability posture (also the primary filter) ────────────────── -->
+    <div v-if="summary" class="summary" data-testid="ownership-summary">
+      <button
+        class="stat stat--btn stat--ok"
+        :class="{ on: view === 'confirmed' }"
+        data-testid="ownership-confirmed"
+        :aria-pressed="view === 'confirmed'"
+        @click="store.setView('confirmed')"
+      >
+        <span class="n">{{ summary.confirmed }}</span><span class="lbl">confirmed of {{ summary.total }}</span>
+      </button>
+      <button
+        v-for="t in TILES"
+        :key="t.view"
+        class="stat stat--btn"
+        :class="[`stat--${t.tone}`, { on: view === t.view }]"
+        :data-testid="t.testid"
+        :aria-pressed="view === t.view"
+        @click="store.setView(t.view)"
+      >
+        <span class="n">{{ t.count(summary) }}</span><span class="lbl">{{ t.label }}</span>
+      </button>
     </div>
+
+    <!-- ── Scope + search ─────────────────────────────────────────────────── -->
+    <div class="bar">
+      <div class="seg seg--sm" role="group" aria-label="Scope by instance" data-testid="ownership-scope">
+        <button :class="{ on: instanceId === 'all' }" @click="store.setInstance('all')">All estate</button>
+        <button v-for="i in instances" :key="i.id" :class="{ on: instanceId === i.id }" @click="store.setInstance(i.id)">
+          <span class="dot" :style="{ background: instanceColor(i.id) }" />{{ i.label }}
+        </button>
+      </div>
+      <input v-model="qInput" class="input search" type="search" placeholder="Search by name…" aria-label="Search workflows by name" data-testid="ownership-search">
+      <button v-if="view !== 'all'" class="linkish" data-testid="ownership-show-all" @click="store.setView('all')">Show all {{ summary?.total ?? '' }}</button>
+    </div>
+
+    <!-- ── The register table ─────────────────────────────────────────────── -->
+    <p v-if="state === 'loading'" class="muted pad">Assessing ownership across the estate…</p>
+    <p v-else-if="state === 'error'" class="err pad" role="alert">Couldn’t load the ownership register — {{ error }}.</p>
+    <div v-else-if="total === 0" class="card empty" data-testid="ownership-empty">
+      <p>Nothing here — no workflows match this filter.</p>
+    </div>
+
+    <template v-else>
+      <div class="table-wrap" data-testid="ownership-register">
+        <table class="wf">
+          <thead>
+            <tr><th class="c-name">Workflow</th><th class="c-owner">Owner</th><th class="c-backup">Backup</th><th class="c-risk">Risk</th><th class="c-inst">Instance</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="w in rows" :key="w.instanceId + '/' + w.id" class="row" tabindex="0" @click="selected = w" @keydown.enter="selected = w">
+              <td class="c-name" data-label="Workflow">
+                <span class="name-cell"><span class="name">{{ w.name }}</span><EnrichmentBadges :enrichment="w.enrichment" /></span>
+              </td>
+              <td class="c-owner" data-label="Owner"><OwnerBadge :owner="w.owner" /></td>
+              <td class="c-backup muted" data-label="Backup">{{ backupName(w) }}</td>
+              <td class="c-risk" data-label="Risk">
+                <span v-if="w.risks.length" class="risks">
+                  <FactBadge v-for="r in w.risks" :key="r" :label="RISK_LABEL[r]" :tone="RISK_TONE[r]" />
+                </span>
+                <span v-else class="muted">—</span>
+              </td>
+              <td class="c-inst" data-label="Instance"><span class="instance"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <ListPager :page="page" :page-size="pageSize" :total="total" label="Ownership pages" @go="store.goToPage($event)" />
+    </template>
+
+    <WorkflowDetailDrawer :selected="selected" @close="selected = null" />
   </section>
 </template>
 
 <style scoped>
-.gov { display: flex; flex-direction: column; gap: var(--spacing--md); }
+.own { display: flex; flex-direction: column; gap: var(--spacing--sm); }
 .head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--spacing--md); flex-wrap: wrap; }
-h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight--bold); }
-.sub { margin: var(--spacing--5xs) 0 0; font-size: var(--font-size--sm); }
+.sub { margin: 0; font-size: var(--font-size--sm); }
 
-.gaps { display: flex; flex-direction: column; gap: var(--spacing--md); }
-.gap { display: flex; flex-direction: column; gap: var(--spacing--2xs); }
-.gap-title { margin: 0; font-size: var(--font-size--md); font-weight: var(--font-weight--bold); }
-.gap-title .count { font-size: var(--font-size--2xs); font-weight: var(--font-weight--medium); opacity: 0.6; font-variant-numeric: tabular-nums; }
-.gap-why { margin: 0; font-size: var(--font-size--2xs); }
-
-.rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing--4xs); }
-.grow, .spof {
-  display: flex; align-items: center; gap: var(--spacing--sm); flex-wrap: wrap;
+/* Summary strip = posture + the primary filter (tiles are buttons). */
+.summary { display: flex; gap: var(--spacing--2xs); flex-wrap: wrap; }
+.stat {
+  flex: 1 1 8rem; min-width: 7.5rem; display: flex; flex-direction: column; gap: var(--spacing--5xs);
   padding: var(--spacing--2xs) var(--spacing--sm);
-  border: 1px solid var(--border-color--subtle); border-radius: var(--radius--md);
-  background: var(--background--surface); font-size: var(--font-size--sm);
+  border: 1px solid var(--border-color--subtle); border-radius: var(--radius--lg);
+  background: var(--background--surface); text-align: left;
 }
-.spof { flex-direction: column; align-items: stretch; gap: var(--spacing--4xs); }
-.spof-head { display: flex; align-items: center; gap: var(--spacing--2xs); flex-wrap: wrap; }
-.spof-wfs { list-style: none; margin: 0; padding: 0 0 0 var(--spacing--sm); display: flex; flex-direction: column; gap: var(--spacing--5xs); }
-.spof-wfs li { display: flex; gap: var(--spacing--sm); align-items: center; flex-wrap: wrap; font-size: var(--font-size--2xs); }
-.wf { font-weight: var(--font-weight--medium); }
-.inst { display: inline-flex; align-items: center; gap: var(--spacing--4xs); white-space: nowrap; }
+.stat--btn { appearance: none; font: inherit; cursor: pointer; transition: border-color var(--duration--snappy, 0.12s) ease; }
+.stat--btn:hover { border-color: var(--border-color--strong, var(--border-color)); }
+.stat--btn.on { border-color: var(--background--brand); box-shadow: inset 0 0 0 1px var(--background--brand); }
+.stat .n { font-size: var(--font-size--xl); font-weight: var(--font-weight--bold); line-height: 1; font-variant-numeric: tabular-nums; }
+.stat .lbl { font-size: var(--font-size--3xs); color: var(--color--text--shade-1); opacity: 0.7; }
+.stat--ok .n { color: var(--color--success); }
+.stat--danger .n { color: var(--color--danger); }
+.stat--warn .n { color: var(--color--warning); }
+.stat--muted .n { color: var(--color--text--shade-1); opacity: 0.6; }
+
+.bar { display: flex; gap: var(--spacing--2xs); flex-wrap: wrap; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--border-color); border-radius: var(--radius--md); overflow: hidden; flex-wrap: wrap; }
+.seg button {
+  appearance: none; border: 0; border-right: 1px solid var(--border-color); background: var(--background--surface);
+  color: var(--color--text--shade-1); font: inherit; font-size: var(--font-size--2xs); padding: var(--spacing--4xs) var(--spacing--2xs);
+  cursor: pointer; display: inline-flex; align-items: center; gap: var(--spacing--4xs); white-space: nowrap;
+}
+.seg button:last-child { border-right: 0; }
+.seg button:hover:not(.on) { background: var(--background--subtle); }
+.seg button.on { background: var(--background--brand); color: var(--color--neutral-white); }
+.search { max-width: 18rem; flex: 1 1 12rem; }
+.linkish { appearance: none; border: 0; background: none; color: var(--background--brand); font: inherit; font-size: var(--font-size--2xs); cursor: pointer; padding: 0; }
+
+.table-wrap { border: 1px solid var(--border-color--subtle); border-radius: var(--radius--lg); overflow-x: auto; }
+.wf { width: 100%; border-collapse: collapse; font-size: var(--font-size--sm); }
+.wf thead th {
+  text-align: left; font-size: var(--font-size--3xs); font-weight: var(--font-weight--medium);
+  text-transform: uppercase; letter-spacing: var(--letter-spacing--wide);
+  color: var(--color--text--shade-1); opacity: 0.6;
+  padding: var(--spacing--2xs) var(--spacing--sm); background: var(--background--subtle);
+  border-bottom: 1px solid var(--border-color--subtle); white-space: nowrap;
+}
+.wf tbody td { padding: var(--spacing--2xs) var(--spacing--sm); border-bottom: 1px solid var(--border-color--subtle); vertical-align: middle; }
+.wf tbody tr:last-child td { border-bottom: 0; }
+.row { cursor: pointer; }
+.row:hover td { background: var(--background--hover, var(--background--subtle)); }
+.row:focus-visible { outline: 2px solid var(--background--brand); outline-offset: -2px; }
+.c-name { font-weight: var(--font-weight--medium); min-width: 13rem; }
+.name-cell { display: flex; align-items: center; gap: var(--spacing--4xs); flex-wrap: wrap; }
+.name-cell .name { flex: 0 0 100%; }
+.c-backup { font-size: var(--font-size--2xs); }
+.risks { display: inline-flex; gap: var(--spacing--4xs); flex-wrap: wrap; }
+.instance { display: inline-flex; align-items: center; gap: var(--spacing--4xs); white-space: nowrap; }
 .dot { width: 0.5rem; height: 0.5rem; border-radius: var(--radius--full); flex: none; }
-.small { font-size: var(--font-size--2xs); }
-.show-more { align-self: flex-start; margin-top: var(--spacing--3xs); }
 
 .card.empty { text-align: center; }
 .card.empty p { margin: 0; }
 .pad { padding: var(--spacing--md); }
 .err { color: var(--color--danger); }
+
+/* Mobile (≤720px): the register reflows to stacked cards; no horizontal scroll. */
+@media (max-width: 720px) {
+  .table-wrap { border: 0; overflow: visible; }
+  .wf, .wf tbody, .wf tr, .wf td { display: block; width: 100%; }
+  .wf thead { display: none; }
+  .wf tbody tr {
+    border: 1px solid var(--border-color--subtle); border-radius: var(--radius--md);
+    margin-bottom: var(--spacing--2xs); padding: var(--spacing--2xs) var(--spacing--sm);
+    background: var(--background--surface);
+  }
+  .wf tbody td { border: 0; padding: var(--spacing--4xs) 0; display: flex; gap: var(--spacing--sm); align-items: baseline; }
+  .wf tbody td[data-label]::before {
+    content: attr(data-label); flex: 0 0 5rem;
+    color: var(--color--text--shade-1); opacity: 0.6;
+    font-size: var(--font-size--3xs); text-transform: uppercase; letter-spacing: var(--letter-spacing--wide);
+  }
+  .c-name { min-width: 0; }
+  .name-cell .name { flex: 1; }
+  .search { max-width: none; flex: 1 1 100%; }
+}
 </style>

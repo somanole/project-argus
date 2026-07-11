@@ -237,15 +237,16 @@ try {
     hMissing.length === 0 ? `${healthUi.length} health UI elements present` : `MISSING: ${hMissing.join(', ')}`);
 
   // S4: ownership chrome — the catalog owner badge, the drawer ownership section +
-  // assign dialog, the Governance view (gaps groups), and the incident owner on the
-  // failing surface. Each has a component test; presence counterpart.
+  // assign dialog, the Ownership register (accountability table + clickable summary
+  // filters), and the incident owner on the failing surface. Each has a component test.
   const ownUi = [
     'owner-badge', 'ownership-section', 'ownership-assign-button', 'assign-owner-dialog', 'assign-owner-picker', 'assign-owner-suggestion',
-    'governance-view', 'governance-gaps', 'gap-unowned', 'gap-single-owner', 'gap-personal-space', 'gap-no-backup',
+    'governance-view', 'ownership-summary', 'ownership-register', 'ownership-confirmed',
+    'ownership-filter-needs-owner', 'ownership-filter-critical-at-risk', 'ownership-scope', 'ownership-search',
     'incident-owner',
   ];
   const oMissing = missing(ownUi);
-  add('Ownership UI ships (owner badge, assign dialog, Governance gaps, incident owner)', oMissing.length === 0,
+  add('Ownership UI ships (owner badge, assign dialog, ownership register + summary filters, incident owner)', oMissing.length === 0,
     oMissing.length === 0 ? `${ownUi.length} ownership UI elements present` : `MISSING: ${oMissing.join(', ')}`);
 
   // The Argus self-audit timeline lives in its own Activity view — the filterable,
@@ -323,7 +324,7 @@ try {
     row('Catalog usable at 375px — no horizontal overflow, no cut-off fields', 'Catalog list');
     row('Health view usable at 375px — no horizontal overflow', 'Health view');
     row('Graph view usable at 375px — no horizontal overflow', 'Graph view');
-    row('Governance view usable at 375px — no horizontal overflow', 'Governance view');
+    row('Ownership register usable at 375px — no horizontal overflow', 'Ownership register');
     row('Detail drawer usable at 375px — full-width, no overflow', 'Detail drawer');
     row('Settings usable at 375px — no horizontal overflow', 'Settings');
     row('Chat view usable at 375px — no horizontal overflow', 'Chat view');
@@ -1450,6 +1451,34 @@ async function s4Checks() {
     } catch { /* fetch failed */ }
     add('Governance gaps + filterable audit timeline (CSV-exportable) served', gapsShapeOk && csvOk,
       `gaps shape ${gapsShapeOk ? 'ok' : 'bad'}, CSV export ${csvOk ? 'ok' : 'MISSING'}`);
+
+    // The ownership register: paginated accountability table + posture summary + filters.
+    let regOk = false;
+    let regDetail = '';
+    try {
+      // The summary posture is filter-independent (computed over ALL) — read it off the
+      // needs-owner response (default working set + page 1) and its page 2. `confirmed` is
+      // the complement of needs-owner and is taken from the summary, not a separate fetch.
+      const p1 = (await argus('/api/ownership/register?state=needs-owner&limit=50&offset=0')).json ?? {};
+      const p2 = (await argus('/api/ownership/register?state=needs-owner&limit=50&offset=50')).json ?? {};
+      const s = p1.summary ?? {};
+      const rows1 = Array.isArray(p1.rows) ? p1.rows : [];
+      const rows2 = Array.isArray(p2.rows) ? p2.rows : [];
+      const summaryOk = (s.confirmed + s.inferred + s.unowned) === s.total && s.total > 0;
+      const rowsHaveRisks = rows1.length > 0 && rows1.every((r) => Array.isArray(r.risks) && r.risks.length > 0);
+      const needsAllUnassigned = rows1.every((r) => r.owner?.status !== 'assigned');
+      const needsTotal = p1.total ?? -1;
+      // needs-owner = advisory + unowned; + confirmed = the whole estate (a clean partition).
+      const partitionsOk = needsTotal === (s.inferred + s.unowned) && (needsTotal + s.confirmed) === s.total;
+      // Paginated: page 2 has rows and none overlap page 1.
+      const ids = (r) => new Set(r.map((x) => `${x.instanceId}/${x.id}`));
+      const pagedOk = rows1.length === 50 && rows2.length > 0 && ![...ids(rows1)].some((k) => ids(rows2).has(k));
+      regOk = summaryOk && rowsHaveRisks && needsAllUnassigned && partitionsOk && pagedOk;
+      regDetail = `total ${s.total} (confirmed ${s.confirmed} · advisory ${s.inferred} · unowned ${s.unowned}), needs-owner ${needsTotal}, partitions=${partitionsOk}, page1 ${rows1.length}/page2 ${rows2.length} distinct=${pagedOk}`;
+    } catch (e) {
+      regDetail = `register failed: ${e.message}`;
+    }
+    add('Ownership register: paginated table + posture summary + honest filters (assigned vs advisory)', regOk, regDetail);
 
     // Audit timeline: partial (case-insensitive substring) actor match + paginated pages.
     let pageOk = false;

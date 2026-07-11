@@ -75,6 +75,14 @@ const gapsBody = {
   noBackupOwner: [{ ...gapWf('nb1', 'Invoice Dispatch'), owner: { email: 'sam@acme.example', name: 'Sam Rivers' } }],
   generatedAt: '2026-07-05T00:00:00.000Z',
 };
+const registerBody = {
+  rows: WORKFLOWS.map((w, i) => ({ ...w, risks: i === 0 ? ['no-confirmed-owner'] : ['no-backup'] })),
+  summary: { total: 3, confirmed: 1, inferred: 1, unowned: 1, criticalAtRisk: 1, noBackup: 1 },
+  total: 3,
+  limit: 50,
+  offset: 0,
+  generatedAt: '2026-07-05T00:00:00.000Z',
+};
 const auditBody = {
   entries: [
     { id: 2, ts: '2026-07-06T10:00:00.000Z', actorName: 'Ops Admin', actorEmail: 'ops@acme.example', action: 'ownership.assign', entityType: 'workflow_ownership', entityId: 'prod/w1', detail: { after: { ownerEmail: 'sam@acme.example' } } },
@@ -163,6 +171,7 @@ function mockApi(route) {
   if (p.endsWith('/api/governance/overview')) return send(overviewBody);
   if (p.endsWith('/api/workflows/failing')) return send(failingBody);
   if (p.endsWith('/api/ownership/gaps')) return send(gapsBody);
+  if (p.endsWith('/api/ownership/register')) return send(registerBody);
   if (p.endsWith('/api/ownership/audit')) return send(auditBody);
   if (/\/api\/ownership\/[^/]+\/assignable-users$/.test(p)) return send({ users: [{ email: 'sam@acme.example', name: 'Sam Rivers', role: 'global:member' }], available: true, reason: null });
   if (/\/api\/workflows\/[^/]+\/[^/]+\/executions$/.test(p)) return send(executionsBody);
@@ -215,7 +224,7 @@ const VIEWS = [
   // rule-10 gate here is "no horizontal overflow at 375px"; the canvas rendering is
   // proven by GraphView.test.ts. Key element is the always-present scope switcher.
   { name: 'Graph view', path: '/graph', mock: mockApi, waitFor: '[data-testid="graph-view"]', key: '[data-testid="graph-scope-switcher"]' },
-  { name: 'Governance view', path: '/governance', mock: mockApi, waitFor: '[data-testid="governance-gaps"]', key: '[data-testid="gap-unowned"]' },
+  { name: 'Ownership register', path: '/estate/ownership', mock: mockApi, waitFor: '[data-testid="ownership-register"]', key: '[data-testid="ownership-summary"]' },
   { name: 'Activity view', path: '/activity', mock: mockApi, waitFor: '[data-testid="activity-view"]', key: '[data-testid="governance-audit-timeline"]' },
   { name: 'Detail drawer', path: '/workflows', mock: mockApi, waitFor: '.wf tbody tr', key: '.drawer',
     action: async (page) => { await page.click('.wf tbody tr'); await page.waitForSelector('.drawer', { timeout: 4000 }); } },

@@ -145,6 +145,16 @@ export {
   type AuditTimelineResponse,
 } from './ownership.js';
 export {
+  ownershipRiskSchema,
+  ownershipRegisterRowSchema,
+  ownershipRegisterSummarySchema,
+  ownershipRegisterResponseSchema,
+  type OwnershipRisk,
+  type OwnershipRegisterRow,
+  type OwnershipRegisterSummary,
+  type OwnershipRegisterResponse,
+} from './ownership-register.js';
+export {
   refResolutionSchema,
   refKindSchema,
   directDepSchema,
