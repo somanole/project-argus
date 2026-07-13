@@ -296,11 +296,11 @@ try {
     ovMissing.length === 0 ? `${overviewUi.length} overview UI elements present` : `MISSING: ${ovMissing.join(', ')}`);
 
   // S7: chat chrome — the chat view, message list + composer, streaming indicator,
-  // tool-call chips, and clickable workflow references (built only from tool-surfaced
-  // workflows). Each has a component test (ChatView.test.ts); presence counterpart (rule 11).
-  const chatUi = ['chat-view', 'chat-messages', 'chat-message', 'chat-input', 'chat-send', 'chat-streaming', 'chat-tool-chip', 'chat-workflow-ref'];
+  // tool-call chips, and the bottom "Referenced" row of clickable workflow pills (built
+  // only from tool-surfaced workflows). Each has a component test (ChatView.test.ts).
+  const chatUi = ['chat-view', 'chat-messages', 'chat-message', 'chat-input', 'chat-send', 'chat-streaming', 'chat-tool-chip', 'chat-refs', 'chat-workflow-ref'];
   const cMissing = missing(chatUi);
-  add('Chat UI ships (view, composer, streaming, tool-call chips, clickable workflow refs)', cMissing.length === 0,
+  add('Chat UI ships (view, composer, streaming, tool-call chips, Referenced workflow pills)', cMissing.length === 0,
     cMissing.length === 0 ? `${chatUi.length} chat UI elements present` : `MISSING: ${cMissing.join(', ')}`);
 }
 

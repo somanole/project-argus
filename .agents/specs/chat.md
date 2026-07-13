@@ -101,12 +101,21 @@ number traces to a tool result:
 8. **Audit** — "Who assigned the owner of 'Order Intake', and when?" → the audit
    timeline entry (actor, before→after, timestamp).
 
-**Every answer's claims are traceable, and workflow references are clickable.** A
-workflow named in an answer renders as a **clickable reference** carrying its instance
-+ id, opening the Argus detail drawer, with a deep link out to the n8n editor
-(`http://<n8n-host>/workflow/<id>`). These references are built from the **workflow
-objects the tools returned**, not parsed from the model's prose — so a reference can
-only point at a real workflow the tool surfaced.
+**Every answer's claims are traceable, and workflow references are clickable — in one
+place.** The answer prose stays **clean text with no inline links**; every workflow the
+answer named is collected into a **"Referenced" row near the top of the message — directly
+under the tool-call chips, above the answer prose** (so it is in view without scrolling past
+a long answer), each a **clickable pill** carrying its instance + id, opening the Argus
+detail drawer with a deep link out to the n8n editor (`http://<n8n-host>/workflow/<id>`).
+These references are built
+from the **workflow objects the tools returned**, not parsed from the model's prose — so a
+reference can only point at a real workflow the tool surfaced. The row is **labeled by
+instance** (`Refund Processor (prod)` / `Refund Processor (staging)`) so two same-named
+workflows across instances stay distinct — never collapsed to one, never a guess about
+which instance the prose meant (rule 5). It is **deduped by instance + id**: a workflow the
+prose names several times (e.g. one line per instance) is listed **once**, so N instances
+never explode into N×(mentions) pills. Only workflows whose name actually appears in the
+answer are listed, so a broad tool result never floods the row.
 
 **Tool-call chips show the work.** As the loop runs, the UI shows a **chip per tool
 call** — which tool was invoked and its key argument ("search_catalog · system=
@@ -275,9 +284,13 @@ with its key text/state, and a `pnpm verify` row.
       while the tool loop runs (`chat-streaming`).
 - [x] **Tool-call chips** render per tool call with the tool name + key argument
       (`chat-tool-chip`).
-- [x] **Workflow references** in an answer render as clickable, opening the detail
-      drawer, with a deep link to n8n (`chat-workflow-ref`); references are built from
-      tool-returned workflow objects, not parsed from prose.
+- [x] **Workflow references** render as clickable pills in a **"Referenced" row under the
+      tool-call chips, above the answer prose** (`chat-refs`, `chat-workflow-ref`), opening
+      the detail drawer with a deep link to n8n; built from tool-returned workflow objects,
+      not parsed from prose. The prose itself carries no inline links. The row is **labeled
+      by instance** and **deduped by instance + id** (a name repeated in the prose is listed
+      once; two same-named workflows across instances stay distinct — no guess about which
+      the prose meant).
 - [x] The scripted **not-found / out-of-scope** responses render as normal assistant
       messages (no error state, no fabricated content).
 
