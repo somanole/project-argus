@@ -86,7 +86,7 @@ async function remove(): Promise<void> {
 
       <!-- Inferred is advisory — say so, and say why it might be wrong. -->
       <p v-else-if="owner?.status === 'inferred'" class="prov muted" data-testid="ownership-inferred-note">
-        Inferred from n8n project membership<template v-if="owner.memberRole"> ({{ owner.memberRole }})</template> — advisory. Assign to make it authoritative.
+        Inferred from n8n project membership<template v-if="owner.memberRole"> ({{ owner.memberRole }})</template>. Assign to make it authoritative.
       </p>
 
       <!-- Unowned: show the honest "couldn't infer" reason when there is one. -->
@@ -114,16 +114,19 @@ async function remove(): Promise<void> {
 </template>
 
 <style scoped>
-.sec-head { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing--sm); }
+.sec-head { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing--sm); margin-bottom: var(--spacing--xs); }
 .sec-actions { display: flex; gap: var(--spacing--4xs); }
+/* Section heading — level 2: full-contrast, normal case (see the drawer type system). */
 .d-sec h3 {
-  margin: 0 0 var(--spacing--2xs);
-  font-size: var(--font-size--3xs); text-transform: uppercase; letter-spacing: var(--letter-spacing--wide);
-  font-weight: var(--font-weight--bold); color: var(--color--text--shade-1); opacity: 0.6;
+  margin: 0;
+  font-size: var(--font-size--sm);
+  font-weight: var(--font-weight--bold);
+  color: var(--color--text--shade-1);
+  letter-spacing: -0.005em;
 }
 .own-body { display: flex; flex-direction: column; gap: var(--spacing--4xs); align-items: flex-start; }
 .line { margin: 0; font-size: var(--font-size--2xs); display: flex; gap: var(--spacing--2xs); }
-.line .k { color: var(--color--text--shade-1); opacity: 0.6; min-width: 3.5rem; }
+.line .k { color: var(--color--text--shade-1); opacity: 0.65; min-width: 3.5rem; }
 .prov { margin: 0; font-size: var(--font-size--3xs); line-height: var(--line-height--md); }
 .suggestion { margin: var(--spacing--4xs) 0 0; }
 .suggestion > summary {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // A small labelled pill for a catalog fact (a system, a trigger, MCP, a warning).
 // All tones are token-based, so every one flips correctly in light/dark.
-withDefaults(defineProps<{ label: string; tone?: 'system' | 'trigger' | 'mcp' | 'ok' | 'warn' | 'danger' | 'muted' | 'faint'; title?: string }>(), {
+withDefaults(defineProps<{ label: string; tone?: 'system' | 'trigger' | 'mcp' | 'ok' | 'warn' | 'danger' | 'muted' | 'faint' | 'risk'; title?: string }>(), {
   tone: 'muted',
   title: '',
 });
@@ -69,5 +69,17 @@ withDefaults(defineProps<{ label: string; tone?: 'system' | 'trigger' | 'mcp' | 
 .fbadge--faint {
   background: transparent;
   opacity: 0.8;
+}
+/* Risk flag — a quiet outline pill led by a small warning dot, so a list of risks
+   reads as attributes and never competes with a genuine alert (silent failure, etc.). */
+.fbadge--risk {
+  background: var(--background--surface);
+  border-color: var(--border-color);
+}
+.fbadge--risk::before {
+  content: '';
+  width: 0.4rem; height: 0.4rem; flex: none;
+  border-radius: var(--radius--full);
+  background: var(--color--warning, var(--color--text--shade-1));
 }
 </style>

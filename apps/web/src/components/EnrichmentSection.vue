@@ -54,7 +54,7 @@ async function saveCorrection(correction: { category?: string; criticality?: str
 <template>
   <section class="d-sec" data-testid="enrichment-section">
     <div class="sec-head">
-      <h3>Sense-making</h3>
+      <h3>What it does</h3>
       <button
         v-if="e && e.status !== 'stub'"
         class="btn btn--secondary btn--sm"
@@ -101,7 +101,7 @@ async function saveCorrection(correction: { category?: string; criticality?: str
 
       <div v-if="e.riskFlags.length" class="risks" data-testid="enrichment-risk-flags">
         <span class="risks-label">Risk</span>
-        <FactBadge v-for="f in e.riskFlags" :key="f" :label="RISK_LABEL[f] ?? f" tone="warn" />
+        <FactBadge v-for="f in e.riskFlags" :key="f" :label="RISK_LABEL[f] ?? f" tone="risk" />
       </div>
 
       <!-- The longer business-context prose lives behind a disclosure so the summary
@@ -130,21 +130,28 @@ async function saveCorrection(correction: { category?: string; criticality?: str
 </template>
 
 <style scoped>
-.sec-head { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing--sm); }
+.sec-head { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing--sm); margin-bottom: var(--spacing--xs); }
+/* Section heading — level 2: full-contrast, normal case, so sections anchor a scan
+   (was tiny-uppercase-muted, indistinguishable from field labels). */
 .d-sec h3 {
-  margin: 0 0 var(--spacing--2xs);
-  font-size: var(--font-size--3xs); text-transform: uppercase; letter-spacing: var(--letter-spacing--wide);
-  font-weight: var(--font-weight--bold); color: var(--color--text--shade-1); opacity: 0.6;
+  margin: 0;
+  font-size: var(--font-size--sm);
+  font-weight: var(--font-weight--bold);
+  color: var(--color--text--shade-1);
+  letter-spacing: -0.005em;
 }
 .enr { display: flex; flex-direction: column; gap: var(--spacing--2xs); }
+/* Level 3 — body: the summary leads, at full contrast. */
 .summary { margin: 0; font-size: var(--font-size--sm); line-height: var(--line-height--md); }
 .crit-row { display: flex; flex-wrap: wrap; gap: var(--spacing--4xs); align-items: center; }
 .corrected { font-size: var(--font-size--3xs); }
-.reason { margin: 0; font-size: var(--font-size--2xs); color: var(--color--text--shade-1); opacity: 0.85; }
+/* Level 4 — supporting prose/meta, the ONE muted step (matches global .muted @ 0.65). */
+.reason { margin: 0; font-size: var(--font-size--2xs); line-height: var(--line-height--md); color: var(--color--text--shade-1); opacity: 0.65; }
 .risks { display: flex; flex-wrap: wrap; gap: var(--spacing--4xs); align-items: center; }
+/* "Risk" reads like the other field labels (Nodes / Triggers), not a tiny uppercase eyebrow. */
 .risks-label {
-  font-size: var(--font-size--3xs); text-transform: uppercase; letter-spacing: var(--letter-spacing--wide);
-  font-weight: var(--font-weight--bold); color: var(--color--text--shade-1); opacity: 0.55;
+  font-size: var(--font-size--2xs);
+  font-weight: var(--font-weight--bold); color: var(--color--text--shade-1);
   margin-right: var(--spacing--5xs);
 }
 .more-toggle > summary {
@@ -158,7 +165,7 @@ async function saveCorrection(correction: { category?: string; criticality?: str
 .more-toggle > summary::before { content: '▸ '; opacity: 0.7; }
 .more-toggle[open] > summary::before { content: '▾ '; }
 .more { display: grid; grid-template-columns: auto; gap: var(--spacing--4xs); margin: var(--spacing--4xs) 0 0; }
-.more dt { font-size: var(--font-size--3xs); text-transform: uppercase; letter-spacing: var(--letter-spacing--wide); opacity: 0.6; }
+.more dt { font-size: var(--font-size--3xs); text-transform: uppercase; letter-spacing: var(--letter-spacing--wide); color: var(--color--text--shade-1); opacity: 0.65; }
 .more dd { margin: 0 0 var(--spacing--2xs); font-size: var(--font-size--2xs); line-height: var(--line-height--md); }
 .prov { font-size: var(--font-size--3xs); }
 .stub, .stale { margin: 0; font-size: var(--font-size--2xs); color: var(--color--warning); }
