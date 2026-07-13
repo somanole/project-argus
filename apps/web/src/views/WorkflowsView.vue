@@ -133,8 +133,9 @@ onUnmounted(() => {
 <template>
   <section class="catalog">
     <header class="head">
-      <div>
-        <p class="muted sub">
+      <!-- Summary: what you're looking at — the count anchor with coverage as its sub-line. -->
+      <div class="summary">
+        <p class="sub">
           {{ total }} workflow<span v-if="total !== 1">s</span>
           <span v-if="activeFilterCount > 0"> match · </span>
           <span v-else> across </span>
@@ -145,38 +146,43 @@ onUnmounted(() => {
             clear {{ activeFilterCount }} filter{{ activeFilterCount > 1 ? 's' : '' }}
           </button>
         </p>
-      </div>
-      <div class="head-right">
-        <div
-          v-if="coverage"
-          class="coverage"
-          data-testid="coverage-indicator"
-          :title="`${coverage.understood}/${coverage.total} workflows fully understood; ${coverage.brokenRefTotal} broken reference(s)`"
-        >
-          <span class="cov-pct">{{ coverage.understoodPct }}%</span>
-          <span class="cov-label muted">understood</span>
-          <button
-            v-if="coverage.brokenRefTotal > 0"
-            type="button"
-            class="cov-broken"
-            :class="{ 'cov-broken--on': brokenOnly }"
-            :aria-pressed="brokenOnly"
-            data-testid="coverage-broken-filter"
-            :title="brokenOnly ? 'Showing only workflows with broken references — click to clear' : 'Filter to workflows with broken references'"
-            @click="store.setBrokenOnly(!brokenOnly)"
+        <div v-if="coverage || enrichmentLabel" class="coverage-line">
+          <div
+            v-if="coverage"
+            class="coverage"
+            data-testid="coverage-indicator"
+            :title="`${coverage.understood}/${coverage.total} workflows fully understood; ${coverage.brokenRefTotal} broken reference(s)`"
           >
-            <FactBadge :label="`${coverage.brokenRefTotal} broken`" tone="danger" />
-          </button>
+            <span class="cov-pct">{{ coverage.understoodPct }}%</span>
+            <span class="cov-label muted">understood</span>
+            <button
+              v-if="coverage.brokenRefTotal > 0"
+              type="button"
+              class="cov-broken"
+              :class="{ 'cov-broken--on': brokenOnly }"
+              :aria-pressed="brokenOnly"
+              data-testid="coverage-broken-filter"
+              :title="brokenOnly ? 'Showing only workflows with broken references — click to clear' : 'Filter to workflows with broken references'"
+              @click="store.setBrokenOnly(!brokenOnly)"
+            >
+              <FactBadge :label="`${coverage.brokenRefTotal} broken`" tone="danger" />
+            </button>
+          </div>
+          <span v-if="coverage && enrichmentLabel" class="cov-sep" aria-hidden="true">·</span>
+          <span
+            v-if="enrichmentLabel"
+            class="coverage"
+            data-testid="enrichment-progress"
+            :title="`${enrichmentProgress?.analyzed} analyzed, ${enrichmentProgress?.stub} couldn't analyze, ${enrichmentProgress?.stale} stale, ${enrichmentProgress?.pending} pending`"
+          >
+            <span class="cov-pct">{{ enrichmentLabel }}</span>
+            <span class="cov-label muted">enriched</span>
+          </span>
         </div>
-        <span
-          v-if="enrichmentLabel"
-          class="coverage"
-          data-testid="enrichment-progress"
-          :title="`${enrichmentProgress?.analyzed} analyzed, ${enrichmentProgress?.stub} couldn't analyze, ${enrichmentProgress?.stale} stale, ${enrichmentProgress?.pending} pending`"
-        >
-          <span class="cov-pct">{{ enrichmentLabel }}</span>
-          <span class="cov-label muted">enriched</span>
-        </span>
+      </div>
+
+      <!-- System status: is the data live — freshness + refresh, grouped and secondary. -->
+      <div class="status">
         <span
           v-if="syncOk"
           class="badge badge--muted"
@@ -389,10 +395,15 @@ onUnmounted(() => {
 .catalog { display: flex; flex-direction: column; gap: var(--spacing--sm); }
 .head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--spacing--md); flex-wrap: wrap; }
 h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight--bold); }
-.sub { margin: var(--spacing--5xs) 0 0; font-size: var(--font-size--sm); }
-.head-right { display: flex; align-items: center; gap: var(--spacing--sm); flex-wrap: wrap; }
+/* Summary: the count is the anchor (not muted); coverage its quiet sub-line beneath. */
+.summary { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--spacing--4xs); }
+.sub { margin: 0; font-size: var(--font-size--md); font-weight: var(--font-weight--medium); }
+.coverage-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--spacing--4xs) var(--spacing--xs); }
+.cov-sep { font-size: var(--font-size--2xs); color: var(--color--text--shade-1); opacity: 0.35; }
+/* System status: freshness + refresh, grouped top-right and secondary to the summary. */
+.status { display: flex; align-items: center; gap: var(--spacing--2xs); flex-wrap: wrap; }
 .coverage { display: inline-flex; align-items: baseline; gap: var(--spacing--4xs); }
-.cov-pct { font-size: var(--font-size--md); font-weight: var(--font-weight--bold); font-variant-numeric: tabular-nums; }
+.cov-pct { font-size: var(--font-size--sm); font-weight: var(--font-weight--bold); font-variant-numeric: tabular-nums; }
 .cov-label { font-size: var(--font-size--2xs); }
 /* The "N broken" count doubles as the broken-refs filter toggle. */
 .cov-broken {
@@ -539,6 +550,8 @@ a { color: var(--color--primary, var(--background--brand)); }
 /* Phone widths (≤720px): the Filters panel becomes a bottom sheet (never overflowing the
    viewport) and search goes full-width. */
 @media (max-width: 720px) {
+  /* Stacked: a hairline sets the control bar apart from the summary/status above it. */
+  .toolbar { border-top: 1px solid var(--border-color--subtle); padding-top: var(--spacing--sm); }
   .search { flex-basis: 100%; max-width: none; }
   .filters-panel {
     position: fixed; inset: auto 0 0 0; top: auto; width: auto; max-width: none;
