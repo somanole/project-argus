@@ -1,6 +1,6 @@
 {
   "$probe": "M0 discovery: are agents-v2 entities exposed via the public API?",
-  "capturedAt": "2026-07-07T13:40:49.911Z",
+  "capturedAt": "2026-07-11T23:14:05.460Z",
   "n8nVersion": "2.29.0",
   "requestHeaders": {
     "X-N8N-API-KEY": "«redacted»"

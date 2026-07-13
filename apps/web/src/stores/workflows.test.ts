@@ -17,7 +17,7 @@ function item(id: string, instanceId: string, instanceLabel: string) {
     mcpExposed: false,
     nodeCount: 2,
     understood: true,
-    brokenRefCount: 0,
+    brokenRefCount: 0, canMaskFailures: false,
     enrichment: null,
     health: null,
     owner: null,

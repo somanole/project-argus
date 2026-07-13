@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import type { WorkflowListItem, Criticality } from '@argus/shared';
+import type { WorkflowListItem, Criticality, SilentFailures } from '@argus/shared';
 import { listWorkflows } from '../workflows/repo.js';
 import { DEFAULT_HEALTH_WINDOW_HOURS } from '../n8n/client.js';
 import type { ComputedHealth } from './compute.js';
@@ -15,6 +15,8 @@ export interface HealthRow extends ComputedHealth {
   workflowId: string;
   /** Set only for status='unknown' (executions couldn't be read). */
   unavailableReason?: string | null;
+  /** S6.3 Layer 2 — silent-failure signal; null/absent when not inspected (rule 5). */
+  silentFailures?: SilentFailures | null;
 }
 
 /** Replace one instance's health rows atomically (the health equivalent of resync). */
@@ -29,11 +31,16 @@ export function replaceInstanceHealth(
     const ins = db.prepare(
       `INSERT INTO workflow_health
          (instance_id, workflow_id, status, runs_in_window, failures_in_window, failure_rate,
-          last_run_at, last_status, avg_duration_ms, window_hours, unavailable_reason, computed_at)
+          last_run_at, last_status, avg_duration_ms, window_hours, unavailable_reason, computed_at,
+          silent_runs_affected, silent_runs_inspected, silent_last_node, silent_last_error_type,
+          silent_last_error_code, silent_last_seen_at)
        VALUES (@instance_id, @workflow_id, @status, @runs_in_window, @failures_in_window, @failure_rate,
-          @last_run_at, @last_status, @avg_duration_ms, @window_hours, @unavailable_reason, @computed_at)`,
+          @last_run_at, @last_status, @avg_duration_ms, @window_hours, @unavailable_reason, @computed_at,
+          @silent_runs_affected, @silent_runs_inspected, @silent_last_node, @silent_last_error_type,
+          @silent_last_error_code, @silent_last_seen_at)`,
     );
     for (const r of rows) {
+      const s = r.silentFailures ?? null;
       ins.run({
         instance_id: instanceId,
         workflow_id: r.workflowId,
@@ -47,6 +54,13 @@ export function replaceInstanceHealth(
         window_hours: r.windowHours,
         unavailable_reason: r.unavailableReason ?? null,
         computed_at: computedAt,
+        // null across the board when not inspected (rule 5: not "verified clean").
+        silent_runs_affected: s ? s.runsAffected : null,
+        silent_runs_inspected: s ? s.runsInspected : null,
+        silent_last_node: s ? s.lastNode : null,
+        silent_last_error_type: s ? s.lastErrorType : null,
+        silent_last_error_code: s ? s.lastErrorCode : null,
+        silent_last_seen_at: s ? s.lastSeenAt : null,
       });
     }
   });
@@ -56,6 +70,20 @@ export function replaceInstanceHealth(
 /** Every workflow id currently cached for an instance (health covers all of them). */
 export function listInstanceWorkflowIds(db: Database.Database, instanceId: string): string[] {
   const rows = db.prepare('SELECT id FROM workflows WHERE instance_id = ?').all(instanceId) as { id: string }[];
+  return rows.map((r) => r.id);
+}
+
+/**
+ * The Layer-2 poll scope: workflow ids in an instance the Layer-1 flag says CAN mask
+ * failures. Only these get the expensive un-redacted detail fetch (a necessary precondition
+ * for a silent failure — a run can only be green-but-broken if a node was configured to
+ * swallow, so scoping here is sound, not a sample). Depends on the inventory sync having
+ * written can_mask_failures first (it runs before health on the same tick).
+ */
+export function listCanMaskWorkflowIds(db: Database.Database, instanceId: string): string[] {
+  const rows = db
+    .prepare('SELECT id FROM workflows WHERE instance_id = ? AND can_mask_failures = 1')
+    .all(instanceId) as { id: string }[];
   return rows.map((r) => r.id);
 }
 
@@ -99,7 +127,9 @@ export interface HealthEstate {
   healthy: WorkflowListItem[];
   idle: WorkflowListItem[];
   unknown: WorkflowListItem[];
-  summary: { failing: number; degraded: number; healthy: number; idle: number; unknown: number };
+  silentlyFailing: WorkflowListItem[];
+  canMask: WorkflowListItem[];
+  summary: { failing: number; degraded: number; healthy: number; idle: number; unknown: number; silentlyFailing: number; canMask: number };
   windows: HealthWindow[];
 }
 
@@ -130,14 +160,20 @@ export function healthEstate(db: Database.Database): HealthEstate {
   const healthy = triage(listWorkflows(db, { health: ['healthy'] }));
   const idle = triage(listWorkflows(db, { health: ['idle'] }));
   const unknown = triage(listWorkflows(db, { health: ['unknown'] }));
+  // S6.3 — orthogonal to status: workflows that read green but swallowed a node error.
+  const silentlyFailing = triage(listWorkflows(db, { silentlyFailing: true }));
+  // S6.3 — orthogonal config-risk: workflows configured so a failure could be masked.
+  const canMask = triage(listWorkflows(db, { canMask: true }));
 
   const counts = db
     .prepare('SELECT status, COUNT(*) AS n FROM workflow_health GROUP BY status')
     .all() as { status: string; n: number }[];
-  const summary = { failing: 0, degraded: 0, healthy: 0, idle: 0, unknown: 0 };
+  const summary = { failing: 0, degraded: 0, healthy: 0, idle: 0, unknown: 0, silentlyFailing: 0, canMask: 0 };
   for (const c of counts) {
     if (c.status in summary) summary[c.status as keyof typeof summary] = c.n;
   }
+  summary.silentlyFailing = silentlyFailing.length;
+  summary.canMask = canMask.length;
 
   const windowRows = db
     .prepare(
@@ -165,5 +201,5 @@ export function healthEstate(db: Database.Database): HealthEstate {
     available: !(r.total > 0 && r.unknownCount === r.total),
   }));
 
-  return { failing, degraded, healthy, idle, unknown, summary, windows };
+  return { failing, degraded, healthy, idle, unknown, silentlyFailing, canMask, summary, windows };
 }

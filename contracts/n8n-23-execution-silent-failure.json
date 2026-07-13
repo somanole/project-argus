@@ -1,0 +1,101 @@
+{
+  "$probe": "GET /api/v1/executions/{id}?includeData=true — GREEN-but-swallowing detail, REDACTED vs UN-REDACTED (S6.3)",
+  "capturedAt": "2026-07-11T23:14:06.490Z",
+  "n8nVersion": "2.29.0",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/executions/{id}?includeData=true&redactExecutionData={true|false}",
+    "headers": {
+      "X-N8N-API-KEY": "«redacted»"
+    }
+  },
+  "recommendedSeedMechanism": "http-continue-regular",
+  "variants": [
+    {
+      "name": "http-continue-regular",
+      "overallStatus": "success",
+      "swallowingNodeExecutionStatus": "success",
+      "outputShape": {
+        "When clicking Test": [
+          1
+        ],
+        "Swallowing Step": [
+          1
+        ]
+      },
+      "redacted": {
+        "detectable": false,
+        "signal": null
+      },
+      "unredacted": {
+        "detectable": true,
+        "swallowingNode": {
+          "node": "Swallowing Step",
+          "executionStatus": "success",
+          "taskErrorType": null,
+          "itemErrorType": "in-json.error",
+          "itemErrorCode": null,
+          "hasJsonError": true
+        }
+      }
+    },
+    {
+      "name": "http-continue-error-output",
+      "overallStatus": "success",
+      "swallowingNodeExecutionStatus": "success",
+      "outputShape": {
+        "When clicking Test": [
+          1
+        ],
+        "Swallowing Step": [
+          0,
+          1
+        ]
+      },
+      "redacted": {
+        "detectable": false,
+        "signal": null
+      },
+      "unredacted": {
+        "detectable": true,
+        "swallowingNode": {
+          "node": "Swallowing Step",
+          "executionStatus": "success",
+          "taskErrorType": null,
+          "itemErrorType": "in-json.error",
+          "itemErrorCode": null,
+          "hasJsonError": true
+        }
+      }
+    },
+    {
+      "name": "code-continue-regular",
+      "overallStatus": "success",
+      "swallowingNodeExecutionStatus": "success",
+      "outputShape": {
+        "When clicking Test": [
+          1
+        ],
+        "Swallowing Step": [
+          1
+        ]
+      },
+      "redacted": {
+        "detectable": false,
+        "signal": null
+      },
+      "unredacted": {
+        "detectable": true,
+        "swallowingNode": {
+          "node": "Swallowing Step",
+          "executionStatus": "success",
+          "taskErrorType": null,
+          "itemErrorType": "in-json.error",
+          "itemErrorCode": null,
+          "hasJsonError": true
+        }
+      }
+    }
+  ],
+  "finding": "FINDING (n8n 2.29.0). REDACTED read: a swallowed node error leaves NO signal — run=\"success\", node executionStatus=\"success\", item.json cleared to {}; the PLAN premise (executionStatus===\"error\") never holds. UN-REDACTED read (owner-approved Layer-2 source): detectable mechanism(s) = [\"http-continue-regular\",\"http-continue-error-output\",\"code-continue-regular\"]. Where the error lives un-redacted varies by mechanism (see variants[].unredacted.swallowingNode: executionStatus / taskErrorType / itemErrorType / hasJsonError). Argus extracts ONLY node name + error type/code server-side and NEVER persists item.json/binary. Seed the detectable mechanism; Code continueRegularOutput passes INPUT through with no error even un-redacted (undetectable — document as an honest boundary)."
+}

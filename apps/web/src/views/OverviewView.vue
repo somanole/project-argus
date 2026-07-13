@@ -24,7 +24,6 @@ const o = computed(() => data.value);
 const score = computed(() => o.value?.score ?? null);
 const unavailableInstances = computed(() => o.value?.health.windows.filter((w) => !w.available) ?? []);
 const advisoryCovered = computed(() => o.value?.unowned.workflows.filter((w) => w.inferred?.status === 'inferred').length ?? 0);
-const totalUnhealthy = computed(() => (o.value ? o.value.health.summary.failing + o.value.health.summary.degraded : 0));
 
 type Tone = 'ok' | 'warn' | 'danger' | 'muted';
 /** Score → semantic tone (tokens only, so both themes come for free). Also drives the tile tone. */
@@ -105,10 +104,16 @@ const operationsTiles = computed<OverviewTileData[]>(() => {
   if (!v) return [];
   return [
     {
-      key: 'incidents', testid: 'overview-incidents', label: 'Failing / degraded, owned', count: v.failingWithOwner.count, tone: 'danger',
-      context: totalUnhealthy.value > 0 ? `${totalUnhealthy.value} unhealthy · ${totalUnhealthy.value - v.failingWithOwner.count} unowned` : 'nothing unhealthy',
-      info: 'Failing or degraded workflows that have a confirmed owner to page — the actionable incidents. Any unhealthy workflow with no confirmed owner has no one to escalate to.',
+      key: 'failing', testid: 'overview-failing', label: 'Failing', count: v.health.summary.failing, tone: 'danger',
+      context: 'failure rate over 50%',
+      info: 'Workflows whose runs are mostly failing (failure rate over 50%) in the health window. Opens the Health view.',
       to: '/estate/health', dest: 'Health',
+    },
+    {
+      key: 'silently-failing', testid: 'overview-silently-failing', label: 'Silently failing', count: v.silentlyFailing.count, tone: 'warn',
+      context: 'green runs, a node errored',
+      info: 'Workflows n8n marked success while a node actually errored-and-continued — caught from the un-redacted run (node + error class only). Observed among the workflows inspected, not a full-fleet guarantee.',
+      to: { path: '/estate/health', query: { view: 'silentlyFailing' } }, dest: 'Health',
     },
     {
       key: 'broken', testid: 'overview-broken', label: 'Broken references', count: v.hygiene.brokenRefs.count, tone: 'danger',
@@ -129,7 +134,7 @@ const operationsTiles = computed<OverviewTileData[]>(() => {
       to: { path: '/estate', query: { health: 'idle', active: 'true' } }, dest: 'Estate',
     },
     {
-      key: 'exposure', testid: 'overview-exposure', label: 'MCP reaching sensitive', count: v.exposure.reachingSensitive, tone: 'danger',
+      key: 'exposure', testid: 'overview-exposure', label: 'MCP reaching sensitive', count: v.exposure.reachingSensitive, tone: 'warn',
       context: `of ${v.exposure.mcpExposed} exposed · ${v.exposure.reachingSensitiveUnowned} unowned`,
       info: 'MCP-exposed workflows whose confirmed dependency path reaches a sensitive system. Confirmed reach only — inferred edges are excluded. Opens the MCP-exposed set in the catalog.',
       to: { path: '/estate', query: { mcp: 'true' } }, dest: 'Estate',

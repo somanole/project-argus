@@ -1,12 +1,16 @@
-import type { N8nExecution, WorkflowRun, ExecutionFailure } from '@argus/shared';
+import type { N8nExecution, WorkflowRun, ExecutionFailure, SilentFailures } from '@argus/shared';
+import { aggregateSilentFailures, type InspectedRun, type SwallowedError } from './silent.js';
 
 /** The slice of the n8n client the drawer's on-demand debug needs — injectable for tests. */
 export interface ExecutionDebugReader {
   recentExecutions(opts: { workflowId: string; limit?: number }): Promise<N8nExecution[]>;
   executionDebug(executionId: string): Promise<{ failedNode: string | null; errorType: string | null; errorCode: string | null } | null>;
+  /** S6.3 Layer 2 — allowlisted swallowed-node errors for ONE execution (optional). */
+  executionSilentFailures?(executionId: string): Promise<SwallowedError[] | null>;
 }
 
 const FAILURE_STATUSES = new Set(['error', 'crashed']);
+const SUCCESS_STATUS = 'success';
 
 /** n8n's per-execution UI deep link (contracts/n8n-18 / VIEWS.EXECUTION_PREVIEW). */
 function runDeepLink(baseUrl: string, workflowId: string, executionId: string): string {
@@ -23,6 +27,8 @@ function durationMs(e: N8nExecution): number | null {
 export interface WorkflowExecutionsResult {
   runs: WorkflowRun[];
   failure: ExecutionFailure | null;
+  /** S6.3 Layer 2 — live silently-failing signal for the fetched success runs (null when none). */
+  silentFailures: SilentFailures | null;
   unavailable: boolean;
   unavailableReason: string | null;
 }
@@ -62,9 +68,29 @@ export async function fetchWorkflowExecutions(
         deepLink: runDeepLink(opts.baseUrl, opts.workflowId, failed.id),
       };
     }
-    return { runs, failure, unavailable: false, unavailableReason: null };
+
+    // S6.3 Layer 2 (on-demand): inspect the fetched SUCCESS runs for a swallowed node error
+    // (un-redacted, allowlisted in the client, never persisted). Live truth for any opened
+    // workflow — including those outside the poll's can-mask scope. Best-effort: a detail
+    // read that fails is simply not counted (rule 5), never a fabricated "clean".
+    let silentFailures: SilentFailures | null = null;
+    if (reader.executionSilentFailures) {
+      const inspected: InspectedRun[] = [];
+      for (const e of execs) {
+        if (e.status !== SUCCESS_STATUS) continue;
+        const swallowed = await reader.executionSilentFailures(e.id);
+        if (swallowed === null) continue;
+        inspected.push({ startedAt: e.startedAt ?? null, swallowed });
+      }
+      if (inspected.length > 0) {
+        const agg = aggregateSilentFailures(inspected);
+        if (agg.runsAffected > 0) silentFailures = agg;
+      }
+    }
+
+    return { runs, failure, silentFailures, unavailable: false, unavailableReason: null };
   } catch (err) {
     const reason = opts.reasonForError ? opts.reasonForError(err) : (err as Error).message;
-    return { runs: [], failure: null, unavailable: true, unavailableReason: reason };
+    return { runs: [], failure: null, silentFailures: null, unavailable: true, unavailableReason: reason };
   }
 }

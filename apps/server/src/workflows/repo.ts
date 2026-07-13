@@ -53,6 +53,10 @@ export interface WorkflowFilters {
   health?: string[] | undefined;
   /** Only workflows with at least one certain-broken reference. */
   broken?: boolean | undefined;
+  /** S6.3: only workflows configured so a failure could be masked (Layer 1 flag). */
+  canMask?: boolean | undefined;
+  /** S6.3: only workflows observed silently failing (Layer 2 signal, runsAffected > 0). */
+  silentlyFailing?: boolean | undefined;
   /** Only workflows whose stored analysis is stale (enrichment exists but its input hash drifted). */
   stale?: boolean | undefined;
   q?: string | undefined;
@@ -75,6 +79,7 @@ interface WorkflowRow {
   node_count: number | null;
   understood: number | null;
   broken_ref_count: number | null;
+  can_mask_failures: number | null;
   systems: string | null; // group_concat, unit-separated
   triggers: string | null;
   // S2 enrichment (LEFT JOIN workflow_enrichments; all null when not enriched):
@@ -97,6 +102,13 @@ interface WorkflowRow {
   health_window_hours: number | null;
   health_unavailable_reason: string | null;
   health_computed_at: string | null;
+  // S6.3 Layer 2 silent-failure signal (null when not inspected):
+  health_silent_runs_affected: number | null;
+  health_silent_runs_inspected: number | null;
+  health_silent_last_node: string | null;
+  health_silent_last_error_type: string | null;
+  health_silent_last_error_code: string | null;
+  health_silent_last_seen_at: string | null;
   // S4 ownership (LEFT JOIN workflow_ownership o; all null when unassigned):
   own_owner_email: string | null;
   own_owner_name: string | null;
@@ -152,10 +164,10 @@ export function replaceInstanceWorkflows(
       `INSERT INTO workflows
          (instance_id, id, name, active, is_archived, project_id, project_name, updated_at, version_id,
           last_synced_at, facts_json, facts_schema_version, mcp_exposed, node_count, understood, broken_ref_count,
-          enrichment_input_json, enrichment_input_hash)
+          can_mask_failures, enrichment_input_json, enrichment_input_hash)
        VALUES (@instance_id, @id, @name, @active, @is_archived, @project_id, @project_name, @updated_at, @version_id,
           @last_synced_at, @facts_json, @facts_schema_version, @mcp_exposed, @node_count, @understood, @broken_ref_count,
-          @enrichment_input_json, @enrichment_input_hash)`,
+          @can_mask_failures, @enrichment_input_json, @enrichment_input_hash)`,
     );
     const insertSystem = db.prepare(
       'INSERT OR IGNORE INTO workflow_systems (instance_id, workflow_id, system) VALUES (?, ?, ?)',
@@ -183,6 +195,9 @@ export function replaceInstanceWorkflows(
         node_count: f ? f.nodeCount : null,
         understood: f ? (f.coverage.understood ? 1 : 0) : null,
         broken_ref_count: f ? brokenRefCount(f) : 0,
+        // Optional-chained: a facts_json from an older schema version may predate this field
+        // (a schemaVersion bump forces recompute anyway) — treat absent as not-flagged (rule 5).
+        can_mask_failures: f?.canMaskFailures?.flagged ? 1 : 0,
         enrichment_input_json: w.enrichmentInput ? JSON.stringify(w.enrichmentInput) : null,
         enrichment_input_hash: w.enrichmentInputHash ?? null,
       });
@@ -216,6 +231,7 @@ function toListItem(r: WorkflowRow): WorkflowListItem {
     nodeCount: r.node_count,
     understood: r.understood == null ? null : r.understood === 1,
     brokenRefCount: r.broken_ref_count ?? 0,
+    canMaskFailures: r.can_mask_failures === 1,
     enrichment: mapEnrichment(r),
     health: mapHealth(r),
     owner: mapOwner(r),
@@ -264,6 +280,18 @@ function mapHealth(r: WorkflowRow): WorkflowHealth | null {
     windowHours: r.health_window_hours ?? 336,
     computedAt: r.health_computed_at,
     unavailableReason: r.health_unavailable_reason,
+    // Silent-failure dimension: null unless we actually inspected this workflow's runs.
+    silentFailures:
+      r.health_silent_runs_inspected == null
+        ? null
+        : {
+            runsAffected: r.health_silent_runs_affected ?? 0,
+            runsInspected: r.health_silent_runs_inspected,
+            lastNode: r.health_silent_last_node,
+            lastErrorType: r.health_silent_last_error_type,
+            lastErrorCode: r.health_silent_last_error_code,
+            lastSeenAt: r.health_silent_last_seen_at,
+          },
   };
 }
 
@@ -313,6 +341,7 @@ function mapEnrichment(r: WorkflowRow): WorkflowEnrichment | null {
 const LIST_SELECT = `
   SELECT w.instance_id, c.label AS instance_label, w.id, w.name, w.active, w.is_archived,
          w.project_name, w.updated_at, w.mcp_exposed, w.node_count, w.understood, w.broken_ref_count,
+         w.can_mask_failures,
          (SELECT group_concat(ws.system, char(31)) FROM workflow_systems ws
             WHERE ws.instance_id = w.instance_id AND ws.workflow_id = w.id) AS systems,
          (SELECT group_concat(wt.trigger_type, char(31)) FROM workflow_triggers wt
@@ -324,6 +353,9 @@ const LIST_SELECT = `
          h.failure_rate AS health_failure_rate, h.last_run_at AS health_last_run_at, h.last_status AS health_last_status,
          h.avg_duration_ms AS health_avg_duration_ms, h.window_hours AS health_window_hours,
          h.unavailable_reason AS health_unavailable_reason, h.computed_at AS health_computed_at,
+         h.silent_runs_affected AS health_silent_runs_affected, h.silent_runs_inspected AS health_silent_runs_inspected,
+         h.silent_last_node AS health_silent_last_node, h.silent_last_error_type AS health_silent_last_error_type,
+         h.silent_last_error_code AS health_silent_last_error_code, h.silent_last_seen_at AS health_silent_last_seen_at,
          o.owner_email AS own_owner_email, o.owner_name AS own_owner_name,
          o.backup_owner_email AS own_backup_email, o.backup_owner_name AS own_backup_name,
          o.reason AS own_reason, o.assigned_by_name AS own_assigned_by_name,
@@ -359,6 +391,12 @@ function buildWorkflowWhere(filters: WorkflowFilters): { clause: string; params:
   }
   if (filters.broken) {
     where.push('w.broken_ref_count > 0');
+  }
+  if (filters.canMask) {
+    where.push('w.can_mask_failures = 1');
+  }
+  if (filters.silentlyFailing) {
+    where.push('h.silent_runs_affected > 0');
   }
   if (filters.stale) {
     // Stale = a stored enrichment whose input hash no longer matches the workflow's current

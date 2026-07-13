@@ -3,8 +3,9 @@ import { ref, computed } from 'vue';
 import { healthEstateResponseSchema, type HealthEstateResponse, type WorkflowListItem } from '@argus/shared';
 import { api } from '../lib/api';
 
-/** Which health state's list the view is showing (also which summary tile is active). */
-export type HealthView = 'failing' | 'degraded' | 'healthy' | 'idle' | 'unknown';
+/** Which list the view is showing (also which summary tile is active). `silentlyFailing`
+ * is orthogonal to the status states — green runs that swallowed a node error (S6.3). */
+export type HealthView = 'failing' | 'degraded' | 'healthy' | 'idle' | 'unknown' | 'silentlyFailing' | 'canMask';
 
 /**
  * The S3 "what's failing right now" feed (`GET /api/workflows/failing`): failing then

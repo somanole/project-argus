@@ -26,8 +26,9 @@ const URL_SECRET = 'https://apiuser:P4ssw0rdLeak@api.vendor.example/v1?api_key=s
 
 function facts(over: Partial<WorkflowFacts>): WorkflowFacts {
   return {
-    schemaVersion: 2, analyzedAt: ISO, nodeCount: 2, nodeTypes: [], triggers: [], triggerCountDetected: 0,
+    schemaVersion: 3, analyzedAt: ISO, nodeCount: 2, nodeTypes: [], triggers: [], triggerCountDetected: 0,
     triggerCountReported: null, systems: [], credentialTypes: [], dataTableRefs: [], mcpExposed: false,
+    canMaskFailures: { flagged: false, reasons: [], noErrorWorkflow: true },
     directDeps: [], webhookEndpoints: [], httpCallsites: [], credentialRefs: [],
     callerPolicy: { policy: null, callerIds: [] }, coverage: { understood: true, unknownNodeTypes: [], unresolvedRefs: 0, reasons: [] },
     ...over,

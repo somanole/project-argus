@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-07-07T13:40:50.554Z",
+  "capturedAt": "2026-07-11T23:14:06.490Z",
   "n8nBaseUrl": "http://localhost:5678",
   "n8nVersion": "2.29.0",
   "results": [
@@ -91,7 +91,7 @@
       "id": "19",
       "description": "project members shape captured",
       "pass": true,
-      "detail": "GET /api/v1/projects/{id}/users → 200, 2 member(s), roles [project:admin, project:editor], fields present"
+      "detail": "GET /api/v1/projects/{id}/users → 200, 2 member(s), roles [project:editor, project:admin], fields present"
     },
     {
       "id": "12",
@@ -134,6 +134,12 @@
       "description": "redacted execution detail captured",
       "pass": true,
       "detail": "GET /api/v1/executions/{id}?includeData → 200, failing node \"HTTP Request\", error NodeApiError"
+    },
+    {
+      "id": "23",
+      "description": "green-but-swallowing shape characterized (redacted vs un-redacted)",
+      "pass": true,
+      "detail": "un-redacted detectable via \"http-continue-regular\"; redacted surfaces nothing"
     }
   ]
 }

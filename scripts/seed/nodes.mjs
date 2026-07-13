@@ -59,6 +59,15 @@ export const code = (name, jsCode) => ({
   type: 'n8n-nodes-base.code', typeVersion: 2, parameters: { language: 'javaScript', jsCode }, name,
 });
 
+// A Code node whose error is SWALLOWED (onError:'continueRegularOutput'): when its
+// script throws, the node's executionStatus is 'error' but the run continues on the
+// normal output and finishes 'success'. This is the "green but swallowing" mechanism
+// the S6.3 silent-failure detector must catch (paired with ALWAYS_FAIL below).
+export const swallowingCode = (name, jsCode) => ({
+  type: 'n8n-nodes-base.code', typeVersion: 2, parameters: { language: 'javaScript', jsCode }, name,
+  onError: 'continueRegularOutput',
+});
+
 // executeWorkflow — standard resource-locator ("list" mode) reference to a real id.
 export const executeWorkflow = (name, workflowId, cachedResultName = '') => ({
   type: 'n8n-nodes-base.executeWorkflow', typeVersion: 1.2,
@@ -131,6 +140,11 @@ export function buildWorkflow(name, nodes, edges = [], opts = {}) {
     position: [260 * (i % 6), 180 * Math.floor(i / 6)],
     parameters: n.parameters ?? {},
     ...(n.credentials ? { credentials: n.credentials } : {}),
+    // Error-handling config must survive assembly (the analyzer's can-mask-failures
+    // signal + the seeded green-but-swallowing case depend on these reaching n8n).
+    ...(n.onError ? { onError: n.onError } : {}),
+    ...(n.continueOnFail ? { continueOnFail: n.continueOnFail } : {}),
+    ...(n.alwaysOutputData ? { alwaysOutputData: n.alwaysOutputData } : {}),
   }));
   const connections = {};
   for (const { from, to, type = 'main' } of edges) {

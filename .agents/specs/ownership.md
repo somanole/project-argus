@@ -195,9 +195,13 @@ with its key text/state, and a `pnpm verify` row.
       with clickable rows and clearer titles.)*
 - [ ] The **summary strip** (`ownership-summary`) reads the posture — confirmed
       (`ownership-confirmed`) of total — and doubles as the primary filter: clickable tiles
-      `ownership-filter-needs-owner` (default) · `-unowned` · `-critical-at-risk` · `-no-backup`.
-      Served by `GET /api/ownership/register` (server-composed + paginated); `summary` is the
-      posture over ALL workflows, `total` is the filtered page count.
+      `ownership-filter-needs-owner` (default) · `-unowned` · `-critical-at-risk` ·
+      `-no-backup` (labeled "No backup owner"). Served by `GET /api/ownership/register`
+      (server-composed + paginated); `summary` is the posture over ALL workflows, `total` is
+      the filtered page count.
+- [ ] The header carries a **poll-fresh/honest-stale indicator** (`ownership-freshness`) +
+      **synced-N-ago** + Refresh — consistent with Explore/Health; the register auto-polls and
+      a not-syncing connection flips the pill to danger, never a green poll (rule 5).
 - [ ] The **register table** (`ownership-register`) shows, per workflow: name + criticality,
       the resolved **owner** (`owner-badge`: confirmed / advisory-inferred / unowned), the
       **backup** owner, the accountability **risk** chips (no-confirmed-owner / SPOF /

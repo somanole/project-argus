@@ -1,6 +1,6 @@
 {
   "$probe": "PATCH /rest/e2e/feature accepts a license-flag patch (E2E unlock)",
-  "capturedAt": "2026-07-07T13:40:49.778Z",
+  "capturedAt": "2026-07-11T23:14:05.304Z",
   "n8nVersion": "2.29.0",
   "request": {
     "method": "PATCH",

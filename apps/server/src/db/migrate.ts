@@ -296,6 +296,26 @@ const MIGRATIONS: ((db: Database.Database) => void)[] = [
       ALTER TABLE workflow_enrichments ADD COLUMN base_url TEXT;
     `);
   },
+
+  // v10 — S6.3 silent-failure detection ("green but broken").
+  //  - workflows.can_mask_failures: the denormalized Layer-1 config-risk flag (from facts),
+  //    so the badge/filter/Layer-2 scope query read it without a facts_json parse.
+  //  - workflow_health.silent_*: the Layer-2 dynamic signal, poll-computed for the
+  //    can-mask-failures workflows only (an un-redacted, allowlisted, never-persisted-payload
+  //    read — contracts/n8n-23). All nullable: NULL means "not inspected" (not flagged / not
+  //    fetched), never "verified clean" (rule 5). Disposable cache, rebuilt each sync.
+  (db) => {
+    db.exec(`
+      ALTER TABLE workflows ADD COLUMN can_mask_failures INTEGER;
+
+      ALTER TABLE workflow_health ADD COLUMN silent_runs_affected  INTEGER;
+      ALTER TABLE workflow_health ADD COLUMN silent_runs_inspected INTEGER;
+      ALTER TABLE workflow_health ADD COLUMN silent_last_node      TEXT;
+      ALTER TABLE workflow_health ADD COLUMN silent_last_error_type TEXT;
+      ALTER TABLE workflow_health ADD COLUMN silent_last_error_code TEXT;
+      ALTER TABLE workflow_health ADD COLUMN silent_last_seen_at   TEXT;
+    `);
+  },
 ];
 
 export function migrate(db: Database.Database): void {

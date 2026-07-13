@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useEstateHealthStore, type HealthView } from '../stores/estate-health';
 import { useConnectionsStore } from '../stores/connections';
@@ -15,6 +16,11 @@ import { usePaged } from '../lib/paginate';
 
 const store = useEstateHealthStore();
 const connections = useConnectionsStore();
+const route = useRoute();
+
+// Deep-links (e.g. the Overview "Silently failing" tile) carry ?view=… — the tile whose
+// list to show on arrival. Validated against the known views; anything else is ignored.
+const VALID_VIEWS: HealthView[] = ['failing', 'degraded', 'healthy', 'idle', 'unknown', 'silentlyFailing', 'canMask'];
 const { data, state, error, lastUpdated, windowDays, unavailableInstances, view, rows } = storeToRefs(store);
 
 const now = ref(Date.now());
@@ -35,7 +41,7 @@ const syncFailureTitle = computed(() =>
 // on-demand recent runs / redacted failure) — the debugging surface.
 const selected = ref<WorkflowListItem | null>(null);
 
-const summary = computed(() => data.value?.summary ?? { failing: 0, degraded: 0, healthy: 0, idle: 0, unknown: 0 });
+const summary = computed(() => data.value?.summary ?? { failing: 0, degraded: 0, healthy: 0, idle: 0, unknown: 0, silentlyFailing: 0, canMask: 0 });
 
 // The summary tiles double as the primary filter (same pattern as the Ownership
 // register): each tile switches the working set to that health state. Healthy / idle
@@ -47,15 +53,45 @@ const tiles = computed<Tile[]>(() =>
   [
     { view: 'failing', label: 'failing', tone: 'danger', testid: 'health-tile-failing', show: true },
     { view: 'degraded', label: 'degraded', tone: 'warn', testid: 'health-tile-degraded', show: true },
+    // Silently failing: green runs that swallowed a node error — always shown so the estate
+    // can see it went from 0 → N (its whole point is that you'd otherwise never notice).
+    { view: 'silentlyFailing', label: 'silently failing', tone: 'warn', testid: 'health-tile-silent', show: true },
     { view: 'healthy', label: 'healthy', tone: 'ok', testid: 'health-tile-healthy', show: true },
     { view: 'idle', label: 'idle', tone: 'muted', testid: 'health-tile-idle', show: true },
     { view: 'unknown', label: 'unavailable', tone: 'muted', testid: 'health-tile-unknown', show: summary.value.unknown > 0 },
+    // Config-risk, not a health state — kept last + muted so it reads as secondary to the
+    // live health tiles (a workflow that CAN mask a failure, whether or not it has).
+    { view: 'canMask', label: 'can mask failures', tone: 'muted', testid: 'health-tile-can-mask', show: true },
   ].filter((t) => t.show) as Tile[],
 );
 
-// The list is the active tile's set, paginated client-side (any one state can be large).
+// Scope + search — consistent with the Ownership register. The active tile picks the
+// health-state SET (estate-wide, like Ownership's summary); instance + name search then
+// narrow the LIST client-side (the feed already holds each set in full). Tiles stay
+// estate-wide, so their counts don't jump around as you scope — matching Ownership.
+const instanceFilter = ref<string>('all');
+const instances = computed(() => connections.connections.map((c) => ({ id: c.id, label: c.label })));
+const qInput = ref('');
+const q = ref('');
+let qTimer: ReturnType<typeof setTimeout> | undefined;
+watch(qInput, (v) => {
+  if (qTimer) clearTimeout(qTimer);
+  qTimer = setTimeout(() => (q.value = v), 250);
+});
+const filteredRows = computed<WorkflowListItem[]>(() => {
+  const needle = q.value.trim().toLowerCase();
+  return rows.value.filter(
+    (w) =>
+      (instanceFilter.value === 'all' || w.instanceId === instanceFilter.value) &&
+      (!needle || w.name.toLowerCase().includes(needle)),
+  );
+});
+
+// The list is the active tile's set (scoped + searched), paginated client-side.
 const PAGE_SIZE = 50;
-const paged = usePaged(rows, PAGE_SIZE);
+const paged = usePaged(filteredRows, PAGE_SIZE);
+// Any scope/search/tile change lands on page 1 of the new set.
+watch([instanceFilter, q, view], () => paged.go(0));
 
 // Empty is reassuring for the problem views ("Nothing failing"), neutral otherwise.
 const isProblemView = computed(() => view.value === 'failing' || view.value === 'degraded');
@@ -70,6 +106,8 @@ async function refreshAll(): Promise<void> {
 }
 
 onMounted(async () => {
+  const qv = route?.query?.view;
+  if (typeof qv === 'string' && (VALID_VIEWS as string[]).includes(qv)) store.setView(qv as HealthView);
   await refreshAll();
   poll = setInterval(() => void refreshAll(), 15_000);
   clock = setInterval(() => (now.value = Date.now()), 1_000);
@@ -128,17 +166,32 @@ onUnmounted(() => {
       </button>
     </div>
 
+    <!-- ── Scope + search ─── narrows the active tile's list (tiles stay estate-wide,
+         matching the Ownership register). Consistent instance + name filtering. ── -->
+    <div class="bar">
+      <div class="seg seg--sm" role="group" aria-label="Scope by instance" data-testid="health-scope">
+        <button :class="{ on: instanceFilter === 'all' }" @click="instanceFilter = 'all'">All estate</button>
+        <button v-for="i in instances" :key="i.id" :class="{ on: instanceFilter === i.id }" @click="instanceFilter = i.id">
+          <span class="dot" :style="{ background: instanceColor(i.id) }" />{{ i.label }}
+        </button>
+      </div>
+      <input v-model="qInput" class="input search" type="search" placeholder="Search by name…" aria-label="Search workflows by name" data-testid="health-search">
+    </div>
+
     <p v-if="state === 'loading'" class="muted pad">Loading estate health…</p>
     <p v-else-if="state === 'error'" class="err pad" role="alert">Couldn’t load estate health — {{ error }}.</p>
 
-    <div v-else-if="rows.length === 0" class="card empty" data-testid="health-empty">
-      <p v-if="isProblemView">Nothing {{ view }} right now — {{ summary.healthy }} healthy, {{ summary.idle }} idle across the estate.</p>
+    <div v-else-if="filteredRows.length === 0" class="card empty" data-testid="health-empty">
+      <p v-if="rows.length > 0">No workflows match this scope or search.</p>
+      <p v-else-if="view === 'silentlyFailing'">No silently-failing workflows observed — no green run swallowed a node error among those inspected. (Absence means “not observed”, not “verified clean”.)</p>
+      <p v-else-if="view === 'canMask'">No workflows are configured to mask failures — none swallow a node error onto their normal output.</p>
+      <p v-else-if="isProblemView">Nothing {{ view }} right now — {{ summary.healthy }} healthy, {{ summary.idle }} idle across the estate.</p>
       <p v-else>No {{ view === 'unknown' ? 'unavailable' : view }} workflows in the last ~{{ windowDays }} days.</p>
     </div>
 
     <!-- One table, filtered to the active tile's health state, most-critical first. -->
     <template v-else>
-      <div class="table-wrap" data-testid="health-failing-list">
+      <div class="table-wrap" :data-testid="view === 'silentlyFailing' ? 'health-silent-list' : 'health-failing-list'">
         <table class="wf">
           <thead>
             <tr><th class="c-name">Workflow</th><th class="c-crit">Criticality</th><th class="c-owner">Owner</th><th class="c-inst">Instance</th><th class="c-health">Health</th><th class="c-rate">Failure rate</th><th class="c-last">Last run</th></tr>
@@ -197,6 +250,19 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 .stat--warn .n { color: var(--color--warning); }
 .stat--muted .n { color: var(--color--text--shade-1); opacity: 0.6; }
 
+/* Scope + search — same markup/styles as the Ownership register (consistency). */
+.bar { display: flex; gap: var(--spacing--2xs); flex-wrap: wrap; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--border-color); border-radius: var(--radius--md); overflow: hidden; flex-wrap: wrap; }
+.seg button {
+  appearance: none; border: 0; border-right: 1px solid var(--border-color); background: var(--background--surface);
+  color: var(--color--text--shade-1); font: inherit; font-size: var(--font-size--2xs); padding: var(--spacing--4xs) var(--spacing--2xs);
+  cursor: pointer; display: inline-flex; align-items: center; gap: var(--spacing--4xs); white-space: nowrap;
+}
+.seg button:last-child { border-right: 0; }
+.seg button:hover:not(.on) { background: var(--background--subtle); }
+.seg button.on { background: var(--background--brand); color: var(--color--neutral-white); }
+.search { max-width: 18rem; flex: 1 1 12rem; }
+
 .table-wrap { border: 1px solid var(--border-color--subtle); border-radius: var(--radius--lg); overflow-x: auto; }
 .wf { width: 100%; border-collapse: collapse; font-size: var(--font-size--sm); }
 .wf thead th {
@@ -223,6 +289,7 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 
 /* Mobile (≤720px): tables reflow to stacked cards — never a horizontal page scroll. */
 @media (max-width: 720px) {
+  .search { max-width: none; flex: 1 1 100%; }
   .table-wrap { border: 0; overflow: visible; }
   .wf, .wf tbody, .wf tr, .wf td { display: block; width: 100%; }
   .wf thead { display: none; }

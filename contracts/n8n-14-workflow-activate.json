@@ -1,18 +1,18 @@
 {
   "$probe": "POST /api/v1/workflows/{id}/activate — activate a workflow (registers its production webhook)",
-  "capturedAt": "2026-07-07T13:40:49.960Z",
+  "capturedAt": "2026-07-11T23:14:05.524Z",
   "n8nVersion": "2.29.0",
   "request": {
     "method": "POST",
-    "path": "/api/v1/workflows/VggEtGtulRsdwksX/activate"
+    "path": "/api/v1/workflows/RVK4rgw6LBm0B70Q/activate"
   },
   "response": {
     "status": 200,
     "ok": true,
     "body": {
-      "updatedAt": "2026-07-07T13:40:49.941Z",
-      "createdAt": "2026-07-07T13:40:49.941Z",
-      "id": "VggEtGtulRsdwksX",
+      "updatedAt": "2026-07-11T23:14:05.501Z",
+      "createdAt": "2026-07-11T23:14:05.501Z",
+      "id": "RVK4rgw6LBm0B70Q",
       "name": "Argus Probe — Webhook WF",
       "description": null,
       "active": true,
@@ -32,7 +32,7 @@
             0,
             0
           ],
-          "webhookId": "46eb5555-8c6a-4e28-b09e-6f98ce77f53f"
+          "webhookId": "c1b88ba0-d925-4aa6-bfd6-be32284ec38a"
         },
         {
           "parameters": {},
@@ -64,16 +64,16 @@
       "meta": null,
       "nodeGroups": [],
       "pinData": null,
-      "versionId": "32a25127-d50b-4e05-acb7-8f7ad000885c",
-      "activeVersionId": "32a25127-d50b-4e05-acb7-8f7ad000885c",
+      "versionId": "d68a4cd9-7a8d-4cf0-b7e0-acb9e7452d28",
+      "activeVersionId": "d68a4cd9-7a8d-4cf0-b7e0-acb9e7452d28",
       "versionCounter": 1,
       "triggerCount": 1,
       "sourceWorkflowId": null,
       "activeVersion": {
-        "updatedAt": "2026-07-07T13:40:49.942Z",
-        "createdAt": "2026-07-07T13:40:49.942Z",
-        "versionId": "32a25127-d50b-4e05-acb7-8f7ad000885c",
-        "workflowId": "VggEtGtulRsdwksX",
+        "updatedAt": "2026-07-11T23:14:05.502Z",
+        "createdAt": "2026-07-11T23:14:05.502Z",
+        "versionId": "d68a4cd9-7a8d-4cf0-b7e0-acb9e7452d28",
+        "workflowId": "RVK4rgw6LBm0B70Q",
         "nodes": [
           {
             "parameters": {
@@ -89,7 +89,7 @@
               0,
               0
             ],
-            "webhookId": "46eb5555-8c6a-4e28-b09e-6f98ce77f53f"
+            "webhookId": "c1b88ba0-d925-4aa6-bfd6-be32284ec38a"
           },
           {
             "parameters": {},
@@ -123,12 +123,12 @@
         "autosaved": false,
         "workflowPublishHistory": [
           {
-            "createdAt": "2026-07-07T13:40:49.958Z",
+            "createdAt": "2026-07-11T23:14:05.521Z",
             "id": 1,
-            "workflowId": "VggEtGtulRsdwksX",
-            "versionId": "32a25127-d50b-4e05-acb7-8f7ad000885c",
+            "workflowId": "RVK4rgw6LBm0B70Q",
+            "versionId": "d68a4cd9-7a8d-4cf0-b7e0-acb9e7452d28",
             "event": "activated",
-            "userId": "8582558e-09a3-4e27-98fd-8682fdbe3f2a"
+            "userId": "a65109d1-e6f2-480c-a481-b87cbb21d930"
           }
         ]
       }

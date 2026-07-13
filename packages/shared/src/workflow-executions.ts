@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { silentFailuresSchema } from './workflow-health.js';
 
 /**
  * The S3 on-demand execution debug contract (server ↔ web). Fetched only when a user
@@ -39,6 +40,11 @@ export const workflowExecutionsResponseSchema = z.object({
   runs: z.array(workflowRunSchema),
   /** Redacted summary of the most recent FAILED run, or null when none recently. */
   failure: executionFailureSchema.nullable(),
+  /**
+   * S6.3 Layer 2 — silently-failing signal computed LIVE from the fetched success runs
+   * (un-redacted, allowlisted, never persisted). Null when none were inspected or none swallowed.
+   */
+  silentFailures: silentFailuresSchema.nullable(),
   /** True when executions couldn't be read (missing scope / error) — honest, not empty. */
   unavailable: z.boolean(),
   /** Reason when unavailable. */

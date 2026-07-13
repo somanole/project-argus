@@ -17,7 +17,7 @@ export interface OverviewTileData {
   testid: string;
   label: string;
   count: number;
-  tone: TileTone; // the colour when the count is a problem; a clean zero always reads muted
+  tone: TileTone; // the colour when the count is a problem (warn/danger); a clean zero reads green
   context: string; // the "X of Y" line — shown IN FULL, never cut
   info: string; // the longer "why" / caveat — lives in the ⓘ tooltip
   to: RouteLocationRaw;
@@ -25,7 +25,13 @@ export interface OverviewTileData {
 }
 
 const props = defineProps<{ tile: OverviewTileData }>();
-const tone = computed<TileTone>(() => (props.tile.count > 0 ? props.tile.tone : 'muted'));
+// A clean ZERO of a problem metric (warn/danger) is a positive outcome → read it GREEN,
+// not grey. A zero of a non-problem tone (ok/muted) stays muted (0 of a good thing isn't
+// itself good). Every Overview tile today is a problem metric, so 0 → green across the board.
+const tone = computed<TileTone>(() => {
+  if (props.tile.count > 0) return props.tile.tone;
+  return props.tile.tone === 'danger' || props.tile.tone === 'warn' ? 'ok' : 'muted';
+});
 </script>
 
 <template>

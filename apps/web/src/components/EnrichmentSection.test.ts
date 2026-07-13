@@ -47,7 +47,7 @@ describe('EnrichmentSection (rule 11)', () => {
     const workflow = {
       instanceId: 'a', instanceLabel: 'prod', id: 'w1', name: 'Alpha', active: true, isArchived: false,
       project: 'Revenue Ops', updatedAt: '2026-07-05T00:00:00.000Z', systems: [], triggers: [],
-      mcpExposed: false, nodeCount: 3, understood: true, brokenRefCount: 0,
+      mcpExposed: false, nodeCount: 3, understood: true, brokenRefCount: 0, canMaskFailures: false,
       enrichment: enr({ criticality: 'critical', corrected: true }), health: null, owner: null,
     };
     const updated = { workflow, facts: null, deepLink: '' };

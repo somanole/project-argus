@@ -36,6 +36,8 @@ export const workflowListItemSchema = z.object({
   understood: z.boolean().nullable(),
   /** Count of certain-broken outbound references. */
   brokenRefCount: z.number().int(),
+  /** S6.3 Layer 1 — advisory: a node is configured so a failure could be swallowed (from facts). */
+  canMaskFailures: z.boolean(),
   // S2 sense-making layer (null when enrichment is off / not yet run for this workflow):
   /** LLM summary + category + criticality-with-reason + risk flags, with honest status. */
   enrichment: workflowEnrichmentSchema.nullable(),
@@ -97,12 +99,20 @@ export const healthEstateResponseSchema = z.object({
   healthy: z.array(workflowListItemSchema),
   idle: z.array(workflowListItemSchema),
   unknown: z.array(workflowListItemSchema),
+  /** S6.3 — workflows observed SILENTLY failing (orthogonal to status: they read green). */
+  silentlyFailing: z.array(workflowListItemSchema),
+  /** S6.3 — workflows CONFIGURED so a failure could be masked (config-risk, orthogonal to status). */
+  canMask: z.array(workflowListItemSchema),
   summary: z.object({
     failing: z.number().int().min(0),
     degraded: z.number().int().min(0),
     healthy: z.number().int().min(0),
     idle: z.number().int().min(0),
     unknown: z.number().int().min(0),
+    /** Count of workflows with an observed silent failure (may overlap healthy/idle). */
+    silentlyFailing: z.number().int().min(0),
+    /** Count of workflows configured to mask failures (may overlap any status). */
+    canMask: z.number().int().min(0),
   }),
   windows: z.array(
     z.object({

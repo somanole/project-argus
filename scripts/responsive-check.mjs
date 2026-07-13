@@ -33,19 +33,22 @@ const enrichment = {
 };
 const mkHealth = (status, over = {}) => ({
   status, failureRate: null, runsInWindow: 0, failuresInWindow: 0, lastRunAt: null, lastStatus: null,
-  avgDurationMs: null, windowHours: 336, computedAt: '2026-07-06T00:00:00.000Z', unavailableReason: null, ...over,
+  avgDurationMs: null, windowHours: 336, computedAt: '2026-07-06T00:00:00.000Z', unavailableReason: null, silentFailures: null, ...over,
 });
 const inferredOwner = { status: 'inferred', owner: { email: 'sam@acme.example', name: 'Sam Rivers' }, backupOwner: null, reason: null, source: 'project-member', memberRole: 'project:admin', assignedBy: null, assignedAt: null };
 const item = (id, name, systems, triggers, over = {}) => ({
   instanceId: 'prod', instanceLabel: 'prod', id, name, active: true, isArchived: false,
   project: 'Revenue Ops', updatedAt: '2026-07-05T00:00:00.000Z',
-  systems, triggers, mcpExposed: false, nodeCount: 4, understood: true, brokenRefCount: 0, enrichment: null,
+  systems, triggers, mcpExposed: false, nodeCount: 4, understood: true, brokenRefCount: 0, canMaskFailures: false, enrichment: null,
   health: mkHealth('healthy', { failureRate: 0, runsInWindow: 5 }), owner: inferredOwner, ...over,
 });
 const WORKFLOWS = [
   item('w1', 'Salesforce CRM Sync — nightly enrichment', ['Salesforce', 'Postgres'], ['n8n-nodes-base.scheduleTrigger'], { mcpExposed: true, enrichment, health: mkHealth('failing', { failureRate: 1, runsInWindow: 4, failuresInWindow: 4, lastRunAt: '2026-07-05T00:00:00.000Z', lastStatus: 'error' }) }),
   item('w2', 'Refund Processor', ['Stripe', 'Slack'], ['n8n-nodes-base.webhook'], { health: mkHealth('degraded', { failureRate: 0.5, runsInWindow: 6, failuresInWindow: 3, lastRunAt: '2026-07-05T00:00:00.000Z', lastStatus: 'error' }) }),
   item('w3', 'Lead Scorer', ['OpenAI'], ['n8n-nodes-base.manualTrigger'], { brokenRefCount: 1, understood: false, health: mkHealth('idle') }),
+  // S6.3 — a green-but-swallowing workflow (renders the silent badge overlay + tile + list).
+  item('w4', 'Inventory Sync', ['HTTP'], ['n8n-nodes-base.webhook'], { canMaskFailures: true,
+    health: mkHealth('healthy', { failureRate: 0, runsInWindow: 4, silentFailures: { runsAffected: 4, runsInspected: 4, lastNode: 'Push to Warehouse', lastErrorType: 'Error', lastErrorCode: 'ECONNREFUSED', lastSeenAt: '2026-07-05T00:00:00.000Z' } }) }),
 ];
 const failingBody = {
   failing: [WORKFLOWS[0]],
@@ -53,7 +56,9 @@ const failingBody = {
   healthy: [],
   idle: [WORKFLOWS[2]],
   unknown: [],
-  summary: { failing: 1, degraded: 1, healthy: 1, idle: 1, unknown: 0 },
+  silentlyFailing: [WORKFLOWS[3]],
+  canMask: [WORKFLOWS[3]],
+  summary: { failing: 1, degraded: 1, healthy: 1, idle: 1, unknown: 0, silentlyFailing: 1, canMask: 1 },
   windows: [{ instanceId: 'prod', instanceLabel: 'prod', windowHours: 336, available: true }],
   generatedAt: '2026-07-05T00:00:00.000Z',
 };
@@ -113,6 +118,7 @@ const overviewBody = {
   personalSpaceCritical: gapsBody.personalSpaceCritical,
   noBackupOwner: gapsBody.noBackupOwner,
   failingWithOwner: { count: failingBody.failing.length, workflows: failingBody.failing },
+  silentlyFailing: { count: failingBody.silentlyFailing.length, workflows: failingBody.silentlyFailing },
   hygiene: {
     brokenRefs: { count: 1, workflows: [WORKFLOWS[2]] },
     staleEnrichment: { count: 0, workflows: [] },
@@ -140,13 +146,15 @@ const impactBody = { mode: 'failure', focusKind: 'workflow', focusInstanceId: 'p
 const detailBody = {
   workflow: WORKFLOWS[0],
   facts: {
-    schemaVersion: 1, analyzedAt: '2026-07-05T00:00:00.000Z', nodeCount: 4,
+    schemaVersion: 3, analyzedAt: '2026-07-05T00:00:00.000Z', nodeCount: 4,
     nodeTypes: [{ type: 'n8n-nodes-base.salesforce', count: 1, category: 'action', known: true }],
     triggers: [{ type: 'n8n-nodes-base.scheduleTrigger', display: 'Schedule Trigger', source: 'manifest' }],
     triggerCountDetected: 1, triggerCountReported: 1,
     systems: [{ system: 'Salesforce', via: 'credential', credentialType: 'salesforceOAuth2Api', nodeType: null, resolved: true, raw: 'salesforceOAuth2Api' }],
     credentialTypes: ['salesforceOAuth2Api'], dataTableRefs: [], mcpExposed: true,
+    canMaskFailures: { flagged: true, reasons: [{ nodeName: 'Push to Warehouse', mechanism: 'continue-regular-output' }], noErrorWorkflow: true },
     directDeps: [{ kind: 'subWorkflow', nodeId: 'n1', nodeName: 'Call Enrich', mode: 'list', rawValue: 'w2', cachedName: 'Enrich', resolution: 'resolved', resolvedId: 'w2', resolvedName: 'Refund Processor' }],
+    webhookEndpoints: [], httpCallsites: [], credentialRefs: [],
     callerPolicy: { policy: null, callerIds: [] },
     coverage: { understood: true, unknownNodeTypes: [], unresolvedRefs: 0, reasons: [] },
   },
@@ -158,6 +166,7 @@ const executionsBody = {
     { executionId: '8', status: 'success', startedAt: '2026-07-04T00:00:00.000Z', stoppedAt: '2026-07-04T00:00:02.000Z', mode: 'webhook', durationMs: 2000, deepLink: 'http://localhost:5678/workflow/w1/executions/8' },
   ],
   failure: { executionId: '9', failedNode: 'Fetch Stripe Ledger', errorType: 'NodeApiError', errorCode: 'ECONNREFUSED', deepLink: 'http://localhost:5678/workflow/w1/executions/9' },
+  silentFailures: null,
   unavailable: false, unavailableReason: null, generatedAt: '2026-07-05T00:00:00.000Z',
 };
 

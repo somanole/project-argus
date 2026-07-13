@@ -14,6 +14,33 @@ import { z } from 'zod';
 export const workflowHealthStatusSchema = z.enum(['failing', 'degraded', 'healthy', 'idle', 'unknown']);
 export type WorkflowHealthStatus = z.infer<typeof workflowHealthStatusSchema>;
 
+/**
+ * S6.3 Layer 2 — the DYNAMIC "silently failing" signal: runs n8n marked `success` in which a
+ * node actually errored-and-continued (contracts/n8n-23). It is an ORTHOGONAL dimension, NOT a
+ * status (a silent-failer's runs read `success`, so its status is `healthy`/`idle`). Computed by
+ * fetching un-redacted execution detail for the can-mask-failures workflows and reading an
+ * ALLOWLIST of node name + error type/code ONLY — never the message/stack/payload. Phrased
+ * factually ("node X errored but the run was marked success, N times"), never a correctness claim.
+ *
+ * `null` means NOT inspected (the workflow isn't flagged can-mask, or its runs weren't fetched) —
+ * honest: absence is "not observed silently failing", never "verified clean" (rule 5).
+ */
+export const silentFailuresSchema = z.object({
+  /** Success runs in the window that had ≥1 swallowed node error (of those inspected). */
+  runsAffected: z.number().int().min(0),
+  /** How many success runs were actually fetched + inspected — the bounded denominator. */
+  runsInspected: z.number().int().min(0),
+  /** The offending node from the most recent affected run (allowlisted name), or null. */
+  lastNode: z.string().nullable(),
+  /** Redacted error class of that node, e.g. "NodeApiError" — never the message. */
+  lastErrorType: z.string().nullable(),
+  /** Redacted error code, e.g. "ECONNREFUSED" — never the message. */
+  lastErrorCode: z.string().nullable(),
+  /** Start time of the most recent affected run, or null. */
+  lastSeenAt: z.string().datetime().nullable(),
+});
+export type SilentFailures = z.infer<typeof silentFailuresSchema>;
+
 export const workflowHealthSchema = z.object({
   status: workflowHealthStatusSchema,
   /** failures / runs within the window; null when 0 runs (idle) or unknown. */
@@ -32,5 +59,7 @@ export const workflowHealthSchema = z.object({
   computedAt: z.string().datetime().nullable(),
   /** For `unknown`: why executions couldn't be read (e.g. missing execution:list). */
   unavailableReason: z.string().nullable(),
+  /** S6.3 Layer 2 — the silently-failing dimension; null when not inspected (rule 5). */
+  silentFailures: silentFailuresSchema.nullable(),
 });
 export type WorkflowHealth = z.infer<typeof workflowHealthSchema>;

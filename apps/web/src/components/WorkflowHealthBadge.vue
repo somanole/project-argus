@@ -15,6 +15,18 @@ const pct = computed(() =>
   props.health?.failureRate != null ? Math.round(props.health.failureRate * 100) : null,
 );
 
+/** S6.3 Layer 2 — an ADDITIVE overlay (never replaces the status pill): the run was green
+ * but a node errored-and-continued. Factual, node-named; absent ≠ "verified clean". */
+const silent = computed(() => {
+  const sf = props.health?.silentFailures;
+  if (!sf || sf.runsAffected <= 0) return null;
+  const cls = [sf.lastErrorType, sf.lastErrorCode].filter(Boolean).join(' · ');
+  const node = sf.lastNode ?? 'a node';
+  return {
+    title: `${node} errored but the run was marked success, ${sf.runsAffected} of ${sf.runsInspected} inspected run(s)${cls ? ` — ${cls}` : ''}`,
+  };
+});
+
 const view = computed(() => {
   const h = props.health;
   if (!h) return { cls: 'badge--muted', dot: 'dot--muted', label: 'checking…', title: 'health not computed yet' };
@@ -39,8 +51,25 @@ const view = computed(() => {
 </script>
 
 <template>
-  <span class="badge" :class="view.cls" data-testid="health-badge" :data-status="health?.status ?? 'pending'" :title="view.title">
-    <span class="dot" :class="view.dot" />
-    {{ view.label }}
+  <span class="hb">
+    <span class="badge" :class="view.cls" data-testid="health-badge" :data-status="health?.status ?? 'pending'" :title="view.title">
+      <span class="dot" :class="view.dot" />
+      {{ view.label }}
+    </span>
+    <span v-if="silent" class="badge badge--warn silent" data-testid="health-silent-badge" :title="silent.title">
+      ⚠ silently failing
+    </span>
   </span>
 </template>
+
+<style scoped>
+.hb {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing--4xs);
+}
+.silent {
+  font-size: var(--font-size--3xs);
+}
+</style>

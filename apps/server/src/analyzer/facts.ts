@@ -11,8 +11,10 @@ import type {
   HttpCallsite,
   CredentialRef,
   CoverageGap,
+  CanMaskFailures,
 } from '@argus/shared';
 import type { Manifest } from './manifest.js';
+import { detectCanMaskFailures } from './mask.js';
 import { classifyTrigger } from './triggers.js';
 import { systemsForNode, dedupeSystems } from './systems.js';
 import { extractDirectRefs, parseWorkflowId, type RawRef } from './refs.js';
@@ -20,7 +22,7 @@ import { resolveRefs } from './resolve.js';
 import { webhookEndpointsForNode, httpCallsitesForNode, credentialRefsForNode } from './endpoints.js';
 
 /** The fact-shape version; bump when WorkflowFacts changes to force recompute. */
-export const FACTS_SCHEMA_VERSION = 2 as const;
+export const FACTS_SCHEMA_VERSION = 3 as const;
 
 const DATA_TABLE_NODE = 'n8n-nodes-base.dataTable';
 
@@ -39,6 +41,7 @@ export interface Pass1Facts {
   credentialTypes: string[];
   dataTableRefs: DataTableRef[];
   mcpExposed: boolean;
+  canMaskFailures: CanMaskFailures;
   callerPolicy: CallerPolicy;
   rawRefs: RawRef[];
   webhookEndpoints: WebhookEndpoint[];
@@ -132,6 +135,7 @@ export function analyzeWorkflow(wf: N8nWorkflowListItem, manifest: Manifest): Pa
     credentialTypes: [...credentialTypeSet],
     dataTableRefs,
     mcpExposed: settings.availableInMCP === true,
+    canMaskFailures: detectCanMaskFailures(wf),
     callerPolicy,
     rawRefs: extractDirectRefs(wf),
     webhookEndpoints,
@@ -183,6 +187,7 @@ export function finalizeFacts(
     credentialTypes: p.credentialTypes,
     dataTableRefs: p.dataTableRefs,
     mcpExposed: p.mcpExposed,
+    canMaskFailures: p.canMaskFailures,
     directDeps,
     webhookEndpoints: p.webhookEndpoints,
     httpCallsites: p.httpCallsites,

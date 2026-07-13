@@ -12,10 +12,10 @@ import OverviewView from './OverviewView.vue';
 const listItem = (over: Record<string, unknown>) => ({
   instanceId: 'a', instanceLabel: 'prod', id: 'w1', name: 'Daily Stripe Reconciliation',
   active: true, isArchived: false, project: 'Revenue Ops', updatedAt: '2026-07-05T00:00:00.000Z',
-  systems: [], triggers: [], mcpExposed: false, nodeCount: 2, understood: true, brokenRefCount: 0,
+  systems: [], triggers: [], mcpExposed: false, nodeCount: 2, understood: true, brokenRefCount: 0, canMaskFailures: false,
   enrichment: { status: 'analyzed', provider: 'openai', model: 'm', enrichedAt: '2026-07-05T00:00:00.000Z', corrected: false,
     summary: 's', description: 'd', category: 'revenue-ops', criticality: 'critical', criticalityReason: 'money', riskFlags: [], suggestedOwnerRationale: null, businessContext: null },
-  health: { status: 'failing', failureRate: 0.75, runsInWindow: 4, failuresInWindow: 3, lastRunAt: '2026-07-05T00:00:00.000Z', lastStatus: 'error', avgDurationMs: 5, windowHours: 336, computedAt: '2026-07-05T00:00:00.000Z', unavailableReason: null },
+  health: { status: 'failing', failureRate: 0.75, runsInWindow: 4, failuresInWindow: 3, lastRunAt: '2026-07-05T00:00:00.000Z', lastStatus: 'error', avgDurationMs: 5, windowHours: 336, computedAt: '2026-07-05T00:00:00.000Z', unavailableReason: null, silentFailures: null },
   owner: { status: 'assigned', owner: { email: 'sam@corp.io', name: 'Sam Rivers' }, backupOwner: null, reason: null, source: 'assigned', memberRole: null, assignedBy: null, assignedAt: '2026-07-05T00:00:00.000Z' },
   ...over,
 });
@@ -56,10 +56,11 @@ const overviewBody = {
   ],
   noBackupOwner: [],
   failingWithOwner: { count: 1, workflows: [listItem({})] },
+  silentlyFailing: { count: 1, workflows: [listItem({ id: 's1', name: 'Inventory Sync', canMaskFailures: true })] },
   hygiene: {
     brokenRefs: { count: 1, workflows: [listItem({ id: 'b1', name: 'Broken Refs WF', brokenRefCount: 2 })] },
     staleEnrichment: { count: 0, workflows: [] },
-    activeNoExecutions: { count: 1, workflows: [listItem({ id: 'i1', name: 'Idle Active WF', health: { status: 'idle', failureRate: null, runsInWindow: 0, failuresInWindow: 0, lastRunAt: null, lastStatus: null, avgDurationMs: null, windowHours: 336, computedAt: '2026-07-05T00:00:00.000Z', unavailableReason: null } })] },
+    activeNoExecutions: { count: 1, workflows: [listItem({ id: 'i1', name: 'Idle Active WF', health: { status: 'idle', failureRate: null, runsInWindow: 0, failuresInWindow: 0, lastRunAt: null, lastStatus: null, avgDurationMs: null, windowHours: 336, computedAt: '2026-07-05T00:00:00.000Z', unavailableReason: null, silentFailures: null } })] },
   },
   exposure: {
     mcpExposed: 2, reachingSensitive: 1, reachingSensitiveUnowned: 1,
@@ -115,12 +116,19 @@ describe('Governance overview — UI-presence (rule 11)', () => {
     expect(w.findAll('[data-testid="pillar-value"]').length).toBe(4); // 4 of 5 pillars scored
 
     // Every headline tile renders (hygiene is now three peer tiles: broken/stale/idle-active).
-    for (const id of ['overview-unowned', 'overview-spof', 'overview-incidents', 'overview-broken', 'overview-stale', 'overview-idle-active', 'overview-exposure', 'overview-personal-space', 'overview-changelog', 'overview-export']) {
+    for (const id of ['overview-unowned', 'overview-spof', 'overview-failing', 'overview-silently-failing', 'overview-broken', 'overview-stale', 'overview-idle-active', 'overview-exposure', 'overview-personal-space', 'overview-changelog', 'overview-export']) {
       expect(tid(id).exists()).toBe(true);
     }
     // Unowned tile shows its criticality context + count.
     expect(tid('overview-unowned').text()).toContain('1 critical');
     expect(tid('overview-unowned').text()).toContain('2');
+
+    // Failing tile shows the raw FAILING count (health.summary.failing), no degraded, no ownership.
+    const failing = tid('overview-failing');
+    expect(failing.text()).toContain('Failing');
+    expect(failing.text()).toContain('1'); // fixture health.summary.failing = 1
+    expect(failing.text().toLowerCase()).not.toContain('owned');
+    expect(failing.text().toLowerCase()).not.toContain('degraded');
 
     // "View all →" points at the Activity view (not the old ownership page).
     const auditLink = tid('overview-changelog').findComponent(RouterLinkStub);
@@ -139,7 +147,8 @@ describe('Governance overview — UI-presence (rule 11)', () => {
     expect(linkTo('overview-spof')).toEqual({ path: '/estate/ownership', query: { view: 'spof' } });
     expect(linkTo('overview-personal-space')).toEqual({ path: '/estate/ownership', query: { view: 'personal-space' } });
     // Operations tiles deep-link to Health / filtered Estate / Graph.
-    expect(linkTo('overview-incidents')).toBe('/estate/health');
+    expect(linkTo('overview-failing')).toBe('/estate/health');
+    expect(linkTo('overview-silently-failing')).toEqual({ path: '/estate/health', query: { view: 'silentlyFailing' } });
     expect(linkTo('overview-broken')).toEqual({ path: '/estate', query: { broken: 'true' } });
     expect(linkTo('overview-stale')).toEqual({ path: '/estate', query: { stale: 'true' } });
     expect(linkTo('overview-idle-active')).toEqual({ path: '/estate', query: { health: 'idle', active: 'true' } });

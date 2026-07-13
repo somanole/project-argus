@@ -29,6 +29,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { createN8nClient, redactBody, FEATURE_FLAGS } from './lib/n8n-client.mjs';
+import { nodeId } from './seed/nodes.mjs';
 
 const BASE = process.env.N8N_BASE_URL ?? 'http://localhost:5678';
 const N8N_VERSION = '2.29.0';
@@ -522,6 +523,122 @@ async function main() {
     });
     record('18', 'redacted execution detail captured', r.status === 200,
       `GET /api/v1/executions/{id}?includeData → ${r.status}, failing node "${rd?.lastNodeExecuted ?? '?'}", error ${rd?.redactedError?.type ?? '—'}`);
+  }
+
+  // 23 — GREEN-BUT-SWALLOWING redacted detail (S6.3 silent-failure source). The case
+  // S3 never captured: overall status=success, but a node erred and was SWALLOWED.
+  // Rule 1: we must learn WHICH swallow mechanism leaves a signal that survives
+  // `redactExecutionData=true`, so Layer-2 detects only what n8n actually surfaces.
+  // We characterise three mechanisms and let the real data pick the seed + detector.
+  {
+    // Extract every allowlist-safe per-node error signal that survives redaction.
+    const readSwallowed = (rd, overallStatus) => {
+      const runData = rd?.runData ?? {};
+      const nodeStatuses = Object.entries(runData).map(([node, runs]) => {
+        const last = Array.isArray(runs) ? runs[runs.length - 1] : null;
+        // Error items may sit on the regular (main[0]) OR error (main[1]) output.
+        const items = (last?.data?.main ?? []).flat().filter(Boolean);
+        const itemErrors = items
+          .map((it) => it?.redaction?.error ?? (it?.error ? { type: it.error.name ?? it.error.type, code: it.error.httpCode ?? it.error.code ?? null } : null))
+          .filter(Boolean);
+        return {
+          node,
+          executionStatus: last?.executionStatus ?? null,
+          taskRedactedError: last?.redactedError ?? null, // node-level throw path
+          itemRedactionKeys: items[0]?.redaction ? Object.keys(items[0].redaction).sort() : null,
+          itemErrors, // item-level swallow path
+        };
+      });
+      const swallowed = nodeStatuses.filter(
+        (n) => n.executionStatus === 'error' || n.taskRedactedError || n.itemErrors.length > 0,
+      );
+      return { overallStatus, nodeStatuses, swallowed, detectable: overallStatus === 'success' && swallowed.length > 0 };
+    };
+
+    const runVariant = async (name, badNode) => {
+      const wf = {
+        name: `Argus Probe — ${name}`,
+        nodes: [
+          { parameters: {}, id: nodeId(`probe23:${name}:trigger`), name: 'When clicking Test', type: 'n8n-nodes-base.manualTrigger', typeVersion: 1, position: [0, 0] },
+          { ...badNode, id: nodeId(`probe23:${name}:bad`), name: 'Swallowing Step', position: [220, 0] },
+        ],
+        connections: { 'When clicking Test': { main: [[{ node: 'Swallowing Step', type: 'main', index: 0 }]] } },
+        settings: {}, projectId,
+      };
+      const created = await client.api('POST', '/workflows', wf);
+      const wfId = created.json?.id ?? created.json?.data?.id ?? '';
+      const run = wfId ? await client.http('POST', `/rest/workflows/${wfId}/run`, { body: { triggerToStartFrom: { name: 'When clicking Test' } } }) : { json: {} };
+      const execId = run.json?.data?.executionId ?? run.json?.executionId ?? '';
+      const waited = execId ? await waitForExecution(execId) : { status: 'no-execution' };
+      const r = execId ? await client.api('GET', `/executions/${execId}?includeData=true&redactExecutionData=true`) : { status: 0, json: {} };
+      const exec = r.json?.data ?? r.json ?? {};
+      const overallStatus = exec.status ?? r.json?.status ?? null;
+      const rd = exec.data?.resultData ?? exec.resultData ?? r.json?.data?.resultData ?? null;
+      // Also record the per-node output-index fan-out — the ONLY structural residue of a
+      // swallow that survives redaction (continueErrorOutput lands items on output idx 1).
+      const outputShape = Object.fromEntries(
+        Object.entries(rd?.runData ?? {}).map(([n, runs]) => [n, (runs[runs.length - 1]?.data?.main ?? []).map((o) => (o ?? []).length)]),
+      );
+      // UN-REDACTED read (owner-approved Layer-2 source): where does the error actually
+      // live, and what allowlist-safe class (name/code) can Argus extract server-side?
+      const ru = execId ? await client.api('GET', `/executions/${execId}?includeData=true&redactExecutionData=false`) : { status: 0, json: {} };
+      const execU = ru.json?.data ?? ru.json ?? {};
+      const rdU = execU.data?.resultData ?? execU.resultData ?? ru.json?.data?.resultData ?? null;
+      const unredacted = Object.entries(rdU?.runData ?? {}).map(([node, runs]) => {
+        const last = Array.isArray(runs) ? runs[runs.length - 1] : null;
+        const items = (last?.data?.main ?? []).flat().filter(Boolean);
+        const itemErr = items.map((it) => it?.error ?? (it?.json && it.json.error ? { name: 'in-json.error', message: typeof it.json.error === 'string' ? it.json.error : undefined } : null)).find(Boolean) ?? null;
+        return {
+          node,
+          executionStatus: last?.executionStatus ?? null,
+          taskErrorType: last?.error?.name ?? null,
+          itemErrorType: itemErr?.name ?? null,
+          itemErrorCode: itemErr?.httpCode ?? itemErr?.code ?? null,
+          hasJsonError: items.some((it) => it?.json && Object.prototype.hasOwnProperty.call(it.json, 'error')),
+        };
+      });
+      const swallowedU = unredacted.filter((n) => n.executionStatus === 'error' || n.taskErrorType || n.itemErrorType || n.hasJsonError);
+      return { name, execId, finishedStatus: waited.status, outputShape, unredacted, swallowedU, detectableUnredacted: overallStatus === 'success' && swallowedU.length > 0, ...readSwallowed(rd, overallStatus) };
+    };
+
+    const jsThrow = "throw new Error('probe: swallowed downstream failure');";
+    const variants = [
+      // A — HTTP node to a dead host, error swallowed onto the regular output.
+      await runVariant('http-continue-regular', { parameters: { url: 'http://127.0.0.1:1/never', options: {} }, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, onError: 'continueRegularOutput' }),
+      // B — HTTP node to a dead host, error routed to a (dead-end) error output.
+      await runVariant('http-continue-error-output', { parameters: { url: 'http://127.0.0.1:1/never', options: {} }, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, onError: 'continueErrorOutput' }),
+      // C — Code node continueRegularOutput (baseline: passes INPUT through — fully swallowed).
+      await runVariant('code-continue-regular', { parameters: { language: 'javaScript', jsCode: jsThrow }, type: 'n8n-nodes-base.code', typeVersion: 2, onError: 'continueRegularOutput' }),
+    ];
+    // Owner-approved Layer-2 source = UN-redacted fetch. Recommend a seed mechanism that is
+    // actually detectable un-redacted (error info present while the run reads success).
+    const recommended = variants.find((v) => v.detectableUnredacted) ?? null;
+    const characterized = variants.every((v) => v.overallStatus);
+    await save('n8n-23-execution-silent-failure.json', {
+      $probe: 'GET /api/v1/executions/{id}?includeData=true — GREEN-but-swallowing detail, REDACTED vs UN-REDACTED (S6.3)',
+      capturedAt: now(), n8nVersion: N8N_VERSION,
+      request: { method: 'GET', path: '/api/v1/executions/{id}?includeData=true&redactExecutionData={true|false}', headers: { 'X-N8N-API-KEY': '«redacted»' } },
+      recommendedSeedMechanism: recommended?.name ?? null,
+      variants: variants.map((v) => ({
+        name: v.name,
+        overallStatus: v.overallStatus,
+        swallowingNodeExecutionStatus: v.nodeStatuses.find((n) => n.node === 'Swallowing Step')?.executionStatus ?? null,
+        outputShape: v.outputShape, // [regular, error] output item counts per node
+        redacted: { detectable: v.detectable, signal: v.swallowed[0] ?? null },
+        unredacted: { detectable: v.detectableUnredacted, swallowingNode: v.unredacted.find((n) => n.node === 'Swallowing Step') ?? null },
+      })),
+      finding: [
+        'FINDING (n8n 2.29.0). REDACTED read: a swallowed node error leaves NO signal — run="success",',
+        'node executionStatus="success", item.json cleared to {}; the PLAN premise (executionStatus==="error") never holds.',
+        `UN-REDACTED read (owner-approved Layer-2 source): detectable mechanism(s) = ${JSON.stringify(variants.filter((v) => v.detectableUnredacted).map((v) => v.name))}.`,
+        'Where the error lives un-redacted varies by mechanism (see variants[].unredacted.swallowingNode: executionStatus /',
+        'taskErrorType / itemErrorType / hasJsonError). Argus extracts ONLY node name + error type/code server-side and',
+        'NEVER persists item.json/binary. Seed the detectable mechanism; Code continueRegularOutput passes INPUT through',
+        'with no error even un-redacted (undetectable — document as an honest boundary).',
+      ].join(' '),
+    });
+    record('23', 'green-but-swallowing shape characterized (redacted vs un-redacted)', characterized && !!recommended,
+      recommended ? `un-redacted detectable via "${recommended.name}"; redacted surfaces nothing` : 'NO detectable mechanism even un-redacted — investigate');
   }
 
   await finish();

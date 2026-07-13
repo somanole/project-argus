@@ -5,7 +5,7 @@ import { buildEdges, normalizeHost, nodeIdOf, type GraphWorkflow, type GraphInst
 /** Minimal facts with only the fields a given test needs. */
 function facts(over: Partial<WorkflowFacts>): WorkflowFacts {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     analyzedAt: 't',
     nodeCount: 1,
     nodeTypes: [],
@@ -16,6 +16,7 @@ function facts(over: Partial<WorkflowFacts>): WorkflowFacts {
     credentialTypes: [],
     dataTableRefs: [],
     mcpExposed: false,
+    canMaskFailures: { flagged: false, reasons: [], noErrorWorkflow: true },
     directDeps: [],
     webhookEndpoints: [],
     httpCallsites: [],

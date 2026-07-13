@@ -1,10 +1,10 @@
 {
   "$probe": "GET /api/v1/projects/{id}/users — project members + roles (Argus ownership-inference source, S4)",
-  "capturedAt": "2026-07-07T13:40:49.929Z",
+  "capturedAt": "2026-07-11T23:14:05.487Z",
   "n8nVersion": "2.29.0",
   "request": {
     "method": "GET",
-    "path": "/api/v1/projects/Kz82z0aY5CZ3OCMb/users",
+    "path": "/api/v1/projects/n0nAyvVnYSjcCnvV/users",
     "headers": {
       "X-N8N-API-KEY": "«redacted»"
     }
@@ -24,17 +24,17 @@
       "updatedAt"
     ],
     "sampleItem": {
-      "id": "8582558e-09a3-4e27-98fd-8682fdbe3f2a",
-      "email": "nathan@n8n.io",
-      "firstName": "Nathan",
-      "lastName": "Owner",
-      "createdAt": "2026-07-07T13:40:49.715Z",
-      "updatedAt": "2026-07-07T13:40:49.000Z",
-      "role": "project:admin"
+      "id": "92a742a7-bc56-45b7-872b-65ac51fe24e2",
+      "email": "priya@n8n.io",
+      "firstName": "Priya",
+      "lastName": "Member",
+      "createdAt": "2026-07-11T23:14:05.289Z",
+      "updatedAt": "2026-07-11T23:14:05.289Z",
+      "role": "project:editor"
     },
     "roles": [
-      "project:admin",
-      "project:editor"
+      "project:editor",
+      "project:admin"
     ]
   },
   "finding": "member fields ALL PRESENT on member items; role is the per-project role slug (project:admin | project:editor | project:viewer). inference picks the most-privileged member (admin > editor > viewer) as the advisory team owner. Requires license feat:projectRole:admin + API key scope user:list; otherwise 401/403 → inference degrades to \"couldn't infer\" (rule 5), never a fabricated owner."

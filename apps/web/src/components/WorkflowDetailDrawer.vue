@@ -25,6 +25,22 @@ const error = ref<string | null>(null);
 const runs = ref<WorkflowExecutionsResponse | null>(null);
 const runsState = ref<'idle' | 'loading' | 'ok' | 'error'>('idle');
 
+// S6.3 Layer 2 — the silently-failing signal. Prefer the LIVE on-demand result (fetched from
+// n8n now) over the poll-persisted one on health; null when neither observed a silent failure.
+const silentFailure = computed(
+  () => runs.value?.silentFailures ?? detail.value?.workflow.health?.silentFailures ?? null,
+);
+// S6.3 Layer 1 — the advisory "can mask failures" config-risk (from facts), shown even when
+// nothing has actually failed. Null when the workflow couldn't be analyzed.
+const canMask = computed(() => detail.value?.facts?.canMaskFailures ?? null);
+// The exact n8n node config that lets a failure pass as success (labels match n8n's
+// "On Error" setting — nodeSettings.onError.* in n8n 2.29), so the fact is verifiable.
+const MASK_MECHANISM: Record<string, string> = {
+  'continue-regular-output': 'On Error set to “Continue” — a node error is passed as a normal output item, so the run finishes success',
+  'legacy-continue-on-fail': '“Continue On Fail” enabled — a node error is passed downstream, so the run finishes success',
+  'dead-end-error-branch': 'On Error set to “Continue (using error output)”, but that output isn’t connected — the error goes nowhere',
+};
+
 watch(
   () => props.selected,
   async (sel) => {
@@ -250,6 +266,14 @@ const riskGlance = computed(() => {
                   <template v-if="detail.workflow.health.computedAt">checked {{ relativeTime(detail.workflow.health.computedAt, Date.now()) }}</template>
                 </span>
               </div>
+
+              <!-- S6.3 Layer 2 — silently failing: n8n marked the run success, but a node
+               errored-and-continued. Stated factually (node + count), never a correctness claim. -->
+              <div v-if="silentFailure && silentFailure.runsAffected > 0" class="silentbox" data-testid="health-silent-failure">
+                <span class="silent-title">⚠ Silently failing — <span class="mono">{{ silentFailure.lastNode ?? 'a node' }}</span></span>
+                <span class="silent-detail muted">Errored on {{ silentFailure.runsAffected }}/{{ silentFailure.runsInspected }} success runs<template v-if="silentFailure.lastErrorType || silentFailure.lastErrorCode"> · <span class="mono">{{ [silentFailure.lastErrorType, silentFailure.lastErrorCode].filter(Boolean).join(' · ') }}</span></template></span>
+              </div>
+
               <dl class="facts">
                 <dt>Failure rate</dt>
                 <dd>
@@ -272,6 +296,18 @@ const riskGlance = computed(() => {
                 <dt>Window</dt>
                 <dd class="muted">~{{ Math.round(detail.workflow.health.windowHours / 24) }} days (n8n default retention)</dd>
               </dl>
+
+              <!-- S6.3 Layer 1 — advisory config-risk: this workflow is CONFIGURED so a node
+               failure could be hidden. Says it CAN mask, never that it HAS (rule 12). -->
+              <div v-if="canMask && canMask.flagged" class="maskbox" data-testid="can-mask-flag">
+                <FactBadge label="Can mask failures" tone="warn" />
+                <ul class="mask-reasons">
+                  <li v-for="r in canMask.reasons" :key="r.nodeName + r.mechanism" class="muted small">
+                    <span class="mono">{{ r.nodeName }}</span>: {{ MASK_MECHANISM[r.mechanism] ?? r.mechanism }}
+                  </li>
+                </ul>
+                <span v-if="canMask.noErrorWorkflow" class="mask-note muted small">No error workflow set.</span>
+              </div>
 
               <!-- On-demand execution debug: redacted failure summary + recent runs. Full
                logs/data stay in n8n (redacted server-side); we show the failing node +
@@ -385,6 +421,31 @@ const riskGlance = computed(() => {
 }
 .fail-title { font-size: var(--font-size--sm); font-weight: var(--font-weight--medium); color: var(--color--danger); }
 .fail-err { font-size: var(--font-size--2xs); color: var(--color--danger); }
+
+/* S6.3 — silently failing (warning-toned, a distinct signal from a red failure). */
+.silentbox {
+  display: flex; flex-direction: column; gap: var(--spacing--5xs);
+  margin: var(--spacing--2xs) 0;
+  padding: var(--spacing--2xs) var(--spacing--sm);
+  border: 1px solid var(--border-color--warning, var(--border-color));
+  border-radius: var(--radius--md);
+  background: var(--background--warning, var(--background--subtle));
+}
+.silent-title { font-size: var(--font-size--sm); font-weight: var(--font-weight--medium); color: var(--color--warning, var(--color--text--shade-1)); }
+.silent-detail { font-size: var(--font-size--2xs); }
+.silent-note { display: block; }
+
+/* S6.3 — "can mask failures" advisory config-risk (Layer 1). */
+.maskbox {
+  display: flex; flex-direction: column; gap: var(--spacing--5xs);
+  margin: var(--spacing--2xs) 0;
+  padding: var(--spacing--2xs) var(--spacing--sm);
+  border: 1px solid var(--border-color--subtle, var(--border-color));
+  border-radius: var(--radius--md);
+  background: var(--background--subtle);
+}
+.mask-reasons { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing--5xs); }
+.mask-note { display: block; }
 .runs-label { margin: var(--spacing--2xs) 0 var(--spacing--4xs); font-size: var(--font-size--3xs); text-transform: uppercase; letter-spacing: var(--letter-spacing--wide); }
 .runlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing--4xs); }
 .run { display: flex; align-items: center; gap: var(--spacing--2xs); flex-wrap: wrap; font-size: var(--font-size--2xs); }

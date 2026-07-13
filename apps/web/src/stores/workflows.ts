@@ -38,6 +38,9 @@ export const useWorkflowsStore = defineStore('workflows', () => {
   const mcpOnly = ref<boolean>(false);
   const brokenOnly = ref<boolean>(false);
   const staleOnly = ref<boolean>(false);
+  // S6.3 config-risk + observed silent-failure filters (backend: filters.canMask / silentlyFailing).
+  const canMaskOnly = ref<boolean>(false);
+  const silentlyFailingOnly = ref<boolean>(false);
   const criticality = ref<string[]>([]);
   const health = ref<string[]>([]);
   const stateFilter = ref<StateFilter>('all');
@@ -58,6 +61,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
       (mcpOnly.value ? 1 : 0) +
       (brokenOnly.value ? 1 : 0) +
       (staleOnly.value ? 1 : 0) +
+      (canMaskOnly.value ? 1 : 0) +
+      (silentlyFailingOnly.value ? 1 : 0) +
       (stateFilter.value !== 'all' ? 1 : 0) +
       (q.value.trim() ? 1 : 0),
   );
@@ -77,6 +82,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     if (mcpOnly.value) p.set('mcp', 'true');
     if (brokenOnly.value) p.set('broken', 'true');
     if (staleOnly.value) p.set('stale', 'true');
+    if (canMaskOnly.value) p.set('canMask', 'true');
+    if (silentlyFailingOnly.value) p.set('silentlyFailing', 'true');
     if (stateFilter.value === 'active') p.set('active', 'true');
     if (stateFilter.value === 'archived') p.set('archived', 'true');
     const query = q.value.trim();
@@ -159,6 +166,14 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     staleOnly.value = v;
     refreshResetPage();
   };
+  const setCanMaskOnly = (v: boolean) => {
+    canMaskOnly.value = v;
+    refreshResetPage();
+  };
+  const setSilentlyFailingOnly = (v: boolean) => {
+    silentlyFailingOnly.value = v;
+    refreshResetPage();
+  };
   const setStateFilter = (v: StateFilter) => {
     stateFilter.value = v;
     refreshResetPage();
@@ -183,6 +198,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     mcpOnly.value = false;
     brokenOnly.value = false;
     staleOnly.value = false;
+    canMaskOnly.value = false;
+    silentlyFailingOnly.value = false;
     stateFilter.value = 'all';
     q.value = '';
   };
@@ -212,6 +229,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     if (query.mcp !== undefined) mcpOnly.value = bool(query.mcp);
     if (query.broken !== undefined) brokenOnly.value = bool(query.broken);
     if (query.stale !== undefined) staleOnly.value = bool(query.stale);
+    if (query.canMask !== undefined) canMaskOnly.value = bool(query.canMask);
+    if (query.silentlyFailing !== undefined) silentlyFailingOnly.value = bool(query.silentlyFailing);
     if (query.active !== undefined && bool(query.active)) stateFilter.value = 'active';
     else if (query.archived !== undefined && bool(query.archived)) stateFilter.value = 'archived';
     if (str(query.q)) q.value = str(query.q) as string;
@@ -233,6 +252,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     mcpOnly,
     brokenOnly,
     staleOnly,
+    canMaskOnly,
+    silentlyFailingOnly,
     stateFilter,
     q,
     page,
@@ -253,6 +274,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     setMcpOnly,
     setBrokenOnly,
     setStaleOnly,
+    setCanMaskOnly,
+    setSilentlyFailingOnly,
     setStateFilter,
     setQuery,
     clearFilters,

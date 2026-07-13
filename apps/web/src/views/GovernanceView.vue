@@ -5,7 +5,7 @@
 // shared detail drawer, where the assign-owner dialog lives — so this is where you FIX
 // accountability, not just view gaps. Honest by construction (rule 5 + rule 12): factual
 // ownership = an assigned owner; an inferred owner is advisory and reads "no confirmed owner".
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useOwnershipRegisterStore, type RegisterView } from '../stores/ownership-register';
@@ -17,12 +17,26 @@ import FactBadge from '../components/FactBadge.vue';
 import WorkflowDetailDrawer from '../components/WorkflowDetailDrawer.vue';
 import ListPager from '../components/ListPager.vue';
 import { instanceColor } from '../lib/instanceColor';
+import { relativeTime } from '../lib/time';
 
 const store = useOwnershipRegisterStore();
 const connections = useConnectionsStore();
-const { rows, summary, total, state, error, page, view, instanceId } = storeToRefs(store);
+const { rows, summary, total, state, error, page, view, instanceId, data } = storeToRefs(store);
 const pageSize = store.pageSize;
 const route = useRoute();
+
+// Poll-fresh + honest-stale indicator — consistent with Explore/Health. The register is
+// served from cache; if a connection stops syncing we say so, never a green poll (rule 5).
+const now = ref(Date.now());
+let clock: ReturnType<typeof setInterval> | undefined;
+let poll: ReturnType<typeof setInterval> | undefined;
+const lastUpdated = computed(() => data.value?.generatedAt ?? null);
+const syncedAgo = computed(() => relativeTime(lastUpdated.value, now.value));
+const syncFailures = computed(() =>
+  connections.connections.filter((c) => c.health.status === 'unauthorized' || c.health.status === 'unreachable'));
+const syncOk = computed(() => syncFailures.value.length === 0);
+const syncFailureTitle = computed(() =>
+  syncFailures.value.map((c) => `${c.label}: ${c.health.lastError ?? c.health.status}`).join(' · '));
 
 // Clicking a row opens the shared detail drawer (owner section + assign dialog).
 const selected = ref<WorkflowListItem | null>(null);
@@ -33,7 +47,7 @@ const TILES: { view: RegisterView; testid: string; label: string; tone: 'danger'
   { view: 'needs-owner', testid: 'ownership-filter-needs-owner', label: 'Needs a confirmed owner', tone: 'warn', count: (s) => s.inferred + s.unowned },
   { view: 'unowned', testid: 'ownership-filter-unowned', label: 'No owner at all', tone: 'danger', count: (s) => s.unowned },
   { view: 'critical-at-risk', testid: 'ownership-filter-critical-at-risk', label: 'Critical at risk', tone: 'danger', count: (s) => s.criticalAtRisk },
-  { view: 'no-backup', testid: 'ownership-filter-no-backup', label: 'No backup', tone: 'muted', count: (s) => s.noBackup },
+  { view: 'no-backup', testid: 'ownership-filter-no-backup', label: 'No backup owner', tone: 'muted', count: (s) => s.noBackup },
 ];
 
 const RISK_LABEL: Record<OwnershipRisk, string> = {
@@ -71,6 +85,12 @@ onMounted(async () => {
   store.applyFromQuery(route?.query ?? {});
   qInput.value = store.q;
   await refresh();
+  poll = setInterval(() => void refresh(), 15_000);
+  clock = setInterval(() => (now.value = Date.now()), 1_000);
+});
+onUnmounted(() => {
+  if (poll) clearInterval(poll);
+  if (clock) clearInterval(clock);
 });
 </script>
 
@@ -80,7 +100,22 @@ onMounted(async () => {
       <div>
         <p class="muted sub">Who owns what across the estate — assign owners and close accountability gaps.</p>
       </div>
-      <button class="btn btn--secondary btn--sm" data-testid="refresh-button" @click="refresh">Refresh</button>
+      <div class="head-right">
+        <span
+          v-if="syncOk"
+          class="badge badge--muted"
+          data-testid="ownership-freshness"
+        ><span class="dot dot--ok" /> Polling — updates within ~30s</span>
+        <span
+          v-else
+          class="badge badge--danger"
+          data-testid="ownership-freshness"
+          data-state="failing"
+          :title="syncFailureTitle"
+        ><span class="dot dot--danger" /> {{ syncFailures.length }} of {{ connections.connections.length }} instances not syncing</span>
+        <span class="muted synced" data-testid="synced-indicator">synced {{ syncedAgo }}</span>
+        <button class="btn btn--secondary btn--sm" data-testid="refresh-button" @click="refresh">Refresh</button>
+      </div>
     </header>
 
     <!-- ── Accountability posture (also the primary filter) ────────────────── -->
@@ -161,6 +196,8 @@ onMounted(async () => {
 <style scoped>
 .own { display: flex; flex-direction: column; gap: var(--spacing--sm); }
 .head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--spacing--md); flex-wrap: wrap; }
+.head-right { display: flex; align-items: center; gap: var(--spacing--sm); flex-wrap: wrap; }
+.synced { font-size: var(--font-size--2xs); }
 .sub { margin: 0; font-size: var(--font-size--sm); }
 
 /* Summary strip = posture + the primary filter (tiles are buttons). */

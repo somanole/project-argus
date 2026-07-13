@@ -17,7 +17,7 @@ import { relativeTime } from '../lib/time';
 
 const store = useWorkflowsStore();
 const connections = useConnectionsStore();
-const { workflows, facets, coverage, enrichmentProgress, state, error, lastUpdated, instanceId, systems, triggers, criticality, health, mcpOnly, brokenOnly, staleOnly, stateFilter, activeFilterCount, triggerLabels, page, total } =
+const { workflows, facets, coverage, enrichmentProgress, state, error, lastUpdated, instanceId, systems, triggers, criticality, health, mcpOnly, brokenOnly, staleOnly, canMaskOnly, silentlyFailingOnly, stateFilter, activeFilterCount, triggerLabels, page, total } =
   storeToRefs(store);
 const pageSize = store.pageSize;
 const route = useRoute();
@@ -49,7 +49,8 @@ function onDocClick(e: MouseEvent): void {
 const panelFilterCount = computed(
   () =>
     systems.value.length + triggers.value.length + criticality.value.length + health.value.length +
-    (mcpOnly.value ? 1 : 0) + (brokenOnly.value ? 1 : 0) + (staleOnly.value ? 1 : 0) + (stateFilter.value !== 'all' ? 1 : 0),
+    (mcpOnly.value ? 1 : 0) + (brokenOnly.value ? 1 : 0) + (staleOnly.value ? 1 : 0) +
+    (canMaskOnly.value ? 1 : 0) + (silentlyFailingOnly.value ? 1 : 0) + (stateFilter.value !== 'all' ? 1 : 0),
 );
 
 // The System facet is long (25+) — a search field narrows it in place.
@@ -73,6 +74,8 @@ const appliedTokens = computed(() => {
   if (mcpOnly.value) t.push({ key: 'mcp', label: '', text: 'MCP-exposed', remove: () => store.setMcpOnly(false) });
   if (brokenOnly.value) t.push({ key: 'broken', label: '', text: 'Broken refs', remove: () => store.setBrokenOnly(false) });
   if (staleOnly.value) t.push({ key: 'stale', label: '', text: 'Stale analysis', remove: () => store.setStaleOnly(false) });
+  if (canMaskOnly.value) t.push({ key: 'canMask', label: '', text: 'Can mask failures', remove: () => store.setCanMaskOnly(false) });
+  if (silentlyFailingOnly.value) t.push({ key: 'silentlyFailing', label: '', text: 'Silently failing', remove: () => store.setSilentlyFailingOnly(false) });
   return t;
 });
 
@@ -286,6 +289,8 @@ onUnmounted(() => {
                   <button class="opt opt--chip" :class="{ sel: mcpOnly }" data-testid="filter-mcp" @click="store.setMcpOnly(!mcpOnly)"><span class="box" />MCP-exposed</button>
                   <button class="opt opt--chip" :class="{ sel: brokenOnly }" data-testid="filter-broken" @click="store.setBrokenOnly(!brokenOnly)"><span class="box" />Broken refs</button>
                   <button class="opt opt--chip" :class="{ sel: staleOnly }" data-testid="filter-stale" @click="store.setStaleOnly(!staleOnly)"><span class="box" />Stale analysis</button>
+                  <button class="opt opt--chip" :class="{ sel: canMaskOnly }" data-testid="filter-can-mask" @click="store.setCanMaskOnly(!canMaskOnly)"><span class="box" />Can mask failures</button>
+                  <button class="opt opt--chip" :class="{ sel: silentlyFailingOnly }" data-testid="filter-silently-failing" @click="store.setSilentlyFailingOnly(!silentlyFailingOnly)"><span class="box" />Silently failing</button>
                 </div>
               </div>
             </div>

@@ -78,11 +78,11 @@ dashboard surfaces, each with a count that opens the precise set behind it:
   medium / low; drills to that filtered catalog set.
 - **Single-point-of-failure owners** — owners holding ≥2 criticals, cross-instance
   span flagged; drills to that owner's workflows.
-- **Failing-with-owner incidents** — active failing/degraded workflows that have a
-  **confirmed (assigned)** owner (the actionable incidents — a real person to page),
-  each showing owner + failure rate; drills to the workflow. The card also shows the
-  total failing/degraded and how many have **no** confirmed owner, so "few incidents
-  with an owner" never misreads as "few problems".
+- **Failing** — the raw count of **`failing`-status** workflows (failure rate > 50% in the
+  health window). No degraded, no ownership qualifier — just "how many are mostly-failing
+  right now"; drills to the Health view. *(The owner-subset figure `failingWithOwner` is still
+  composed in the payload and pinned by the non-divergence check, but is no longer the headline
+  tile — the owner wanted the plain failing count front-and-centre.)*
 - **Hygiene issues** — broken refs, stale enrichment, active-no-executions counts;
   each drills to its set.
 - **MCP exposure surface** — MCP-exposed workflows, how many reach sensitive
@@ -95,12 +95,17 @@ dashboard surfaces, each with a count that opens the precise set behind it:
 
 **Tile mechanics (navigate to the owning page, never reproduce it).** The dashboard
 is a glanceable router, not a place that reproduces detail. Each figure is a **uniform
-metric tile** — label + ⓘ tooltip, a count coloured by severity (a clean zero reads
-muted), a one-line context — and the **whole tile navigates** to the page that owns
+metric tile** — label + ⓘ tooltip, a count coloured by severity (a problem count reads
+warn/danger; a **clean zero reads green** — 0 of a problem is a positive signal), a
+one-line context — and the **whole tile navigates** to the page that owns
 that set, **deep-linked** to exactly it:
 - Accountability tiles → the **Ownership** view, anchored to the matching gap section
   (`#gap-unowned`, `#gap-single-owner`, `#gap-personal-space`).
-- Failing-with-owner → the **Health** view.
+- Failing (the raw count of `failing`-status workflows — no degraded, no ownership qualifier)
+  → the **Health** view.
+- **Silently failing (S6.3)** → Estate `?silentlyFailing` — green runs that swallowed a node
+  error. Warn-toned; the tooltip states it's *observed among the workflows inspected*, not a
+  full-fleet guarantee (rule 5). `count === list.length` pinned like every other figure.
 - Broken refs → Estate `?broken`; stale analysis → Estate `?stale`; idle-but-active →
   Estate `?health=idle&active=true`; MCP exposure → Estate `?mcp` (the MCP-exposed set).
 The composition guarantee still holds — the composed payload carries the exact set
@@ -228,7 +233,8 @@ renders with its key text/state, and a `pnpm verify` row.
       drill. Accountability tiles deep-link to the Ownership gap sections
       (`overview-unowned` → `#gap-unowned`, `overview-spof` → `#gap-single-owner`,
       `overview-personal-space` → `#gap-personal-space`).
-- [x] **Failing-with-owner incidents** (`overview-incidents`) → Health.
+- [x] **Failing** (`overview-failing`, the raw `failing`-status count — no degraded, no
+      ownership qualifier) → Health.
 - [x] The three **hygiene** metrics render as peer tiles and deep-link to the filtered
       Estate catalog: `overview-broken` → `?broken`, `overview-stale` → `?stale`,
       `overview-idle-active` → `?health=idle&active=true`.

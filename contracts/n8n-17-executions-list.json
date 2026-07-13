@@ -1,6 +1,6 @@
 {
   "$probe": "GET /api/v1/executions — public executions LIST shape (Argus health source, S3)",
-  "capturedAt": "2026-07-07T13:40:50.543Z",
+  "capturedAt": "2026-07-11T23:14:06.118Z",
   "n8nVersion": "2.29.0",
   "request": {
     "method": "GET",
@@ -27,15 +27,15 @@
       "workflowId"
     ],
     "sampleItem": {
-      "id": "273",
+      "id": "345",
       "finished": false,
       "mode": "manual",
       "retryOf": null,
       "retrySuccessId": null,
       "status": "error",
-      "startedAt": "2026-07-07T13:40:50.517Z",
-      "stoppedAt": "2026-07-07T13:40:50.522Z",
-      "workflowId": "4AYs15ymPvrkh5U8",
+      "startedAt": "2026-07-11T23:14:06.090Z",
+      "stoppedAt": "2026-07-11T23:14:06.094Z",
+      "workflowId": "VCjzV3KYpnsT2zrV",
       "waitTill": null
     }
   },

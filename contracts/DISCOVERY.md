@@ -167,6 +167,20 @@ public invite flow (which leaves users pending).
   opens a workflow) and **allowlists only** `lastNodeExecuted` + `redactedError.{type,httpCode}`
   — never the message/payload, never persisted. Evidence: `n8n-18-execution-redacted.json`.
 
+- **Silent failures are invisible under redaction (S6.3, drove a design change).** The PLAN's
+  S6.3 Layer-2 premise was to read `runData[node].executionStatus === 'error'` on a `success`
+  run from the **redacted** detail. The probe **disproved it** at n8n 2.29: a node error
+  swallowed by any `onError: continue*` mode makes the node read **`executionStatus: 'success'`**
+  (n8n treats it as handled), and `redactExecutionData=true` **clears `item.json` to `{}`** — so
+  **nothing** signals the swallow. The error only survives **un-redacted**, at
+  `runData[node].data.main[*][*].json.error` (a structured `{name,code,message,stack}` for
+  HTTP/app nodes; a bare message **string** for Code nodes). Owner-approved resolution: Layer 2
+  — and **only** Layer 2 — reads the **un-redacted** detail for the can-mask-failures workflows,
+  and Argus **allowlists it to node name + error type/code** (`error.name` + `error.code`/
+  `httpCode`) **server-side**, never the message/stack/payload, never persisted. Evidence:
+  `n8n-23-execution-silent-failure.json` (characterizes all three swallow mechanisms, redacted
+  vs un-redacted).
+
 ## Two-instance ports (rule 1 — reality vs. PLAN's illustration)
 
 PLAN illustrates "prod :5678 / staging :5679". **`:5679` is not free** — it is the

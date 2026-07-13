@@ -122,6 +122,8 @@ export const governanceOverviewResponseSchema = z.object({
 
   // Reliability (S3) — the OWNED subset of failing+degraded (the actionable incidents).
   failingWithOwner: overviewFigureSchema,
+  // S6.3 — workflows observed silently failing (green runs that swallowed a node error).
+  silentlyFailing: overviewFigureSchema,
 
   // Hygiene (S1b/S2/S3) — each sub-figure drills to its exact set.
   hygiene: z.object({

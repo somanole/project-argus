@@ -16,7 +16,7 @@
 import {
   buildWorkflow, BROKEN_REF,
   manualTrigger, webhookTrigger, scheduleTrigger, chatTrigger, executeWorkflowTrigger,
-  httpRequest, set, code, appNode, attachCred,
+  httpRequest, set, code, swallowingCode, appNode, attachCred,
   executeWorkflow, executeWorkflowPlainString, executeWorkflowInline,
   agent, lmChatOpenAi, memoryBuffer, toolWorkflow, agentTool,
 } from './nodes.mjs';
@@ -150,6 +150,30 @@ const CURATED = [
     build: () => buildWorkflow('Data Quality Sentinel',
       [webhookTrigger('Quality Check', { path: 'data-quality' }), code('Validate Rows', MAYBE_FAIL)],
       [{ from: 'Quality Check', to: 'Validate Rows' }]),
+  },
+  // ---- S6.3 silent-failure cases (the "green but broken" demo) ----
+  {
+    // Case 1: GREEN BUT SWALLOWING. Every webhook run succeeds at the RUN level, but the
+    // "Push to Warehouse" HTTP node hits a dead host on every run and its error is
+    // swallowed (onError:continueRegularOutput). n8n shows the run green; Argus's Layer-2
+    // detector (un-redacted, allowlisted) must read it as silently failing with the
+    // offending node named + the error class (Error · ECONNREFUSED), AND carry the
+    // static can-mask flag. HTTP node → structured json.error{name,code} (contracts/n8n-23).
+    key: 'inventorySync', name: 'Inventory Sync', project: 'data', tags: ['production'],
+    active: true, webhookPath: 'inventory-sync', exec: { kind: 'webhook', runs: 4 },
+    build: () => buildWorkflow('Inventory Sync',
+      [webhookTrigger('Inventory Event', { path: 'inventory-sync' }), { ...httpRequest('Push to Warehouse', 'http://127.0.0.1:1/inventory'), onError: 'continueRegularOutput' }],
+      [{ from: 'Inventory Event', to: 'Push to Warehouse' }]),
+  },
+  {
+    // Case 2: MASK-PRONE BUT HEALTHY. Same swallowing config (onError:continueRegularOutput)
+    // so the static can-mask flag fires — but the node NEVER throws, so there is no
+    // silent failure. Proves the flag is advisory config-risk, not a failure claim.
+    key: 'resilientNotifier', name: 'Resilient Notifier', project: 'support', tags: ['internal'],
+    active: true, webhookPath: 'resilient-notify', exec: { kind: 'webhook', runs: 3 },
+    build: () => buildWorkflow('Resilient Notifier',
+      [webhookTrigger('Notify Event', { path: 'resilient-notify' }), swallowingCode('Best-Effort Post', 'return $input.all();')],
+      [{ from: 'Notify Event', to: 'Best-Effort Post' }]),
   },
   {
     key: 'archivedAggregator', name: 'Legacy Data Aggregator', project: 'data', tags: ['internal'],

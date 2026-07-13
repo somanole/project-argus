@@ -112,6 +112,7 @@ export function governanceOverview(db: Database.Database, generatedAt: string): 
     personalSpaceCritical: gaps.personalSpaceCritical,
     noBackupOwner: gaps.noBackupOwner,
     failingWithOwner: { count: failingWithOwnerList.length, workflows: failingWithOwnerList },
+    silentlyFailing: { count: estate.silentlyFailing.length, workflows: estate.silentlyFailing },
     hygiene: {
       brokenRefs: { count: brokenRefs.length, workflows: brokenRefs },
       staleEnrichment: { count: staleEnrichment.length, workflows: staleEnrichment },

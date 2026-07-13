@@ -1,10 +1,10 @@
 {
   "$probe": "POST /api/v1/projects/{id}/users — add a member (relations:[{userId, role}])",
-  "capturedAt": "2026-07-07T13:40:49.923Z",
+  "capturedAt": "2026-07-11T23:14:05.480Z",
   "n8nVersion": "2.29.0",
   "request": {
     "method": "POST",
-    "path": "/api/v1/projects/Kz82z0aY5CZ3OCMb/users",
+    "path": "/api/v1/projects/n0nAyvVnYSjcCnvV/users",
     "body": {
       "relations": [
         {

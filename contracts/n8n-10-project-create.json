@@ -1,6 +1,6 @@
 {
   "$probe": "POST /api/v1/projects — create a team project (does an owner key create type:team?)",
-  "capturedAt": "2026-07-07T13:40:49.917Z",
+  "capturedAt": "2026-07-11T23:14:05.473Z",
   "n8nVersion": "2.29.0",
   "request": {
     "method": "POST",
@@ -15,12 +15,12 @@
     "body": {
       "name": "Argus Probe — Revenue Ops",
       "type": "team",
-      "creatorId": "8582558e-09a3-4e27-98fd-8682fdbe3f2a",
-      "id": "Kz82z0aY5CZ3OCMb",
+      "creatorId": "a65109d1-e6f2-480c-a481-b87cbb21d930",
+      "id": "n0nAyvVnYSjcCnvV",
       "icon": null,
       "description": null,
-      "updatedAt": "2026-07-07T13:40:49.914Z",
-      "createdAt": "2026-07-07T13:40:49.914Z",
+      "updatedAt": "2026-07-11T23:14:05.468Z",
+      "createdAt": "2026-07-11T23:14:05.468Z",
       "customTelemetryTags": [],
       "role": "project:admin",
       "scopes": [

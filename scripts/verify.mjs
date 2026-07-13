@@ -203,7 +203,7 @@ try {
   add('Catalog surfaces a failing sync (rejected key ≠ healthy pill)', surfacesFailure,
     surfacesFailure ? 'failing-state pill ships' : 'failing-state pill MISSING');
 
-  const filters = ['filter-search', 'filter-state', 'filter-mcp', 'filter-broken', 'filter-stale', 'filter-instance', 'filter-system', 'filter-criticality', 'filter-trigger'];
+  const filters = ['filter-search', 'filter-state', 'filter-mcp', 'filter-broken', 'filter-stale', 'filter-can-mask', 'filter-silently-failing', 'filter-instance', 'filter-system', 'filter-criticality', 'filter-trigger'];
   const fmissing = missing(filters);
   add('Catalog shows all filter controls (search/state/MCP/broken/stale/instance/system/criticality/trigger)', fmissing.length === 0,
     fmissing.length === 0 ? `${filters.length} filter controls present` : `MISSING: ${fmissing.join(', ')}`);
@@ -236,10 +236,17 @@ try {
   // S3: health chrome — the catalog badge + health facet, the "what's failing" view
   // (failing list, summary, retention window, poll-fresh/honest-stale indicator), and
   // the drawer health section. Each has a component test; this is the presence counterpart.
-  const healthUi = ['health-badge', 'filter-health', 'health-view', 'health-failing-list', 'health-window', 'health-freshness', 'health-section', 'health-summary', 'health-tile-failing', 'health-tile-healthy', 'health-tile-idle', 'execution-runs', 'execution-failure'];
+  const healthUi = ['health-badge', 'filter-health', 'health-view', 'health-failing-list', 'health-window', 'health-freshness', 'health-scope', 'health-search', 'health-section', 'health-summary', 'health-tile-failing', 'health-tile-healthy', 'health-tile-idle', 'execution-runs', 'execution-failure'];
   const hMissing = missing(healthUi);
   add('Health UI ships (catalog badge+facet, failing view, drawer health + runs/failure)', hMissing.length === 0,
     hMissing.length === 0 ? `${healthUi.length} health UI elements present` : `MISSING: ${hMissing.join(', ')}`);
+
+  // S6.3: silent-failure chrome — the additive badge overlay, the drawer silently-failing box
+  // + the advisory can-mask-failures flag, and the Health view's silently-failing tile + list.
+  const silentUi = ['health-silent-badge', 'health-silent-failure', 'can-mask-flag', 'health-tile-silent', 'health-tile-can-mask', 'health-silent-list'];
+  const sMissing = missing(silentUi);
+  add('Silent-failure UI ships (badge overlay, drawer silent box + can-mask flag, Health tile + list)', sMissing.length === 0,
+    sMissing.length === 0 ? `${silentUi.length} silent-failure UI elements present` : `MISSING: ${sMissing.join(', ')}`);
 
   // S4: ownership chrome — the catalog owner badge, the drawer ownership section +
   // assign dialog, the Ownership register (accountability table + clickable summary
@@ -247,7 +254,7 @@ try {
   const ownUi = [
     'owner-badge', 'ownership-section', 'ownership-assign-button', 'ownership-suggested-owner', 'assign-owner-dialog', 'assign-owner-picker', 'assign-owner-suggestion',
     'governance-view', 'ownership-summary', 'ownership-register', 'ownership-confirmed',
-    'ownership-filter-needs-owner', 'ownership-filter-critical-at-risk', 'ownership-scope', 'ownership-search',
+    'ownership-filter-needs-owner', 'ownership-filter-critical-at-risk', 'ownership-scope', 'ownership-search', 'ownership-freshness',
     'incident-owner',
   ];
   const oMissing = missing(ownUi);
@@ -281,7 +288,7 @@ try {
   // uncertainty caveats (advisory owner, confirmed-reach-only) live in ⓘ tooltips.
   const overviewUi = [
     'overview-view', 'overview-score', 'overview-score-breakdown', 'pillar-value', 'overview-unowned', 'overview-spof',
-    'overview-incidents', 'overview-broken', 'overview-stale', 'overview-idle-active', 'overview-exposure', 'overview-personal-space',
+    'overview-failing', 'overview-silently-failing', 'overview-broken', 'overview-stale', 'overview-idle-active', 'overview-exposure', 'overview-personal-space',
     'overview-changelog', 'overview-export', 'overview-health-unavailable', 'infotip',
   ];
   const ovMissing = missing(overviewUi);
@@ -1333,6 +1340,77 @@ async function s3Checks() {
     add('Redacted execution debug: failing node + error class + per-run deep links',
       !dbg?.unavailable && runOk && failNodeOk,
       dbg ? `node "${dbg.failure?.failedNode}", error ${dbg.failure?.errorType ?? '—'}·${dbg.failure?.errorCode ?? '—'}, ${dbg.runs?.length ?? 0} runs w/ deep links` : 'no debug payload');
+
+    // ── S6.3 silent-failure detection ("green but broken") ────────────────────
+    const wfByName = new Map(allWfs.map((w) => [w.name, w]));
+    const inv = wfByName.get('Inventory Sync');
+    const invSf = inv?.health?.silentFailures;
+    // Green-but-swallowing: the run status is green (healthy/idle) BUT a node silently failed,
+    // and Argus names the offending node — even though n8n marks every run success.
+    add('S6.3 seeded green-but-swallowing reads SILENTLY FAILING with the offending node named',
+      !!invSf && invSf.runsAffected > 0 && invSf.lastNode === 'Push to Warehouse' && ['healthy', 'idle'].includes(inv?.health?.status),
+      inv ? `Inventory Sync status=${inv.health?.status} (green), silent runsAffected=${invSf?.runsAffected ?? 0}, node="${invSf?.lastNode ?? '—'}", err ${invSf?.lastErrorType ?? '—'}·${invSf?.lastErrorCode ?? '—'}` : 'Inventory Sync missing');
+
+    // Layer 1: the static can-mask-failures flag fires on both swallow-configured workflows,
+    // and NOT on a clean control (deterministic, no LLM).
+    const notifier = wfByName.get('Resilient Notifier');
+    const orderIntake = wfByName.get('Order Intake');
+    add('S6.3 Layer-1 can-mask-failures flag: fires on swallow-configured, clean control not flagged',
+      inv?.canMaskFailures === true && notifier?.canMaskFailures === true && orderIntake?.canMaskFailures === false,
+      `Inventory Sync=${inv?.canMaskFailures}, Resilient Notifier=${notifier?.canMaskFailures}, Order Intake=${orderIntake?.canMaskFailures}`);
+
+    // Mask-prone-but-healthy carries the flag but has NO silent failure; the clean control has neither.
+    const notifierSilent = (notifier?.health?.silentFailures?.runsAffected ?? 0) > 0;
+    const orderSilent = (orderIntake?.health?.silentFailures?.runsAffected ?? 0) > 0;
+    add('S6.3 mask-prone-but-healthy has the flag but NO silent failure; clean control shows neither',
+      notifier?.canMaskFailures === true && !notifierSilent && orderIntake?.canMaskFailures === false && !orderSilent,
+      `Resilient Notifier silent=${notifierSilent}; Order Intake canMask=${orderIntake?.canMaskFailures}, silent=${orderSilent}`);
+
+    // Zero-false: ONLY the seeded green-but-swallowing workflow reads silently failing —
+    // one per seeded instance (prod + staging), and nothing else (no false positives).
+    const silentList = (feed.silentlyFailing ?? []).map((w) => w.name);
+    add('S6.3 only the seeded green-but-swallowing workflow reads silently failing — no false positives',
+      silentList.length >= 1 && silentList.every((n) => n === 'Inventory Sync') && (sum.silentlyFailing ?? 0) === silentList.length,
+      `silentlyFailing feed = [${silentList.join(', ') || 'none'}], summary=${sum.silentlyFailing}`);
+
+    // On-demand (drawer): the LIVE silent-failure signal is ALLOWLISTED — node + error class
+    // only, with NO error message, stack, or payload host leaking into Argus's output.
+    const invDbgSf = inv ? (await argus(`/api/workflows/${inv.instanceId}/${inv.id}/executions`)).json?.silentFailures : null;
+    const serialized = JSON.stringify(invDbgSf ?? {});
+    const noLeak = !/stack/i.test(serialized) && !serialized.includes('127.0.0.1') && !/connect econnrefused/i.test(serialized);
+    add('S6.3 on-demand silent-failure is allowlisted (node + error class only; no message/stack/payload)',
+      !!invDbgSf && invDbgSf.runsAffected > 0 && invDbgSf.lastNode === 'Push to Warehouse' && noLeak,
+      invDbgSf ? `node "${invDbgSf.lastNode}", err ${invDbgSf.lastErrorType ?? '—'}·${invDbgSf.lastErrorCode ?? '—'}, no-leak=${noLeak}` : 'no on-demand silent signal');
+
+    // Contract-verify (rule 1): n8n-23 characterizes the swallow shape + the un-redacted signal.
+    let n23 = null;
+    try { n23 = JSON.parse(readFileSync(new URL('../contracts/n8n-23-execution-silent-failure.json', import.meta.url), 'utf8')); } catch { /* missing */ }
+    add('S6.3 contract n8n-23 captured (redacted-invisible → un-redacted allowlisted signal)',
+      !!n23 && n23.recommendedSeedMechanism === 'http-continue-regular' && /un-redacted/i.test(n23.finding ?? ''),
+      n23 ? `recommended="${n23.recommendedSeedMechanism}", finding characterized` : 'contracts/n8n-23 MISSING');
+
+    // Phase 1 — Explore FILTERS: can-mask and silently-failing are findable server-side.
+    const canMaskList = ((await argus('/api/workflows?canMask=true&limit=5000')).json?.workflows ?? []).map((w) => w.name).sort();
+    const silentFilterList = ((await argus('/api/workflows?silentlyFailing=true&limit=5000')).json?.workflows ?? []).map((w) => w.name).sort();
+    add('S6.3 Explore filter: canMask=true returns exactly the swallow-configured workflows',
+      canMaskList.length === 4 && canMaskList.every((n) => n === 'Inventory Sync' || n === 'Resilient Notifier'),
+      `canMask filter → [${[...new Set(canMaskList)].join(', ') || 'none'}] (${canMaskList.length})`);
+    add('S6.3 Explore filter: silentlyFailing=true returns exactly the silently-failing workflows',
+      silentFilterList.length === 2 && silentFilterList.every((n) => n === 'Inventory Sync'),
+      `silentlyFailing filter → [${[...new Set(silentFilterList)].join(', ') || 'none'}] (${silentFilterList.length})`);
+
+    // Phase 1 — Overview surfaces the silently-failing figure (deep-links to the filtered set).
+    const ov = (await argus('/api/governance/overview')).json ?? {};
+    const ovSilent = ov.silentlyFailing ?? {};
+    add('S6.3 Overview surfaces the silently-failing figure (count == its drilled set)',
+      ovSilent.count === 2 && (ovSilent.workflows ?? []).length === ovSilent.count && (ovSilent.workflows ?? []).every((w) => w.name === 'Inventory Sync'),
+      `overview silentlyFailing count=${ovSilent.count}, drills to ${(ovSilent.workflows ?? []).length}`);
+
+    // Health feed also buckets the can-mask set (backs the Health "can mask failures" tile).
+    const feedCanMask = (feed.canMask ?? []).map((w) => w.name);
+    add('S6.3 Health feed buckets the can-mask set for its tile (== the flagged workflows)',
+      (feed.summary?.canMask ?? 0) === feedCanMask.length && feedCanMask.length === 4 && feedCanMask.every((n) => n === 'Inventory Sync' || n === 'Resilient Notifier'),
+      `health feed canMask = [${[...new Set(feedCanMask)].join(', ') || 'none'}] (${feedCanMask.length}), summary=${feed.summary?.canMask}`);
   } finally {
     try { child.kill(); } catch { /* already gone */ }
   }

@@ -1,6 +1,6 @@
 {
   "$probe": "GET /api/v1/workflows?limit=N — live LIST item shape (Argus live inventory source, S1a)",
-  "capturedAt": "2026-07-07T13:40:49.900Z",
+  "capturedAt": "2026-07-11T23:14:05.434Z",
   "n8nVersion": "2.29.0",
   "request": {
     "method": "GET",
@@ -36,24 +36,24 @@
       "versionId"
     ],
     "sampleItem": {
-      "updatedAt": "2026-07-07T13:40:49.887Z",
-      "createdAt": "2026-07-07T13:40:49.887Z",
-      "id": "RElEfcFuYoWCbvcu",
+      "updatedAt": "2026-07-11T23:14:05.412Z",
+      "createdAt": "2026-07-11T23:14:05.412Z",
+      "id": "PP9T1H2jnkyWi2fL",
       "name": "Argus probe workflow",
       "active": false,
       "isArchived": false,
       "settings": {},
       "nodeGroups": [],
-      "versionId": "a87430de-95c4-45e0-97b3-9795af9108a5",
+      "versionId": "8e24a53f-e9f3-4e5a-aea4-491cefadb9bb",
       "activeVersionId": null,
       "triggerCount": 0,
       "shared": [
         {
-          "updatedAt": "2026-07-07T13:40:49.888Z",
-          "createdAt": "2026-07-07T13:40:49.888Z",
+          "updatedAt": "2026-07-11T23:14:05.413Z",
+          "createdAt": "2026-07-11T23:14:05.413Z",
           "role": "workflow:owner",
-          "workflowId": "RElEfcFuYoWCbvcu",
-          "projectId": "YiuGDedeChPmcPi8"
+          "workflowId": "PP9T1H2jnkyWi2fL",
+          "projectId": "60PNGh7oN8esccH3"
         }
       ],
       "activeVersion": null,
@@ -65,5 +65,5 @@
       "meta": null
     }
   },
-  "finding": "inventory fields ALL PRESENT on list items. list items carry `shared` (owner link → projectId=YiuGDedeChPmcPi8) but NOT the nested `project` object; resolve the owning project name via GET /api/v1/projects."
+  "finding": "inventory fields ALL PRESENT on list items. list items carry `shared` (owner link → projectId=60PNGh7oN8esccH3) but NOT the nested `project` object; resolve the owning project name via GET /api/v1/projects."
 }

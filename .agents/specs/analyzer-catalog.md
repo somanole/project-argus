@@ -39,6 +39,21 @@ public templates and the coverage reported honestly.
   **recorded raw and marked `unknown`** — never dropped, never given a fabricated
   label. External systems Argus can't map are shown by their raw type.
 
+**Error-handling hygiene — "can mask failures" (S6.3 Layer 1).**
+- Deterministically, from the workflow JSON alone (no LLM), Argus flags a workflow that is
+  **configured so a node failure could be hidden**: an enabled node with
+  `onError: continueRegularOutput` (or the legacy `continueOnFail: true`) — an error swallowed
+  onto the normal output — or `onError: continueErrorOutput` whose **error output dead-ends**
+  (no downstream node; this is the first analyzer consumer of `connections`). A *connected*
+  error output is real handling and is **not** flagged.
+- This is an **advisory config-risk** flag — a structural sibling of `broken_ref`, **not** an
+  LLM risk flag and **not** a claim the workflow *has* failed (that is the dynamic
+  silent-failure signal on health, S6.3 Layer 2). It names the **offending node(s) + mechanism**
+  and notes whether the workflow has **no `errorWorkflow`** as amplifying context.
+- Honest when unparsed (rule 5): a workflow whose node graph can't be read is **not flagged**,
+  never a fabricated risk. The flag is a denormalized boolean on the list item (for the badge +
+  filter + the Layer-2 poll scope) plus the per-node reasons in the facts.
+
 **Direct dependencies (what a workflow directly connects to).**
 - Argus detects a workflow's **outbound** direct dependencies from the *known*
   reference-bearing node types — `executeWorkflow`, `toolWorkflow`, `agentTool`
@@ -114,7 +129,9 @@ public templates and the coverage reported honestly.
   "what it can reach."
 - **No enrichment / LLM** of any kind in this slice.
 - **No governance flags** (orphan, single-owner-critical, archived-but-called, …) —
-  later slices. This slice is ground-truth facts, not judgments.
+  later slices. This slice is ground-truth facts, not judgments. *(S6.3 later adds the one
+  deterministic structural flag `can_mask_failures` — a config-risk sibling of `broken_ref`,
+  described above.)*
 - **`callerPolicy` / `callerIds` captured but not displayed** here (held for S5).
 - The full **`seed:large`** synthetic generator is deferred to **S1b.1**; this slice
   ships a lightweight scale smoke-test instead.
@@ -158,6 +175,9 @@ public templates and the coverage reported honestly.
 - [x] The one planted broken reference (Lead Scorer → a deleted id) is reported as
       **broken**, and it is the **only** broken ref — zero false positives across the
       whole estate and the corpus.
+- [ ] **S6.3:** the seeded workflows configured to swallow errors (`Inventory Sync`,
+      `Resilient Notifier`) are flagged **can-mask-failures** with the offending node +
+      mechanism; a clean control (`Order Intake`) is **not** flagged. Deterministic, no LLM.
 - [x] Dynamic references (expression-valued, `source=parameter`/inline, by-name, or
       `agentTool` with no id) are reported as **dynamic / unresolved**, never broken;
       the Plain-String Ref Caller resolves and the Inline Sub-Workflow Runner is
@@ -192,6 +212,9 @@ renders with its key text/state (not appearance), and a `pnpm verify` row.
       component test (both states) and a `pnpm verify` row.
 - [x] The catalog shows every **filter control** — search, state (All/Active/
       Archived), MCP-exposed, instance, system, trigger.
+- [ ] **S6.3:** the catalog is also filterable by **Can mask failures** (`filter-can-mask`)
+      and **Silently failing** (`filter-silently-failing`) — so the two S6.3 signals are
+      findable estate-wide, not only in a workflow's drawer.
 - [x] The **detail drawer** shows the **at-a-glance summary strip**
       (`drawer-glance`) and promotes the **"Open in n8n"** action into the sticky
       header (asserted present, not by pixel position).

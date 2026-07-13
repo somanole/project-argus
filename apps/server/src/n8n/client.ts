@@ -11,6 +11,7 @@ import {
   type N8nExecution,
 } from '@argus/shared';
 import type { ConnectionStatus } from '@argus/shared';
+import { extractSwallowedErrors, type SwallowedError } from '../health/silent.js';
 
 /** How far back health looks: n8n's default execution retention (~14 days). */
 export const DEFAULT_HEALTH_WINDOW_HOURS = 336;
@@ -203,6 +204,26 @@ export function createN8nClient(opts: N8nClientOptions) {
         errorType: str(rd.redactedError?.type),
         errorCode: str(rd.redactedError?.httpCode),
       };
+    },
+
+    /**
+     * S6.3 Layer 2 — the swallowed-node errors in ONE execution. This is the ONE place
+     * Argus reads UN-redacted execution detail (`redactExecutionData=false`), because a
+     * node error swallowed by `onError: continue*` leaves NO signal in the redacted detail
+     * (contracts/n8n-23). The raw payload NEVER leaves this function: `extractSwallowedErrors`
+     * reduces it immediately to the allowlist (node name + error type/code only — never the
+     * message/stack/json). Returns [] when clean, null when the detail can't be read.
+     */
+    async executionSilentFailures(executionId: string): Promise<SwallowedError[] | null> {
+      const { status, json } = await get(
+        `/executions/${encodeURIComponent(executionId)}?includeData=true&redactExecutionData=false`,
+      );
+      if (status !== 200) return null;
+      const body = json as { data?: { resultData?: unknown } } | { resultData?: unknown } | undefined;
+      const resultData =
+        (body as { data?: { resultData?: unknown } })?.data?.resultData ??
+        (body as { resultData?: unknown })?.resultData;
+      return extractSwallowedErrors(resultData);
     },
 
     /** Classify reachability for the connection-health indicator. */

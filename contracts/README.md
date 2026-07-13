@@ -30,6 +30,7 @@ cookies, passwords) are redacted before writing.** Never commit an un-redacted k
 | `n8n-07-agents-v2-visibility.json` | M0 discovery: agents-v2 in the public API |
 | `n8n-21-version-unreachable.json` | S6.1/Decision #23 gate Q1: an API-key caller gets **no** n8n version (`versionCli` is cookie-session only; no `/api/v1/version`). `pnpm probe:freshness` |
 | `n8n-22-types-nodes-auth.json` | S6.1/Decision #23 gate Q2: node/credential-type metadata is **cookie-only** (`/types/nodes.json` → 401 with an API key, 200 with a cookie). `pnpm probe:freshness` |
+| `n8n-23-execution-silent-failure.json` | S6.3 gate: a node error swallowed by `onError: continue*` is **invisible in the REDACTED detail** at 2.29 (node reads `executionStatus: success`, `item.json` cleared to `{}`). UN-redacted, the error lives at `runData[node].data.main[*][*].json.error` (structured `{name,code,…}` for HTTP nodes; a message string for Code nodes). Argus allowlists **node name + error type/code only**. `pnpm probe:n8n` |
 | `n8n-probe-summary.json` | machine-readable pass/fail roll-up |
 
 See `DISCOVERY.md` for the plain-English M0 discovery findings.

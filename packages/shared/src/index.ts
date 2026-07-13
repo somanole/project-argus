@@ -71,8 +71,10 @@ export {
 export {
   workflowHealthStatusSchema,
   workflowHealthSchema,
+  silentFailuresSchema,
   type WorkflowHealthStatus,
   type WorkflowHealth,
+  type SilentFailures,
 } from './workflow-health.js';
 export {
   workflowRunSchema,
@@ -166,6 +168,9 @@ export {
   httpCallsiteSchema,
   credentialRefSchema,
   callerPolicySchema,
+  maskMechanismSchema,
+  maskReasonSchema,
+  canMaskFailuresSchema,
   coverageGapKindSchema,
   coverageGapSchema,
   workflowFactsSchema,
@@ -181,6 +186,9 @@ export {
   type HttpCallsite,
   type CredentialRef,
   type CallerPolicy,
+  type MaskMechanism,
+  type MaskReason,
+  type CanMaskFailures,
   type CoverageGapKind,
   type CoverageGap,
   type WorkflowFacts,

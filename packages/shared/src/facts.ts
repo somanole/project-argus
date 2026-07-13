@@ -119,6 +119,44 @@ export const credentialRefSchema = z.object({
 });
 export type CredentialRef = z.infer<typeof credentialRefSchema>;
 
+/**
+ * The mechanism by which a node can swallow an error (S6.3, Layer 1). Deterministic,
+ * from the workflow JSON — NOT an LLM judgment. A sibling of `broken_ref`, not a risk flag.
+ *  - `continue-regular-output` — node's `onError: continueRegularOutput`: an error is merged
+ *    into the normal output and the run continues green.
+ *  - `legacy-continue-on-fail` — the legacy `continueOnFail: true` (same effect).
+ *  - `dead-end-error-branch` — `onError: continueErrorOutput` whose error output has no
+ *    downstream node: the error is routed to a branch that goes nowhere.
+ */
+export const maskMechanismSchema = z.enum([
+  'continue-regular-output',
+  'legacy-continue-on-fail',
+  'dead-end-error-branch',
+]);
+export type MaskMechanism = z.infer<typeof maskMechanismSchema>;
+
+/** One node that can mask failures, and how. */
+export const maskReasonSchema = z.object({
+  nodeName: z.string(),
+  mechanism: maskMechanismSchema,
+});
+export type MaskReason = z.infer<typeof maskReasonSchema>;
+
+/**
+ * "Can mask failures" — an ADVISORY config-risk flag (S6.3, Layer 1). It says a workflow is
+ * *configured* so a node failure could be hidden — NOT that it *has* failed (that is the
+ * dynamic silent-failure signal on health). `flagged` is honest: it is only set when the node
+ * graph was parsed; a workflow whose JSON couldn't be read carries `flagged: false` (rule 5),
+ * never a fabricated risk. `noErrorWorkflow` is amplifying context, not itself the trigger.
+ */
+export const canMaskFailuresSchema = z.object({
+  flagged: z.boolean(),
+  reasons: z.array(maskReasonSchema),
+  /** The workflow has no `settings.errorWorkflow` catch-all — context for the reason text. */
+  noErrorWorkflow: z.boolean(),
+});
+export type CanMaskFailures = z.infer<typeof canMaskFailuresSchema>;
+
 /** Inward-facing caller policy (who may call this workflow). Stored, not shown here (held for S5). */
 export const callerPolicySchema = z.object({
   /** 'workflowsFromSameOwner' | 'workflowsFromAList' | 'any' | 'none' | null. */
@@ -147,7 +185,7 @@ export type CoverageGap = z.infer<typeof coverageGapSchema>;
 /** The full deterministic fact set for one workflow. */
 export const workflowFactsSchema = z.object({
   /** Bump when the fact shape changes — forces recompute on next sync. */
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(3),
   analyzedAt: z.string(),
   nodeCount: z.number().int(),
   nodeTypes: z.array(nodeTypeFactSchema),
@@ -160,6 +198,8 @@ export const workflowFactsSchema = z.object({
   credentialTypes: z.array(z.string()),
   dataTableRefs: z.array(dataTableRefSchema),
   mcpExposed: z.boolean(),
+  /** S6.3 Layer 1 — advisory "can mask failures" config-risk (deterministic, no LLM). */
+  canMaskFailures: canMaskFailuresSchema,
   directDeps: z.array(directDepSchema),
   /** Cross-workflow endpoint facts (S5): webhook entry points, HTTP call sites, credential bindings. */
   webhookEndpoints: z.array(webhookEndpointSchema),

@@ -1,6 +1,6 @@
 {
   "$probe": "public API rejects a request with no X-N8N-API-KEY",
-  "capturedAt": "2026-07-07T13:40:49.528Z",
+  "capturedAt": "2026-07-11T23:14:05.049Z",
   "n8nVersion": "2.29.0",
   "request": {
     "method": "GET",

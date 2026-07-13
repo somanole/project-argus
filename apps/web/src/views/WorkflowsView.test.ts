@@ -18,7 +18,7 @@ const workflowsBody = {
     {
       instanceId: 'a', instanceLabel: 'prod', id: 'w1', name: 'Alpha', active: true, isArchived: false,
       project: 'Revenue Ops', updatedAt: '2026-07-05T00:00:00.000Z',
-      systems: ['Salesforce'], triggers: ['n8n-nodes-base.webhook'], mcpExposed: true, nodeCount: 3, understood: true, brokenRefCount: 0,
+      systems: ['Salesforce'], triggers: ['n8n-nodes-base.webhook'], mcpExposed: true, nodeCount: 3, understood: true, brokenRefCount: 0, canMaskFailures: false,
       enrichment: null, health: null, owner: null,
     },
   ],
@@ -89,9 +89,12 @@ describe('Catalog chrome — UI-presence (rule 11)', () => {
     await flushPromises();
     const tid = (id: string) => w.find(`[data-testid="${id}"]`);
 
-    for (const f of ['filter-search', 'filter-state', 'filter-mcp', 'filter-broken', 'filter-instance', 'filter-system', 'filter-criticality', 'filter-health', 'filter-trigger']) {
+    for (const f of ['filter-search', 'filter-state', 'filter-mcp', 'filter-broken', 'filter-can-mask', 'filter-silently-failing', 'filter-instance', 'filter-system', 'filter-criticality', 'filter-health', 'filter-trigger']) {
       expect(tid(f).exists(), `${f} should render`).toBe(true);
     }
+    // S6.3 config-risk + observed-failure facets.
+    expect(tid('filter-can-mask').text()).toContain('Can mask failures');
+    expect(tid('filter-silently-failing').text()).toContain('Silently failing');
     // The criticality facet offers the levels.
     expect(tid('filter-criticality').text()).toContain('high');
     // The health facet offers the S3 statuses.

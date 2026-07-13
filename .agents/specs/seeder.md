@@ -58,6 +58,13 @@ that reads like a real company's n8n.
 - **Deliberate failures with real history**: an always-failing critical "Daily
   Stripe Reconciliation", a flaky "Zendesk Sync" (mix of success and error), and
   an alternating "Data Quality Sentinel".
+- **Green-but-swallowing (S6.3)**: "Inventory Sync" — every webhook run is **run-level
+  success**, but its "Push to Warehouse" HTTP node hits a dead host on every run and the
+  error is **swallowed** (`onError: continueRegularOutput`). n8n shows it green; Argus must
+  read it as **silently failing** (offending node + error class) and flag it can-mask.
+- **Mask-prone but healthy (S6.3)**: "Resilient Notifier" — same swallow config on a node
+  that **never throws**, so it carries the **can-mask-failures** advisory flag but has **no**
+  silent failure. (Requires `buildWorkflow` to pass a node's `onError` through to n8n.)
 - A **single-owner-critical** person: one individual solely owns 5 workflows
   tagged critical, with no backup owner.
 - A **personal-space-critical** workflow: a critical workflow living in a person's
@@ -171,6 +178,9 @@ Every n8n shape the seeder relies on is captured live in `contracts/` (rule 1):
 - [ ] **Exactly one orphan** — "Old CSV Import", inactive, zero inbound calls. → 1.
 - [ ] **Deliberate failures present** — Stripe Reconciliation has error-only history;
       Zendesk Sync and Data Quality Sentinel each have both success and error. → 1 + 2.
+- [ ] **Green-but-swallowing present (S6.3)** — Inventory Sync's runs are all `success`
+      while its "Push to Warehouse" node swallows an error every run; Resilient Notifier
+      carries the swallow config but never errors. → detected silently-failing = 1.
 - [ ] **Single-owner-critical** — one person solely owns 5 critical workflows. → 5.
 - [ ] **Archived-but-called** — one archived workflow is still called by a live
       (non-archived) workflow. → 1.

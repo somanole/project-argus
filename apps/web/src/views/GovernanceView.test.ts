@@ -15,7 +15,7 @@ vi.mock('vue-router', async (orig) => ({ ...(await orig<object>()), useRoute: ()
 const listItem = (over: Record<string, unknown>) => ({
   instanceId: 'a', instanceLabel: 'prod', id: 'w1', name: 'Refund Processor',
   active: true, isArchived: false, project: 'Revenue Ops', updatedAt: '2026-07-05T00:00:00.000Z',
-  systems: [], triggers: [], mcpExposed: false, nodeCount: 2, understood: true, brokenRefCount: 0,
+  systems: [], triggers: [], mcpExposed: false, nodeCount: 2, understood: true, brokenRefCount: 0, canMaskFailures: false,
   enrichment: { status: 'analyzed', provider: 'o', model: 'm', enrichedAt: '2026-07-05T00:00:00.000Z', corrected: false,
     summary: 's', description: 'd', category: 'revenue-ops', criticality: 'critical', criticalityReason: 'money', riskFlags: [], suggestedOwnerRationale: null, businessContext: null },
   health: null,
@@ -64,6 +64,12 @@ describe('Ownership view — register (rule 11)', () => {
     for (const v of ['needs-owner', 'unowned', 'critical-at-risk', 'no-backup']) {
       expect(tid(`ownership-filter-${v}`).exists()).toBe(true);
     }
+    expect(tid('ownership-filter-no-backup').text()).toContain('No backup owner');
+
+    // Poll-fresh indicator (consistent with Explore/Health) + synced + Refresh.
+    expect(tid('ownership-freshness').exists()).toBe(true);
+    expect(tid('ownership-freshness').text()).toContain('Polling');
+    expect(tid('synced-indicator').exists()).toBe(true);
 
     // The register table with owner + backup + risk.
     expect(tid('ownership-register').exists()).toBe(true);

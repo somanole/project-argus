@@ -90,12 +90,45 @@ data server-side**; Argus reads an **allowlist of only** `lastNodeExecuted` +
 and data stay in n8n, one click away. Data-minimization holds: on-demand, redacted,
 allowlisted, not stored (contracts/n8n-18).
 
+**Silent-failure detection — "green but broken" (S6.3).** A run can be **green while a step
+silently failed** — a node errored and was swallowed (`onError: continueRegularOutput`,
+legacy `continueOnFail`, or an error branch that dead-ends). Argus surfaces this as **facts**,
+never a claim about whether the workflow did "the right thing" (rule 5):
+
+- **Layer 2 — the dynamic "silently failing" signal (this spec).** For the workflows the
+  Layer-1 flag marks (see the analyzer spec), Argus reports "**node X errored but the run was
+  marked success, N of M inspected runs**", with the node named and the error **type/code**
+  (e.g. `Push to Warehouse — Error · ECONNREFUSED`). It is an **orthogonal dimension**, not a
+  status: a silent-failer's runs are `success`, so its status stays `healthy`/`idle` and the
+  signal rides **alongside** the badge, never replacing it. Recency is bounded by the same
+  retention window as S3.
+- **The one relaxation (contract-verified, rule 1).** `contracts/n8n-23` proved that at n8n
+  2.29 a swallowed node error is **invisible in the redacted execution detail** (the node
+  reads `executionStatus: success`; redaction clears `item.json` to `{}`). So Layer 2 —
+  **and only Layer 2** — reads the **un-redacted** detail for the flagged workflows, and Argus
+  **allowlists it server-side to node name + error type/code ONLY** (never the message, stack,
+  or any payload; the allowlisting lives in one client function and the raw detail is never
+  persisted). A deliberate, narrow exception to the S3 "redaction is n8n-side" rule, scoped to
+  the can-mask-failures workflows + on-demand in the drawer.
+- **Selective fetch, never fleet-wide.** The poll inspects only the **can-mask-failures**
+  workflows' recent **success** runs (capped per workflow) — a *necessary* precondition, so
+  the scope is sound, not a sample. The drawer additionally computes it **live on-demand** for
+  any opened workflow. A detail-read failure leaves the signal **null** ("not inspected"),
+  never a fabricated "clean".
+- **Honest boundary.** Absence of the signal means **"not observed silently failing"**, never
+  **"verified clean"** — only flagged/opened workflows are inspected at all, and the UI says
+  so. A Code-node swallow whose only detail is a message string is reported as **present**
+  (node named) with a null type/code — the message is never surfaced. Detects "a node failed
+  silently" (a fact); does **not** detect business-wrong-but-error-free results (out of scope).
+
 ## Non-goals
 
 <!-- What this subsystem deliberately does NOT do. Stops scope creep mid-session. -->
 
 - **No real-time events.** Failure/waiting/resumed via Log Streaming is deferred;
   health is poll-fresh only, and says so.
+- **No detection of what redaction hides.** Layer 2 reports only what the un-redacted detail
+  exposes as an allowlisted class; it never reconstructs or stores payloads/messages.
 - **No ownership or incident package.** The failing view shows health + criticality,
   not owners, downstream impact, or recent-change context — that is **S4**.
 - **No fleet-level Insights corroboration.** The owner-key `insights/summary` opt-in is
@@ -158,6 +191,21 @@ allowlisted, not stored (contracts/n8n-18).
 - [ ] The execution-debug fetch **degrades honestly** to "unavailable" (with a reason)
       when executions can't be read — never a fabricated/empty run list shown as truth.
 
+**Silent-failure detection (S6.3 Layer 2).**
+- [ ] The rule-1 probe `contracts/n8n-23` is captured and records the finding: a swallowed
+      node error is **invisible under redaction** at n8n 2.29, so Layer 2 reads the
+      **un-redacted** detail and allowlists to node name + error type/code only.
+- [ ] The seeded **green-but-swallowing** workflow (`Inventory Sync`) reads as **silently
+      failing** with the offending node named (`Push to Warehouse`) and the error class,
+      even though n8n marks every run `success`.
+- [ ] A seeded **mask-prone but healthy** workflow (`Resilient Notifier`) shows the
+      **can-mask-failures** advisory flag but **no** silent-failure signal; a genuinely
+      healthy control (`Order Intake`) shows **neither**.
+- [ ] The silent-failure signal is **allowlisted**: node name + error type/code only —
+      **no** error message, stack, or payload ever appears in Argus's output or storage.
+- [ ] Absence of the signal is **"not observed"**, not "clean": only can-mask (poll) /
+      opened (drawer) workflows are inspected, and a detail-read failure leaves it null.
+
 **UI presence (standing rule 11 — this chrome is guarded, not just built).**
 Each element carries a stable `data-testid`, a fast component test asserting it renders
 with its key text/state (not appearance), and a `pnpm verify` row.
@@ -174,6 +222,10 @@ with its key text/state (not appearance), and a `pnpm verify` row.
       **poll-fresh/honest-stale** indicator (`health-freshness`) are shown, and the list is
       **paginated** (the shared `ListPager`, 50/page). Empty state is reassuring for the
       problem views ("Nothing failing right now"), neutral otherwise ("No idle workflows…").
+      For **consistency with the Ownership register**, the view also carries an instance
+      **scope** (`health-scope`) + **search** (`health-search`) that narrow the active tile's
+      list; the tiles stay **estate-wide** (like Ownership's summary-over-all), so their counts
+      don't jump as you scope.
 - [ ] The **detail drawer** shows a **health section** (`health-section`): status,
       failure rate, last run, average duration, window, and checked-N-ago — and, on
       demand, the **recent-runs list** (`execution-runs`) + the **redacted failure
@@ -182,6 +234,16 @@ with its key text/state (not appearance), and a `pnpm verify` row.
       debugging surface); existing chrome unchanged (additive, rule 11).
 - [ ] A new top-nav **"Health"** item routes to the view; existing chrome is unchanged
       (additive only, rule 11).
+- [ ] **S6.3:** the catalog/drawer health badge carries an **additive silent-failure
+      overlay** (`health-silent-badge`) when a green run swallowed a node error — it never
+      replaces the status pill. The **drawer** shows the silently-failing box
+      (`health-silent-failure`, node + count + error class) and the advisory
+      **can-mask-failures** flag (`can-mask-flag`, offending node + the exact n8n On-Error
+      config). The **Health view** adds a **silently-failing tile** (`health-tile-silent`)
+      and a **can-mask-failures tile** (`health-tile-can-mask`, muted — a config-risk kept
+      distinct from the live health-state tiles), each filtering the list. Both signals are
+      also **Explore facets** (`filter-can-mask`, `filter-silently-failing`) and silently-
+      failing is an **Overview tile** (`overview-silently-failing`). All additive (rule 11).
 
 **Responsive (standing rule 10 — both themes AND both widths).** Each hero view is
 rendered at 375px + desktop, in light AND dark, asserted to have no horizontal overflow.
