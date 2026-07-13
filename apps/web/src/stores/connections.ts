@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import {
   connectionsResponseSchema,
   connectionResponseSchema,
@@ -7,6 +7,7 @@ import {
   type ConnectionInput,
 } from '@argus/shared';
 import { api } from '../lib/api';
+import { assignInstanceColors } from '../lib/instanceColor';
 
 /**
  * The connections registry, client side. Holds the list (with live health) and
@@ -16,6 +17,10 @@ export const useConnectionsStore = defineStore('connections', () => {
   const connections = ref<Connection[]>([]);
   const state = ref<'idle' | 'loading' | 'ok' | 'error'>('idle');
   const error = ref<string | null>(null);
+
+  // Give each connected instance a distinct, stable accent color (so prod ≠ staging)
+  // the moment the registry is known — every view's dots read from this assignment.
+  watch(connections, (list) => assignInstanceColors(list.map((c) => c.id)), { immediate: true });
 
   async function refresh(): Promise<void> {
     if (state.value === 'idle') state.value = 'loading';

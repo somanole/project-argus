@@ -2,10 +2,16 @@
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from './stores/auth';
+import { useConnectionsStore } from './stores/connections';
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const connections = useConnectionsStore();
+
+// Load the connections registry once signed in, so each instance gets its distinct
+// accent color estate-wide (drives the prod/staging dots on every filter, drawer, graph).
+watch(() => auth.actor, (actor) => { if (actor) void connections.refresh(); }, { immediate: true });
 
 // The chrome (sidebar) is only shown once signed in; the login page is bare.
 const showShell = computed(() => auth.actor !== null && route.name !== 'login');
