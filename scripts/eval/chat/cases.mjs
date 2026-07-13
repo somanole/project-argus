@@ -65,7 +65,9 @@ export const CANONICAL = [
     id: 'audit',
     question: "Who assigned the owner of 'Daily Stripe Reconciliation', and when?",
     expectedTools: ['audit_log'],
-    mustMentionAny: ['Priya Admin', 'priya@corp.io'],
+    // Names-only egress (DECISION #29): the audit tool emits the actor NAME with actorEmail:null,
+    // so a faithful answer surfaces "Priya Admin", never the (correctly withheld) priya@corp.io.
+    mustMentionAny: ['Priya Admin'],
   },
 ];
 

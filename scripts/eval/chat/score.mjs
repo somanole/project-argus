@@ -30,6 +30,15 @@ const STOPWORD_ENTITIES = new Set([
   'high', 'medium', 'low', 'failing', 'degraded', 'healthy', 'idle', 'unknown',
   'settings', 'production', 'staging', 'governance', 'score', 'here', 'this', 'that',
   'these', 'those', 'currently', 'right', 'now',
+  // 'mcp' — Model Context Protocol, the n8n external-agent exposure MECHANISM Argus reports on
+  // (the `mcp_exposure` tool, n8n's MCP server trigger). Adjudicated at H4: it is a product/
+  // protocol acronym, the same class of Capitalized product chrome as 'argus'/'n8n'/'governance
+  // score' above — never a fabricated workflow/person/system name. It is un-grounded only because
+  // the acronym isn't spelled out in the tool-result VALUES (the mechanism is a boolean flag +
+  // the tool's name, not an estate entity), so a model that writes "the MCP exposure"/`"MCP"`
+  // would trip the entity check. Exempting it keeps the gate from crying wolf (see header) without
+  // weakening it: MCP is not an estate fact, so nothing real is laundered through this exemption.
+  'mcp',
 ]);
 
 // Ordinary words that a Capitalized span may START or END with because it began a
