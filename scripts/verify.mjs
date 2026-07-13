@@ -870,6 +870,20 @@ async function s1aChecks() {
     const li = await argus('/api/auth/login', { method: 'POST', body: { password: 'verify-admin', name: 'Verify Owner', email: 'verify@acme.example' } });
     cookie = li.setCookies.map((c) => c.split(';')[0]).join('; ');
 
+    // Logins & logouts land in the self-audit timeline — the operator's comings and goings
+    // show alongside every other governance action. Exercise a throwaway session so both
+    // actions are recorded, then read them back with the main session.
+    {
+      const tmp = await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'verify-admin', name: 'Comes And Goes', email: 'transient@acme.example' }) });
+      const tmpCookie = (tmp.headers.getSetCookie?.() ?? []).map((c) => c.split(';')[0]).join('; ');
+      await fetch(`${base}/api/auth/logout`, { method: 'POST', headers: { cookie: tmpCookie } });
+      const timeline = (await argus('/api/ownership/audit?action=auth&limit=50')).json ?? {};
+      const acts = (timeline.entries ?? []).map((e) => e.action);
+      add('Logins & logouts are audited (auth.login / auth.logout in the timeline)',
+        acts.includes('auth.login') && acts.includes('auth.logout'),
+        `login=${acts.includes('auth.login')}, logout=${acts.includes('auth.logout')}; ${timeline.total ?? 0} auth events`);
+    }
+
     // Connect to n8n (mint read keys) + read the ground truth per instance.
     const prodC = await connect(INSTANCES.prod.baseUrl);
     const stagingC = await connect(INSTANCES.staging.baseUrl);

@@ -91,10 +91,19 @@ is later.)
 
 **The audit timeline — Argus's own self-audit.** Every Argus mutation (ownership
 lifecycle, label corrections, connection changes) is append-only audit-logged with
-actor, action, entity, before→after, reason, and timestamp. A **unified timeline** view
-shows these entries, **filterable** (by action, entity, actor, date) and **exportable**
-(CSV, secret-free). This is **Argus's own self-audit only** — ingested `n8n.audit.*`
-events join when the deferred Log Streaming receiver lands.
+actor, action, entity, before→after, reason, and timestamp. **Access is audited too:**
+each successful **login** (`auth.login`) and **logout** (`auth.logout`) writes an
+append-only entry attributed to the asserted actor, with a `session` entity — so who
+came and went reads in the same timeline as every other action. A **rejected** login
+(wrong password) is **never** audited: there is no authenticated actor to attribute
+(rule 5). A **unified timeline** view shows these entries, **filterable** (by action,
+entity, actor, date) and **exportable** (CSV, secret-free). This is **Argus's own
+self-audit only** — ingested `n8n.audit.*` events join when the deferred Log Streaming
+receiver lands.
+
+**Acceptance:** a login and a logout each appear in the timeline as `auth.login` /
+`auth.logout` attributed to the actor; a wrong-password attempt leaves no entry
+(`pnpm verify` row + `app.test.ts`).
 
 ## Non-goals
 

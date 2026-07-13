@@ -78,6 +78,30 @@ describe('Argus API', () => {
     expect(res.headers['set-cookie']?.[0]).toMatch(/argus_session=/);
   });
 
+  it('audits every login and logout (but not a rejected login) in the self-audit timeline', async () => {
+    const agent = request.agent(app);
+    // A rejected login must NOT be audited — there is no authenticated actor to attribute.
+    await agent.post('/api/auth/login').send({ password: 'wrong', name: 'Mallory', email: 'mallory@x.example' });
+    // A successful login, then logout, then log back in so we can read the timeline.
+    await agent.post('/api/auth/login').send({ password: 'pw', name: 'Sam Rivers', email: 'sam@acme.example' });
+    await agent.post('/api/auth/logout');
+    await agent.post('/api/auth/login').send({ password: 'pw', name: 'Sam Rivers', email: 'sam@acme.example' });
+
+    const audit = await agent.get('/api/ownership/audit?action=auth');
+    expect(audit.status).toBe(200);
+    const actions = audit.body.entries.map((e: { action: string }) => e.action);
+    expect(actions).toContain('auth.login');
+    expect(actions).toContain('auth.logout');
+    // The rejected attempt left no trace — no entry attributed to Mallory.
+    expect(audit.body.entries.some((e: { actorEmail: string }) => e.actorEmail === 'mallory@x.example')).toBe(false);
+    // The login entry carries the asserted actor + a `session` entity.
+    expect(audit.body.entries.find((e: { action: string }) => e.action === 'auth.login')).toMatchObject({
+      actorName: 'Sam Rivers', actorEmail: 'sam@acme.example', entityType: 'session',
+    });
+    // `auth.login` / `auth.logout` are offered as filter options in the timeline.
+    expect(audit.body.actions).toEqual(expect.arrayContaining(['auth.login', 'auth.logout']));
+  });
+
   it('registers a connection, syncs it, and never returns the API key', async () => {
     const agent = request.agent(app);
     await agent.post('/api/auth/login').send({ password: 'pw', name: 'Sam', email: 'sam@acme.example' });

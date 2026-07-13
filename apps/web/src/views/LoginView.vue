@@ -28,7 +28,7 @@ async function submit(): Promise<void> {
   error.value = null;
   try {
     await auth.login({ password: password.value, name: name.value, email: email.value });
-    const next = typeof route.query.next === 'string' ? route.query.next : '/workflows';
+    const next = typeof route.query.next === 'string' ? route.query.next : '/overview';
     await router.replace(next);
   } catch (err) {
     error.value = err instanceof ApiError ? err.message : 'could not sign in';

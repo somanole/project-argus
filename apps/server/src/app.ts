@@ -50,8 +50,8 @@ export function createApp(deps: AppDeps): Express {
     res.json(healthResponseSchema.parse(body));
   });
 
-  // Public: login / logout / me.
-  app.use('/api/auth', authRouter(config));
+  // Public: login / logout / me. (db so login/logout write to the sacred audit_log.)
+  app.use('/api/auth', authRouter(config, db));
 
   // Everything else is behind the session guard.
   const guard = requireAuth(config.sessionSecret);
