@@ -217,7 +217,7 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <input v-model="qInput" class="input search" type="search" placeholder="Search by name…" aria-label="Search workflows by name" data-testid="filter-search">
+        <input v-model="qInput" class="input search" type="search" placeholder="Search by name or owner…" aria-label="Search workflows by name or owner" data-testid="filter-search">
 
         <!-- Filters panel: everything except instance + search. -->
         <div class="filters-anchor">

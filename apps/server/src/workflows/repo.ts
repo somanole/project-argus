@@ -431,8 +431,16 @@ function buildWorkflowWhere(filters: WorkflowFilters): { clause: string; params:
     params.push(...filters.triggers);
   }
   if (filters.q) {
-    where.push('w.name LIKE ? ESCAPE \'\\\'');
-    params.push(`%${filters.q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`);
+    const like = `%${filters.q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+    // Match the workflow NAME or its resolved (assigned-over-inferred) OWNER — name or
+    // email — so flows can be found by who owns them. The CASE mirrors buildResolvedOwner:
+    // an assignment wins, otherwise the advisory inferred owner is used.
+    where.push(
+      `(w.name LIKE ? ESCAPE '\\'
+        OR (CASE WHEN o.assigned_at IS NOT NULL THEN o.owner_name ELSE io.owner_name END) LIKE ? ESCAPE '\\'
+        OR (CASE WHEN o.assigned_at IS NOT NULL THEN o.owner_email ELSE io.owner_email END) LIKE ? ESCAPE '\\')`,
+    );
+    params.push(like, like, like);
   }
 
   return { clause: where.length ? ` WHERE ${where.join(' AND ')}` : '', params };
@@ -459,9 +467,13 @@ export function listWorkflows(db: Database.Database, filters: WorkflowFilters = 
 /** Total workflows matching the filters (ignores limit/offset) — the pagination denominator. */
 export function countWorkflows(db: Database.Database, filters: WorkflowFilters = {}): number {
   const { clause, params } = buildWorkflowWhere(filters);
+  // The owner joins mirror LIST_SELECT so the shared WHERE (which can reference o/io for
+  // owner search) resolves identically here — list and count must always agree.
   const row = db.prepare(`SELECT COUNT(*) AS n FROM workflows w JOIN connections c ON c.id = w.instance_id
     LEFT JOIN workflow_enrichments e ON e.instance_id = w.instance_id AND e.workflow_id = w.id
-    LEFT JOIN workflow_health h ON h.instance_id = w.instance_id AND h.workflow_id = w.id${clause}`).get(...params) as { n: number };
+    LEFT JOIN workflow_health h ON h.instance_id = w.instance_id AND h.workflow_id = w.id
+    LEFT JOIN workflow_ownership o ON o.instance_id = w.instance_id AND o.workflow_id = w.id
+    LEFT JOIN workflow_inferred_owner io ON io.instance_id = w.instance_id AND io.workflow_id = w.id${clause}`).get(...params) as { n: number };
   return row.n;
 }
 

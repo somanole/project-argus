@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useEstateHealthStore, type HealthView } from '../stores/estate-health';
 import { useConnectionsStore } from '../stores/connections';
-import type { WorkflowListItem } from '@argus/shared';
+import { workflowMatchesQuery, type WorkflowListItem } from '@argus/shared';
 import WorkflowHealthBadge from '../components/WorkflowHealthBadge.vue';
 import EnrichmentBadges from '../components/EnrichmentBadges.vue';
 import OwnerBadge from '../components/OwnerBadge.vue';
@@ -78,14 +78,14 @@ watch(qInput, (v) => {
   if (qTimer) clearTimeout(qTimer);
   qTimer = setTimeout(() => (q.value = v), 250);
 });
-const filteredRows = computed<WorkflowListItem[]>(() => {
-  const needle = q.value.trim().toLowerCase();
-  return rows.value.filter(
+const filteredRows = computed<WorkflowListItem[]>(() =>
+  rows.value.filter(
     (w) =>
       (instanceFilter.value === 'all' || w.instanceId === instanceFilter.value) &&
-      (!needle || w.name.toLowerCase().includes(needle)),
-  );
-});
+      // Matches the workflow name OR its owner (assigned or inferred) — search by owner.
+      workflowMatchesQuery(w, q.value),
+  ),
+);
 
 // The list is the active tile's set (scoped + searched), paginated client-side.
 const PAGE_SIZE = 50;
@@ -175,7 +175,7 @@ onUnmounted(() => {
           <span class="dot" :style="{ background: instanceColor(i.id) }" />{{ i.label }}
         </button>
       </div>
-      <input v-model="qInput" class="input search" type="search" placeholder="Search by name…" aria-label="Search workflows by name" data-testid="health-search">
+      <input v-model="qInput" class="input search" type="search" placeholder="Search by name or owner…" aria-label="Search workflows by name or owner" data-testid="health-search">
     </div>
 
     <p v-if="state === 'loading'" class="muted pad">Loading estate health…</p>

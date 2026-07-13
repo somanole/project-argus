@@ -16,6 +16,7 @@ import type {
   OwnershipRegisterSummary,
   OwnershipRisk,
 } from '@argus/shared';
+import { workflowMatchesQuery } from '@argus/shared';
 import { withAudit } from '../db/audit.js';
 import { listWorkflows } from '../workflows/repo.js';
 
@@ -527,10 +528,10 @@ export function ownershipRegister(
     noBackup: decorated.filter((d) => d.noBackup).length,
   };
 
-  const q = filters.q?.trim().toLowerCase();
   const filtered = decorated.filter((d) => {
     if (filters.instanceId && d.row.instanceId !== filters.instanceId) return false;
-    if (q && !d.row.name.toLowerCase().includes(q)) return false;
+    // Match the workflow name OR its resolved owner (assigned or inferred) — search by owner.
+    if (!workflowMatchesQuery(d.row, filters.q ?? '')) return false;
     if (filters.criticalAtRisk && !d.criticalAtRisk) return false;
     if (filters.risk && !d.row.risks.includes(filters.risk)) return false;
     switch (filters.state) {

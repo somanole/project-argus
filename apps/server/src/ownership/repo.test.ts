@@ -211,6 +211,21 @@ describe('governance gaps', () => {
     expect(page.total).toBe(5);
   });
 
+  it('ownershipRegister search matches the owner — assigned or inferred (search flows by owner)', () => {
+    assignOwner(db, ACTOR, 'prod', 'p1', { ownerEmail: 'sam@corp.io', ownerName: 'Sam Rivers' });
+    replaceInferredOwners(db, 'staging', [
+      { workflowId: 's1', ownerEmail: 'priya@n8n.io', ownerName: 'Priya Member', source: 'project-member', memberRole: 'project:admin', reason: null },
+    ], ISO);
+
+    expect(ownershipRegister(db, { q: 'sam' }).rows.map((r) => r.id)).toEqual(['p1']);        // assigned, by name
+    expect(ownershipRegister(db, { q: 'sam@corp' }).rows.map((r) => r.id)).toEqual(['p1']);   // assigned, by email
+    expect(ownershipRegister(db, { q: 'priya' }).rows.map((r) => r.id)).toEqual(['s1']);      // inferred (advisory)
+    expect(ownershipRegister(db, { q: 'invoice' }).rows.map((r) => r.id)).toEqual(['p2']);    // still matches name
+
+    const r = ownershipRegister(db, { q: 'sam' });
+    expect(r.total).toBe(r.rows.length); // total tracks the filtered rows
+  });
+
   it('no-backup-owner surfaces an assigned critical with no backup; adding a backup clears it', () => {
     assignOwner(db, ACTOR, 'prod', 'p1', { ownerEmail: 'sam@corp.io', ownerName: 'Sam' });
     expect(noBackupOwner(db).some((g) => g.workflowId === 'p1')).toBe(true);

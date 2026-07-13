@@ -150,7 +150,7 @@ onUnmounted(() => {
           <span class="dot" :style="{ background: instanceColor(i.id) }" />{{ i.label }}
         </button>
       </div>
-      <input v-model="qInput" class="input search" type="search" placeholder="Search by name…" aria-label="Search workflows by name" data-testid="ownership-search">
+      <input v-model="qInput" class="input search" type="search" placeholder="Search by name or owner…" aria-label="Search workflows by name or owner" data-testid="ownership-search">
       <button v-if="view !== 'all'" class="linkish" data-testid="ownership-show-all" @click="store.setView('all')">Show all {{ summary?.total ?? '' }}</button>
     </div>
 

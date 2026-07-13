@@ -56,6 +56,7 @@ export {
 } from './connections.js';
 export {
   workflowListItemSchema,
+  workflowMatchesQuery,
   workflowFacetsSchema,
   workflowsResponseSchema,
   workflowDetailSchema,

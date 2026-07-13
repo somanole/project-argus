@@ -912,6 +912,27 @@ async function s1aChecks() {
     const sf = (await argus(`/api/workflows?instanceId=${stagingId}`)).json?.total ?? 0;
     add('Filter by instance', pf === prodWfs.length && sf === stagingWfs.length, `prod ${pf}, staging ${sf}`);
 
+    // Search matches the OWNER (assigned or inferred), not just the name — so flows can be
+    // found by who owns them. Probe with a real owner name from the live estate: every
+    // result must match by name-or-owner, and at least one must match by OWNER alone.
+    const estateList = (await argus('/api/workflows?limit=5000')).json ?? {};
+    const owned = (estateList.workflows ?? []).find((w) => w.owner?.owner?.name);
+    if (owned) {
+      const ownerName = owned.owner.owner.name;
+      const q = ownerName.toLowerCase();
+      const res = (await argus(`/api/workflows?q=${encodeURIComponent(ownerName)}&limit=5000`)).json ?? {};
+      const rows = res.workflows ?? [];
+      const matchesContract = rows.length > 0 && rows.every((w) =>
+        w.name.toLowerCase().includes(q)
+        || (w.owner?.owner?.name ?? '').toLowerCase().includes(q)
+        || (w.owner?.owner?.email ?? '').toLowerCase().includes(q));
+      const someByOwner = rows.some((w) => (w.owner?.owner?.name ?? '').toLowerCase().includes(q) && !w.name.toLowerCase().includes(q));
+      add('Search finds flows by owner (assigned or inferred), never a non-match', matchesContract && someByOwner,
+        `q="${ownerName}" → ${res.total} of ${estateList.total} workflows; all match name-or-owner, ≥1 by owner`);
+    } else {
+      add('Search finds flows by owner (assigned or inferred), never a non-match', true, 'no owned workflow in the estate to probe — skipped');
+    }
+
     // Pagination: page 2 continues where page 1 stopped, and the pages don't overlap.
     const p1 = (await argus('/api/workflows?limit=50&offset=0')).json ?? {};
     const p2 = (await argus('/api/workflows?limit=50&offset=50')).json ?? {};

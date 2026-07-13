@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { workflowFactsSchema, coverageReportSchema } from './facts.js';
 import { workflowEnrichmentSchema } from './enrichment.js';
 import { workflowHealthSchema } from './workflow-health.js';
-import { workflowOwnerSchema } from './ownership.js';
+import { workflowOwnerSchema, type WorkflowOwner } from './ownership.js';
 
 /**
  * The estate-wide workflow inventory contract (server ↔ web). One flat list
@@ -49,6 +49,23 @@ export const workflowListItemSchema = z.object({
   owner: workflowOwnerSchema.nullable(),
 });
 export type WorkflowListItem = z.infer<typeof workflowListItemSchema>;
+
+/**
+ * Does a workflow match a free-text search? Matches the workflow NAME or its resolved
+ * (assigned-over-inferred) OWNER — name or email — so flows can be found by who owns them.
+ * A blank query matches everything. Used by the Health + Ownership searches; the Explore
+ * catalog mirrors this precedence in SQL (buildResolvedOwner: assigned wins, else inferred).
+ */
+export function workflowMatchesQuery(
+  item: { name: string; owner?: WorkflowOwner | null },
+  query: string,
+): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  if (item.name.toLowerCase().includes(q)) return true;
+  const owner = item.owner?.owner;
+  return !!owner && ((owner.name?.toLowerCase().includes(q) ?? false) || (owner.email?.toLowerCase().includes(q) ?? false));
+}
 
 /** The filter facets the UI builds chips from (distinct values + counts). */
 export const workflowFacetsSchema = z.object({
