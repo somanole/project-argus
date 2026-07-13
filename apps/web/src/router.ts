@@ -47,3 +47,21 @@ router.beforeEach(async (to) => {
   if (to.name === 'login' && authed) return { name: 'overview' };
   return true;
 });
+
+/**
+ * Self-heal a stale bundle. A deploy replaces the hashed chunk files; a browser still
+ * running an older index.html then 404s when it lazy-loads a route it hadn't visited yet
+ * (e.g. Chat) — and vue-router silently aborts, so the page looks stuck. Detect that
+ * chunk-load failure and hard-reload once to the target URL, which fetches the current
+ * build. Keyed by path so a genuinely broken chunk can't loop (sessionStorage survives the
+ * reload); every successful navigation clears the guard.
+ */
+router.onError((error, to) => {
+  const message = error instanceof Error ? error.message : String(error);
+  const isChunkLoadError = /dynamically imported module|Importing a module script failed|Failed to fetch/i.test(message);
+  if (isChunkLoadError && to?.fullPath && sessionStorage.getItem('argus:reloaded-for') !== to.fullPath) {
+    sessionStorage.setItem('argus:reloaded-for', to.fullPath);
+    window.location.assign(to.fullPath);
+  }
+});
+router.afterEach(() => sessionStorage.removeItem('argus:reloaded-for'));
