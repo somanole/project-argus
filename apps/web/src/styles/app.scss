@@ -88,6 +88,11 @@
   font-size: var(--font-size--sm);
   padding: var(--spacing--2xs) var(--spacing--xs);
 }
+/* iOS Safari auto-zooms (and stays zoomed) when focusing an input under 16px. Keep
+   inputs at 16px on narrow/touch widths so login and every form leave the page at 1×. */
+@media (max-width: 48rem) {
+  .input { font-size: var(--font-size--md); }
+}
 .input::placeholder { color: var(--color--text--shade-1); opacity: 0.45; }
 .input:focus {
   outline: none;

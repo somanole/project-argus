@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import { workflowDetailSchema, type GraphNode, type GraphScope, type WorkflowListItem } from '@argus/shared';
 import { useGraphStore } from '../stores/graph';
 import { api } from '../lib/api';
@@ -69,8 +69,14 @@ async function pickScope(scope: GraphScope): Promise<void> {
   if (scope === 'system') return graph.load({ scope, focus: systemPick.value });
 }
 
+const panelRef = ref<HTMLElement | null>(null);
 function onSelect(node: GraphNode): void {
   graph.selectNode(node);
+  // On stacked (mobile) layouts the detail panel sits below the canvas — bring it into
+  // view so the selection's blast radius is visible without a manual scroll.
+  if (window.matchMedia('(max-width: 900px)').matches) {
+    void nextTick(() => panelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
 }
 
 // Clicking the selected workflow or any workflow in its blast radius opens the shared
@@ -177,7 +183,7 @@ const sel = computed(() => graph.selectedNode);
         />
       </div>
 
-      <aside class="panel" data-testid="graph-impact-panel">
+      <aside ref="panelRef" class="panel" data-testid="graph-impact-panel">
         <template v-if="sel">
           <div class="p-head">
             <button

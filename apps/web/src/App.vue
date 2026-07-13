@@ -254,9 +254,15 @@ async function logout(): Promise<void> {
   }
   .sidebar.open { transform: translateX(0); }
   .sidebar.collapsed { width: 16rem; }               /* collapse is desktop-only */
-  .sidebar.collapsed .lbl, .sidebar.collapsed .nav-sec,
-  .sidebar.collapsed .who-meta,
-  .sidebar.collapsed .signout { display: revert; }
+  .sidebar.collapsed .lbl, .sidebar.collapsed .nav-sec { display: revert; }
+  .sidebar.collapsed .who-meta { display: flex; }    /* keep name over email, not inline */
+  .sidebar.collapsed .signout { display: inline-grid; }
+  /* The drawer is the expanded layout — undo the icon-rail centering/tightening so nav
+     items sit flush-left and the header/footer keep their normal spacing. */
+  .sidebar.collapsed .nav-item { justify-content: flex-start; }
+  .sidebar.collapsed .side-top { justify-content: space-between; }
+  .sidebar.collapsed .who { justify-content: flex-start; padding-left: var(--spacing--3xs); padding-right: var(--spacing--3xs); }
+  .sidebar.collapsed .nav-children { margin-left: var(--spacing--md); border-left: 1px solid var(--border-color--subtle); padding-left: var(--spacing--3xs); }
   .icon-btn.side-close { display: inline-grid; }
   .collapse-btn { display: none; }
   .content { padding: var(--spacing--md) var(--spacing--sm) var(--spacing--2xl); }
