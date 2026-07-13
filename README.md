@@ -12,11 +12,29 @@ MCP-exposed sensitive workflows, and more.
 Argus is **read-only and advisory** about the estate: it infers ownership and risk,
 shows its confidence, and lets a human decide — it never rewrites your automations.
 
-> **Status.** Argus is built milestone by milestone. **Available today:** the
-> **seeder** (M1) — one command that stands up a realistic two-instance demo estate
-> with real governance problems planted in it — and the app scaffold (M0). The
-> ingestion + analysis that turn that estate into governance findings land in the
-> next milestone (M2). See [`docs/PLAN.md`](docs/PLAN.md) for the full roadmap.
+> **Status — the core experiment is built and green.** Point Argus at one or more n8n
+> instances and it gives you, behind a polished n8n-style UI that works on phone and
+> desktop:
+> - a single **live catalog** of every workflow across the whole estate (connect,
+>   sync, reconcile, filter);
+> - an **AI plain-English summary + category + criticality** per workflow, from the
+>   LLM provider *you* choose (OpenAI, Anthropic, or any self-hosted OpenAI-compatible
+>   endpoint);
+> - **health** — what's healthy, failing, idle, and *silently* failing (green but a
+>   node errored);
+> - **ownership & accountability** — an answerable owner per workflow, governance-gap
+>   detection, and a self-audit timeline of every governance action;
+> - a fleet **dependency graph** + "what breaks if this fails?" blast-radius analysis,
+>   including the cross-instance edges (prod↔staging) nothing else sees;
+> - a single **governance overview**; and
+> - **chat** — ask questions in natural language, answered only from the deterministic
+>   tools (never invented).
+>
+> All automated checks pass (`pnpm verify` is green). Still to come in the next
+> milestone: real-time push updates (Log Streaming receiver), outbound notifications,
+> cross-instance identity resolution, a Docker image, and the independent "blind fleet"
+> evaluation. See [`docs/PLAN.md`](docs/PLAN.md) for the full roadmap and what's
+> deliberately deferred.
 
 ---
 
@@ -56,10 +74,18 @@ pnpm seed
   `http://localhost:5678`**, **staging on `http://localhost:5679`** — each isolated
   in its own data folder under `.n8n-instances/` (git-ignored), so reseeding one
   never touches the other;
-- fills each with 4 team projects, people, credentials, ~25–30 workflows, and real
-  execution history (including deliberate failures);
+- fills each with 4 team projects, people, credentials, **~100 workflows**, and real
+  execution history (including deliberate failures) — a believably messy ~200-workflow
+  estate, not a tidy dozen;
+- plants the governance problems every view is built to surface: a broken sub-workflow
+  reference, an orphan, a single owner holding 5 critical workflows, a green-but-
+  silently-failing run, MCP-exposed workflows reaching sensitive systems, an archived
+  workflow still called by an active one, and more;
 - wires the cross-instance scenarios (a staging workflow that reaches into prod, a
-  person who owns critical workflows in both instances, a shared Salesforce system).
+  person who owns critical workflows in both instances, a shared Salesforce system);
+- and, if a local Argus is already running, **re-registers both connections into it
+  with fresh read-only keys** — so the app is pointed at the freshly-seeded estate
+  automatically (see step 4).
 
 ### 2. Open the two instances
 
@@ -91,12 +117,37 @@ intended.
 pnpm dev
 ```
 
-Then open **http://localhost:5173**. This runs the Argus server + web UI together.
+Then open **http://localhost:5173** (server + web UI run together). Log in with the
+dev default password **`argus`** and any name/email you like (the identity is
+*asserted*, stamped on your session and every audit entry — see the security note
+below).
 
-> Today the UI is the scaffold — it confirms the app is wired up and healthy. The
-> dashboards, dependency graph, and chat that read the seeded estate and report on
-> it arrive in the next milestone; `pnpm verify` is the current window into the
-> estate's governance state.
+**Point the app at the estate.** The connection registry lives in the app's
+**Connections** page. Since you seeded (step 1) *before* Argus was running, the app has
+no connections yet — get them in with either:
+
+- **re-run `pnpm seed`** now that Argus is up — it **auto-registers both instances** into
+  the running app with fresh read-only keys; or
+- add the two by hand in **Connections** — base URL `http://localhost:5678` / `:5679`
+  plus a read-only n8n API key from each instance.
+
+(Tip: start `pnpm dev` *before* your first `pnpm seed` and the auto-register happens on
+that first seed.)
+
+Once connected, Argus polls each instance (~30s), syncs the catalog, and — if you've
+picked an LLM provider in **Settings** — enriches each workflow. Then explore:
+
+- **Overview** — the estate at a glance.
+- **Estate** — the workflow catalog (**Explore**), with **Health**, **Ownership**, and
+  the dependency **Graph** as lenses over the same estate.
+- **Chat** — ask questions in natural language.
+- **Activity** — the unified governance audit timeline.
+- **Connections** / **Settings** — instances and LLM provider.
+
+> Everything except **enrichment** and **chat** is fully deterministic and works with
+> **no LLM configured at all** — the catalog, health, ownership, gaps, and graph are
+> all computed, not guessed. `pnpm verify` remains the executable, plain-English report
+> of every signed-off behavior.
 
 ### Handy follow-ups
 
@@ -109,30 +160,37 @@ Then open **http://localhost:5173**. This runs the Argus server + web UI togethe
 ## Point Argus at an existing fleet of instances
 
 You would **not** run `pnpm seed` against a real fleet — seeding resets and writes
-demo data. Real instances are connected **read-only**: you register each instance's
-URL together with a scoped, read-only **n8n API key** you create inside that
-instance, and Argus ingests it without changing anything.
+demo data. Real instances are connected **read-only** through the app's **Connections**
+page: you register each instance's URL together with a scoped, read-only **n8n API key**
+you create inside that instance, and Argus ingests it without changing anything.
 
-**What each connection needs (per instance):**
+**To connect a real instance:**
 
-- the instance's **base URL** (e.g. `https://n8n.your-company.internal`);
-- an **n8n API key** created in that instance (**Settings → n8n API**) with
-  read/list scopes for workflows, executions, projects, users, credentials, and
-  tags — no write scopes required;
-- the instance's **public webhook host**, which lets Argus resolve cross-instance
-  edges with confidence (e.g. spotting that one instance's workflow calls another's
-  webhook).
+1. In the target n8n instance, create an **n8n API key** under **Settings → n8n API**
+   with read/list scopes only — no write scopes required. Scope coverage is graceful:
+   `workflow:list` + `project:list` cover the catalog; add `execution:list`
+   (+ `execution:read`) for **health**; add `user:list` for the **advisory inferred
+   owner**. If a scope is missing, that feature degrades explicitly ("unavailable" /
+   "couldn't infer") rather than guessing — everything else still works.
+2. In Argus → **Connections**, add the connection: a **label**, the instance's **base
+   URL** (e.g. `https://n8n.your-company.internal`), the **API key**, and optionally the
+   instance's **public webhook host** (lets Argus confirm cross-instance edges — e.g.
+   spotting that one instance's workflow calls another's webhook).
 
-Real instances do **not** need E2E mode — that switch is only for the disposable
-demo estate above.
+Argus **validates the key against the live instance before saving** (unreachable vs.
+unauthorized, in plain English), stores it **encrypted at rest**, and **never** returns
+it in any API response, log, or audit entry. Registering or removing a connection is
+itself audit-logged. Real instances do **not** need E2E mode — that switch is only for
+the disposable demo estate above.
 
-> **Availability.** The app-level connection registry and the read-only ingestion
-> that consume these connections are the **next milestone (M2)** — not wired into
-> the UI yet. What works against *any* running instance today is the contract
-> tooling: point it at an instance with `N8N_BASE_URL=<url> pnpm probe:n8n` to
-> capture and verify its real API shapes (Argus always codes against captured
-> contracts, never against assumptions). When M2 lands, connecting a real fleet
-> will be the registration flow described above; the inputs won't change.
+> **Read-only, always.** Argus only ever *reads* your instances (the Public API, over
+> your scoped key). It never activates, edits, or deletes a workflow. The one thing it
+> writes is its *own* governance layer — owner assignments, corrections, the audit log —
+> in its own database, invisible to n8n.
+>
+> **Not yet wired:** real-time push (the Log Streaming receiver) is deferred to the next
+> milestone, so today freshness comes from the ~30s reconciliation poll (fresh within a
+> minute), not seconds. See `docs/PLAN.md` → "Next milestones".
 
 ---
 
@@ -222,19 +280,43 @@ The full command reference lives in [`CLAUDE.md`](CLAUDE.md).
 ## Repository layout
 
 ```
-apps/server      Express + better-sqlite3 API   (GET /api/health today)
-apps/web         Vue 3 + Vite + Pinia UI         (n8n-token-styled scaffold today)
+apps/server      Express + better-sqlite3 API — connections, sync, analyzer,
+                 enrichment, health, ownership, graph, chat, audit, LLM wrapper
+apps/web         Vue 3 + Vite + Pinia UI — Overview, Estate (Explore/Health/
+                 Ownership/Graph), Chat, Activity, Connections, Settings
 packages/shared  TypeScript types + Zod schemas  (the server↔web contract)
-scripts/         seed.mjs, verify.mjs, probe-n8n.mjs, n8n-up.mjs, seed/, lib/
+scripts/         seed.mjs, verify.mjs, probe-*.mjs, n8n-up.mjs, eval/, seed/, lib/
 contracts/       captured real n8n request/response shapes
 .agents/specs/   per-subsystem plain-English specs (the review surface)
-docs/            PLAN.md (master spec), DEV-STRATEGY.md
+docs/            PLAN.md (master spec), DEV-STRATEGY.md, DATA-FLOW*.md, DECISIONS.md
 ```
+
+---
+
+## A note on security posture
+
+Argus is a **platform-owner tool** and deliberately shows the whole fleet, which
+flattens n8n's per-project RBAC — a stated scope, enforced by Argus's own login. A few
+things follow from that, all reflected in the app:
+
+- **Everything is behind a login** (admin password + a required *asserted* identity —
+  name/email stamped on the session and every audit entry; shown as "asserted" because
+  it isn't verified — OIDC is a later track). Argus is **private-network only, never
+  internet-exposed** — and the demo instances' `E2E_TESTS=true` mode makes that
+  doubly true.
+- **Every n8n API key is stored encrypted at rest** and never leaves in an API response,
+  log, or audit entry. They are collectively the highest-value secrets in the system —
+  a compromised Argus means read access to every connected instance, which is why the
+  private-network stance matters more with each instance you add.
+- **Argus audits itself.** Every mutation (owner assignment, correction, config change,
+  connection add/remove, export) writes an append-only audit entry in the *same
+  transaction* — visible in **Activity**.
 
 ---
 
 ## Learn more
 
 - [`docs/PLAN.md`](docs/PLAN.md) — the approved master spec: what Argus is and why.
-- [`.agents/specs/seeder.md`](.agents/specs/seeder.md) — the seeder's behavior + acceptance criteria.
+- [`.agents/specs/`](.agents/specs/) — per-subsystem plain-English specs (the review surface).
+- [`docs/DATA-FLOW.md`](docs/DATA-FLOW.md) / [`docs/DATA-FLOW-CHAT.md`](docs/DATA-FLOW-CHAT.md) — exactly what is sent to the LLM.
 - [`contracts/DISCOVERY.md`](contracts/DISCOVERY.md) — what we've verified against the real n8n API.
