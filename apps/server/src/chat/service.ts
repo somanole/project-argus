@@ -16,6 +16,13 @@ import { CHAT_SYSTEM_PROMPT } from './prompt.js';
 export interface ChatDeps {
   db: Database.Database;
   encryptionKey: string;
+  /**
+   * The smart-features master switch (the SAME switch that governs enrichment — Settings).
+   * Chat is one of the two smart features; when the switch is off, chat makes ZERO LLM
+   * calls and says so honestly. `undefined` is treated as on (backward-compat for callers
+   * that predate the switch / tests that only exercise the provider path).
+   */
+  enabled?: boolean;
   /** Opt-in (default off): egress owner/actor emails in tool results (DECISION #29). */
   egressEmails?: boolean;
   /** Injectable for tests (a stub client with no network); defaults to the real wrapper. */
@@ -32,6 +39,19 @@ const MAX_ITERATIONS = 8;
 
 export async function* runChat(deps: ChatDeps, input: ChatTurnInput, signal?: AbortSignal): AsyncIterable<ChatEvent> {
   const { db, encryptionKey } = deps;
+
+  // The smart-features kill switch (Settings). Off → chat is unavailable and makes ZERO
+  // LLM calls; the rest of Argus is deterministic and unaffected. Checked before touching
+  // the provider config so "off" short-circuits regardless of whether a key is stored.
+  if (deps.enabled === false) {
+    yield {
+      type: 'text',
+      text: 'Smart features are off, so chat is unavailable. Turn them on in Settings — the same switch that powers AI enrichment — to ask questions here. Everything else in Argus works without it.',
+    };
+    yield { type: 'done' };
+    return;
+  }
+
   const cfg = getLlmConfigRow(db);
   // `''` is a legal key for a keyless self-hosted endpoint — only `null` means unconfigured.
   const apiKey = cfg ? getDecryptedApiKey(db, encryptionKey) : null;

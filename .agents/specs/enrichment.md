@@ -199,9 +199,16 @@ with its key text/state (not appearance), and a `pnpm verify` row.
 - [ ] The **stub** ("couldn't analyze") and **stale** states are clearly labeled, never
       dressed as analysis.
 - [ ] The **enrichment-progress** indicator renders next to coverage ("enriched X/Y").
-- [ ] The **Settings** screen shows a **master on/off switch** (the kill switch),
-      provider selection as clear cards with the **active provider plainly stated**, key
-      entry, and honest off/unconfigured/ops-locked status (key never displayed back).
+- [ ] The **Settings** screen presents the provider under a **"Smart features"** section
+      (`smart-features-heading`) whose one master on/off switch (the kill switch) governs
+      **both enrichment and chat** — the copy and status banner name both. Provider
+      selection is clear cards with the **active provider plainly stated**, key entry, and
+      honest off/unconfigured/ops-locked status (key never displayed back).
+- [ ] A **"Learn what's sent to the provider"** control (`egress-open`) opens a side drawer
+      (`egress-drawer`) that lays out, in plain English, what leaves for **enrichment**
+      (`egress-enrichment`) and for **chat** (`egress-chat`) — sent vs never-sent + the
+      shared guarantees — so the owner can decide before enabling. Mirrors the sign-off docs
+      (`docs/DATA-FLOW.md`, `docs/DATA-FLOW-CHAT.md`); changes with them (rule 9).
 
 **Responsive (standing rule 10 — both themes AND both widths).** Each hero view is
 rendered at 375px + desktop, in light AND dark, asserted to have no horizontal overflow.

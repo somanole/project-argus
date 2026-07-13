@@ -238,6 +238,11 @@ contracts:
       model call is made — while enrichment keeps working. `pnpm eval:chat` likewise
       refuses to score such an endpoint rather than grading ungrounded prose. See
       [`llm-providers.md`](llm-providers.md) (DECISION #30).
+- [x] **Chat is one of the two smart features, gated on the SAME master switch as
+      enrichment.** When smart features are off (in-app switch or `ENRICHMENT_ENABLED=false`),
+      `runChat` makes **zero LLM calls** and returns an honest "smart features are off — turn
+      them on in Settings" message; the switch is read per request, so flipping it takes
+      effect immediately.
 - [x] Each chat tool returns **exactly** what its underlying S1b–S6 read returns
       (per-tool fidelity test) — the tool re-shapes, it never re-derives; the model
       only ever sees tool output.
@@ -293,6 +298,11 @@ with its key text/state, and a `pnpm verify` row.
       the prose meant).
 - [x] The scripted **not-found / out-of-scope** responses render as normal assistant
       messages (no error state, no fabricated content).
+- [x] When chat is **unavailable** — smart features off, no provider configured, or the
+      provider can't make tool calls — the Chat view shows an honest **disabled panel**
+      (`chat-disabled`) that names the reason and links to **Settings** (`chat-open-settings`),
+      with the composer hidden — never a dead input. Availability is read from the same
+      config Settings shows.
 
 **Responsive (standing rule 10 — both themes AND both widths).** The chat view is
 rendered in a real browser at 375px + desktop, in light AND dark, asserted no

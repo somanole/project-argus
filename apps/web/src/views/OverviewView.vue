@@ -87,7 +87,7 @@ const accountabilityTiles = computed<OverviewTileData[]>(() => {
     {
       key: 'spof', testid: 'overview-spof', label: 'Single-owner criticals', count: v.spofOwners.length, tone: 'danger',
       context: 'sole owner of ≥2 criticals',
-      info: 'One person is the sole owner of several critical workflows — a single point of failure. Exact-email match; cross-instance identity is a later slice.',
+      info: 'One person is the sole owner of several critical workflows — a single point of failure.',
       to: { path: '/estate/ownership', query: { view: 'spof' } }, dest: 'Ownership',
     },
     {
@@ -118,7 +118,7 @@ const operationsTiles = computed<OverviewTileData[]>(() => {
     {
       key: 'broken', testid: 'overview-broken', label: 'Broken references', count: v.hygiene.brokenRefs.count, tone: 'danger',
       context: 'unresolved node refs',
-      info: 'Workflows referencing a node or credential that no longer resolves — a certain break, not a guess.',
+      info: 'Workflows referencing a node or credential that no longer resolves.',
       to: { path: '/estate', query: { broken: 'true' } }, dest: 'Estate',
     },
     {
@@ -136,7 +136,7 @@ const operationsTiles = computed<OverviewTileData[]>(() => {
     {
       key: 'exposure', testid: 'overview-exposure', label: 'MCP reaching sensitive', count: v.exposure.reachingSensitive, tone: 'warn',
       context: `of ${v.exposure.mcpExposed} exposed · ${v.exposure.reachingSensitiveUnowned} unowned`,
-      info: 'MCP-exposed workflows whose confirmed dependency path reaches a sensitive system. Confirmed reach only — inferred edges are excluded. Opens the MCP-exposed set in the catalog.',
+      info: 'MCP-exposed workflows whose confirmed dependency path reaches a sensitive system. Confirmed reach only — inferred edges are excluded.',
       to: { path: '/estate', query: { mcp: 'true' } }, dest: 'Estate',
     },
   ];
@@ -188,7 +188,7 @@ onUnmounted(() => { if (clock) clearInterval(clock); });
             <div class="score-cap">
               <span class="score-band" :class="`band-${scoreTone(score?.score ?? null)}`">{{ scoreBand(score?.score ?? null) }}</span>
               <span class="score-label">Governance score</span>
-              <InfoTip text="A deterministic, explainable weighted average of five pillars — not a black box. Each pillar shows what drove it; hover its ⓘ for why." />
+              <InfoTip text="A deterministic, explainable weighted average of five pillars. Each pillar shows what drove it; hover its ⓘ for why." />
             </div>
           </div>
         </div>

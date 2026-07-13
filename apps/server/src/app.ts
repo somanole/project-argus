@@ -63,7 +63,7 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/governance', guard, governanceRouter(db));
   // Chat history lives here, per process — in-memory, not persisted (Finding 1).
   const chatSessions = createChatSessionStore();
-  app.use('/api/chat', guard, chatRouter(db, config.encryptionKey, config.chatEgressEmails, chatSessions));
+  app.use('/api/chat', guard, chatRouter(db, config.encryptionKey, config.chatEgressEmails, chatSessions, config.enrichmentEnabled));
 
   return app;
 }

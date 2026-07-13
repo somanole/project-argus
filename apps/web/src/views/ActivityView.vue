@@ -38,7 +38,7 @@ onUnmounted(() => { if (clock) clearInterval(clock); });
     <header class="head">
       <div>
         <h1>Activity</h1>
-        <p class="muted sub">Every governance action Argus has taken — append-only, tamper-evident.</p>
+        <p class="muted sub">Every governance action Argus has taken.</p>
       </div>
       <div class="head-actions">
         <a class="btn btn--secondary btn--sm" data-testid="governance-audit-export" :href="store.exportUrl()">Export CSV</a>

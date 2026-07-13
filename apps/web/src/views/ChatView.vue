@@ -6,9 +6,11 @@
  * the tools surfaced — a fabricated workflow has no link). Read-only: chat never
  * mutates; a workflow reference opens the existing detail drawer. Honest states only.
  */
-import { computed, nextTick, ref, watch } from 'vue';
-import { workflowDetailSchema, type ChatWorkflowRef, type WorkflowListItem } from '@argus/shared';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { storeToRefs } from 'pinia';
+import { chatSupported, workflowDetailSchema, type ChatWorkflowRef, type WorkflowListItem } from '@argus/shared';
 import { useChatStore } from '../stores/chat';
+import { useSettingsStore } from '../stores/settings';
 import { api } from '../lib/api';
 import ChatToolChip from '../components/ChatToolChip.vue';
 import WorkflowDetailDrawer from '../components/WorkflowDetailDrawer.vue';
@@ -16,6 +18,42 @@ import WorkflowDetailDrawer from '../components/WorkflowDetailDrawer.vue';
 const store = useChatStore();
 const draft = ref('');
 const scroller = ref<HTMLElement | null>(null);
+
+// Chat is one of the two smart features (Settings). It's available only when the master
+// switch is on, a provider is configured, and that provider can make tool calls (chat is
+// grounded in tool results — a model that can't call tools can't do chat). We read the
+// SAME config Settings shows; while it's still loading (null) we don't block — the server
+// gates honestly if the user sends anyway.
+const settings = useSettingsStore();
+const { config } = storeToRefs(settings);
+onMounted(() => void settings.load());
+
+const availability = computed<{ ok: boolean; reason: 'off' | 'unconfigured' | 'unsupported' | null }>(() => {
+  const c = config.value;
+  if (!c) return { ok: true, reason: null };
+  if (!c.enabled || c.envLocked) return { ok: false, reason: 'off' };
+  if (!c.configured) return { ok: false, reason: 'unconfigured' };
+  if (!chatSupported(c)) return { ok: false, reason: 'unsupported' };
+  return { ok: true, reason: null };
+});
+const chatDisabled = computed(() => !availability.value.ok);
+const disabledTitle = computed(() => {
+  switch (availability.value.reason) {
+    case 'unconfigured': return 'Chat needs an AI provider';
+    case 'unsupported': return 'Chat isn’t available on this provider';
+    default: return 'Chat is off';
+  }
+});
+const disabledMsg = computed(() => {
+  switch (availability.value.reason) {
+    case 'unconfigured':
+      return 'Smart features are on, but no AI provider is configured yet. Add one in Settings to start chatting.';
+    case 'unsupported':
+      return 'The configured provider can’t make tool calls, which chat needs to stay grounded in real data. Point it at a tool-calling model in Settings — everything else in Argus keeps working.';
+    default:
+      return 'Chat needs the AI provider that powers smart features. Turn on smart features in Settings — you can review exactly what’s sent there first.';
+  }
+});
 
 // A chat workflow-reference click opens the existing detail drawer. We fetch the full
 // list item by instanceId+id (the drawer's contract) — no reshaping, no invented data.
@@ -104,12 +142,23 @@ watch(
     <header class="head">
       <div>
         <h1>Chat</h1>
-        <p class="muted sub">Ask about the estate. Every answer is grounded in Argus's data — names and numbers come from the tools, never invented.</p>
+        <p class="muted sub">Ask about the estate. Every answer is grounded in Argus's data.</p>
       </div>
-      <button v-if="!isEmpty" class="btn btn--secondary btn--sm" :disabled="store.sending" @click="store.reset()">New chat</button>
+      <button v-if="!isEmpty && !chatDisabled" class="btn btn--secondary btn--sm" :disabled="store.sending" @click="store.reset()">New chat</button>
     </header>
 
-    <div ref="scroller" class="messages" data-testid="chat-messages">
+    <!-- Chat off / unconfigured / unsupported: an honest disabled panel, not a dead input.
+         It names why and sends the owner to the one place that fixes it — Settings, where
+         they can also review exactly what's sent before enabling (rule 5, never a silent no-op). -->
+    <div v-if="chatDisabled" class="disabled" data-testid="chat-disabled">
+      <div class="disabled-card">
+        <h2 class="disabled-title">{{ disabledTitle }}</h2>
+        <p class="muted disabled-msg">{{ disabledMsg }}</p>
+        <router-link to="/settings" class="btn btn--secondary btn--sm" data-testid="chat-open-settings">Open Settings</router-link>
+      </div>
+    </div>
+
+    <div v-else ref="scroller" class="messages" data-testid="chat-messages">
       <!-- Empty state: the canonical questions as one-click prompts. -->
       <div v-if="isEmpty" class="empty">
         <p class="muted">Try one of these:</p>
@@ -150,7 +199,7 @@ watch(
       <p v-if="openError" class="err pad" role="alert">{{ openError }}</p>
     </div>
 
-    <form class="composer" @submit.prevent="submit">
+    <form v-if="!chatDisabled" class="composer" @submit.prevent="submit">
       <textarea
         v-model="draft"
         class="input composer-input"
@@ -190,6 +239,18 @@ watch(
   gap: var(--spacing--md);
   padding: var(--spacing--sm) var(--spacing--3xs);
 }
+
+/* Disabled state: centered card explaining why chat is off + the way to fix it. */
+.disabled { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; padding: var(--spacing--md); }
+.disabled-card {
+  max-width: 30rem; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: var(--spacing--2xs);
+  border: 1px solid var(--border-color--subtle); border-radius: var(--radius--lg);
+  background: var(--background--subtle); padding: var(--spacing--lg) var(--spacing--md);
+}
+.disabled-title { margin: 0; font-size: var(--font-size--md); font-weight: var(--font-weight--bold); }
+.disabled-msg { margin: 0; font-size: var(--font-size--sm); line-height: var(--line-height--md); }
+.disabled-card .btn { margin-top: var(--spacing--2xs); }
 
 /* Anchor the starter prompts just above the composer (not dead-centre in the scroll
    area) — they sit where the eye goes to type, instead of floating in a void below

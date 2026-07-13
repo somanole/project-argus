@@ -228,10 +228,13 @@ try {
   const enrichUi = [
     'enrichment-badges', 'enrichment-criticality', 'enrichment-section', 'enrichment-criticality-reason',
     'enrichment-correct-button', 'enrichment-progress', 'settings-view', 'enrichment-toggle', 'llm-provider-select', 'llm-key-input', 'llm-save',
+    // Smart features: the shared switch governs enrichment + chat, and a "what's sent"
+    // drawer surfaces both features' egress so the owner decides before enabling.
+    'smart-features-heading', 'egress-open', 'egress-drawer', 'egress-enrichment', 'egress-chat',
   ];
   const eMissing = missing(enrichUi);
-  add('Enrichment UI ships (master switch, catalog badges, drawer summary+reason, correction)', eMissing.length === 0,
-    eMissing.length === 0 ? `${enrichUi.length} enrichment UI elements present` : `MISSING: ${eMissing.join(', ')}`);
+  add('Smart-features UI ships (shared switch, provider cards, "what\'s sent" egress drawer for enrichment + chat)', eMissing.length === 0,
+    eMissing.length === 0 ? `${enrichUi.length} smart-features UI elements present` : `MISSING: ${eMissing.join(', ')}`);
 
   // S3: health chrome — the catalog badge + health facet, the "what's failing" view
   // (failing list, summary, retention window, poll-fresh/honest-stale indicator), and
@@ -298,9 +301,9 @@ try {
   // S7: chat chrome — the chat view, message list + composer, streaming indicator,
   // tool-call chips, and the bottom "Referenced" row of clickable workflow pills (built
   // only from tool-surfaced workflows). Each has a component test (ChatView.test.ts).
-  const chatUi = ['chat-view', 'chat-messages', 'chat-message', 'chat-input', 'chat-send', 'chat-streaming', 'chat-tool-chip', 'chat-refs', 'chat-workflow-ref'];
+  const chatUi = ['chat-view', 'chat-messages', 'chat-message', 'chat-input', 'chat-send', 'chat-streaming', 'chat-tool-chip', 'chat-refs', 'chat-workflow-ref', 'chat-disabled', 'chat-open-settings'];
   const cMissing = missing(chatUi);
-  add('Chat UI ships (view, composer, streaming, tool-call chips, Referenced workflow pills)', cMissing.length === 0,
+  add('Chat UI ships (view, composer, streaming, chips, Referenced pills, off-state panel)', cMissing.length === 0,
     cMissing.length === 0 ? `${chatUi.length} chat UI elements present` : `MISSING: ${cMissing.join(', ')}`);
 }
 

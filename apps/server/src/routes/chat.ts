@@ -3,6 +3,7 @@ import type Database from 'better-sqlite3';
 import { chatRequestSchema } from '@argus/shared';
 import { runChat } from '../chat/service.js';
 import { actorOf } from '../auth/middleware.js';
+import { getEnrichmentEnabled } from '../settings/repo.js';
 import type { ChatSessionStore } from '../chat/session.js';
 
 /**
@@ -15,7 +16,7 @@ import type { ChatSessionStore } from '../chat/session.js';
  * + the client's opaque `conversationId`, so a client can neither read another user's
  * context nor inject fabricated prior turns. The client sends only the new message.
  */
-export function chatRouter(db: Database.Database, encryptionKey: string, egressEmails: boolean, sessions: ChatSessionStore): Router {
+export function chatRouter(db: Database.Database, encryptionKey: string, egressEmails: boolean, sessions: ChatSessionStore, envAllowed: boolean): Router {
   const router = Router();
 
   router.post('/', async (req, res) => {
@@ -40,10 +41,14 @@ export function chatRouter(db: Database.Database, encryptionKey: string, egressE
     const ac = new AbortController();
     res.on('close', () => ac.abort());
 
+    // The smart-features switch is read per request (env override AND the in-app master
+    // switch), so flipping it in Settings takes effect immediately — including mid-session.
+    const enabled = envAllowed && getEnrichmentEnabled(db);
+
     let answer = '';
     let errored = false;
     try {
-      for await (const ev of runChat({ db, encryptionKey, egressEmails }, { message, history }, ac.signal)) {
+      for await (const ev of runChat({ db, encryptionKey, enabled, egressEmails }, { message, history }, ac.signal)) {
         if (ev.type === 'text') answer += ev.text;
         if (ev.type === 'error') errored = true;
         res.write(`data: ${JSON.stringify(ev)}\n\n`);

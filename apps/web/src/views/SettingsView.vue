@@ -9,9 +9,13 @@ import { useSettingsStore } from '../stores/settings';
 import { useThemeStore, type ThemePreference } from '../stores/theme';
 import { relativeTime } from '../lib/time';
 import { checkBaseUrl, type LlmProvider } from '@argus/shared';
+import SmartFeaturesEgressDrawer from '../components/SmartFeaturesEgressDrawer.vue';
 
 const store = useSettingsStore();
 const { config, progress, state, error } = storeToRefs(store);
+
+// The "what's sent to the provider" informed-consent drawer.
+const egressOpen = ref(false);
 
 // Appearance: light / dark / match-system (moved here from the sidebar).
 const theme = useThemeStore();
@@ -22,9 +26,11 @@ const themeOptions: { value: ThemePreference; label: string }[] = [
 ];
 
 // `model: null` ⇒ the model is customer-chosen, not pinned by us (DECISION #30).
-const PROVIDERS: { value: LlmProvider; label: string; model: string | null; blurb: string }[] = [
-  { value: 'openai', label: 'OpenAI', model: 'gpt-5-mini', blurb: 'GPT — the reference provider.' },
-  { value: 'anthropic', label: 'Anthropic', model: 'claude-haiku-4-5', blurb: 'Claude — measured against the same bar.' },
+// `blurb` is optional — the hosted providers are self-explanatory; only the custom
+// endpoint carries an explainer.
+const PROVIDERS: { value: LlmProvider; label: string; model: string | null; blurb?: string }[] = [
+  { value: 'openai', label: 'OpenAI', model: 'gpt-5-mini' },
+  { value: 'anthropic', label: 'Anthropic', model: 'claude-haiku-4-5' },
   {
     value: 'openai_compatible',
     label: 'Custom endpoint',
@@ -166,7 +172,7 @@ async function save(): Promise<void> {
   <section class="settings" data-testid="settings-view">
     <header>
       <h1>Settings</h1>
-      <p class="muted sub">Appearance and the AI enrichment provider.</p>
+      <p class="muted sub">Appearance and the AI provider that powers smart features.</p>
     </header>
 
     <!-- Appearance -->
@@ -194,11 +200,14 @@ async function save(): Promise<void> {
     </div>
 
     <div class="card">
-      <!-- Master switch (the kill switch) -->
+      <!-- Master switch (the kill switch) — governs BOTH smart features. -->
       <div class="switch-row">
         <div class="switch-label">
-          <h2>Enrichment</h2>
-          <p class="muted">When on, workflows get an AI summary, category, and criticality. When off, Argus runs fully deterministic — no summaries, nothing sent. Only the workflow metadata allow-list is ever sent — never secrets or URLs.</p>
+          <h2 data-testid="smart-features-heading">Smart features</h2>
+          <p class="muted">Two features use the AI provider below: <strong>enrichment</strong> (each workflow gets a summary, category, and criticality) and <strong>chat</strong> (ask about the estate in plain English). This one switch powers both. When off, Argus runs fully deterministic and nothing is sent.</p>
+          <button type="button" class="egress-link" data-testid="egress-open" @click="egressOpen = true">
+            Learn what's sent to the provider →
+          </button>
         </div>
         <button
           type="button"
@@ -218,13 +227,13 @@ async function save(): Promise<void> {
       <!-- Status banner: always states plainly what's happening -->
       <p class="status" :class="`status--${status}`" data-testid="llm-status">
         <span v-if="status === 'active'">
-          <span class="dot dot--ok" /> Active — enriching via <strong>{{ config?.provider === 'openai_compatible' ? 'your endpoint' : config?.provider }}</strong>
+          <span class="dot dot--ok" /> Active — enrichment and chat via <strong>{{ config?.provider === 'openai_compatible' ? 'your endpoint' : config?.provider }}</strong>
           · <span class="mono">{{ config?.model }}</span>
           <span v-if="config?.baseUrl" class="mono muted"> @ {{ config.baseUrl }}</span>
         </span>
-        <span v-else-if="status === 'on-unconfigured'"><span class="dot dot--warn" /> On, but no provider key yet — add one below to start.</span>
+        <span v-else-if="status === 'on-unconfigured'"><span class="dot dot--warn" /> On, but no provider key yet — add one below to start enrichment and chat.</span>
         <span v-else-if="status === 'env-locked'"><span class="dot dot--muted" /> Turned off by ops config (<span class="mono">ENRICHMENT_ENABLED=false</span>). The switch is locked.</span>
-        <span v-else><span class="dot dot--muted" /> Off — Argus runs fully deterministic; no summaries.</span>
+        <span v-else><span class="dot dot--muted" /> Off — Argus runs fully deterministic; no enrichment, no chat, nothing sent.</span>
       </p>
 
       <!-- Provider selection + key — only when the switch is on and not ops-locked -->
@@ -250,7 +259,7 @@ async function save(): Promise<void> {
                   <span v-if="configured && config?.provider === p.value" class="prov-active" data-testid="provider-active-badge">Active</span>
                 </span>
                 <span class="prov-model mono muted">{{ p.model ?? 'your model' }}</span>
-                <span class="prov-blurb muted">{{ p.blurb }}</span>
+                <span v-if="p.blurb" class="prov-blurb muted">{{ p.blurb }}</span>
               </span>
             </button>
           </div>
@@ -363,6 +372,8 @@ async function save(): Promise<void> {
         </div>
       </div>
     </div>
+
+    <SmartFeaturesEgressDrawer :open="egressOpen" @close="egressOpen = false" />
   </section>
 </template>
 
@@ -377,6 +388,13 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 .switch-label { flex: 1 1 16rem; }
 .switch-label h2 { margin: 0 0 var(--spacing--5xs); font-size: var(--font-size--md); font-weight: var(--font-weight--bold); }
 .switch-label p { margin: 0; font-size: var(--font-size--2xs); line-height: var(--line-height--md); }
+.switch-label p strong { font-weight: var(--font-weight--bold); }
+.egress-link {
+  appearance: none; border: 0; background: none; padding: 0; margin: var(--spacing--3xs) 0 0;
+  font: inherit; font-size: var(--font-size--2xs); font-weight: var(--font-weight--medium);
+  color: var(--background--brand); cursor: pointer;
+}
+.egress-link:hover { text-decoration: underline; }
 .switch {
   appearance: none; display: inline-flex; align-items: center; gap: var(--spacing--3xs);
   border: 1px solid var(--border-color); border-radius: var(--radius--full);

@@ -67,6 +67,28 @@ describe('SettingsView (rule 11)', () => {
     expect(tid(w, 'llm-save').exists()).toBe(true);
   });
 
+  it('presents the provider under a "Smart features" section naming both features', async () => {
+    stub({ provider: 'openai', model: 'gpt-5-mini', configured: true, enabled: true, envLocked: false });
+    const w = await mountView();
+    expect(tid(w, 'smart-features-heading').text()).toBe('Smart features');
+    // The copy makes the shared scope explicit: one switch, enrichment AND chat.
+    expect(tid(w, 'smart-features-heading').element.parentElement?.textContent?.toLowerCase()).toContain('chat');
+    expect(tid(w, 'llm-status').text().toLowerCase()).toContain('chat');
+  });
+
+  it('opens and closes the "what\'s sent to the provider" egress drawer', async () => {
+    stub({ provider: null, model: null, configured: false, enabled: false, envLocked: false });
+    const w = await mountView();
+    expect(tid(w, 'egress-open').exists()).toBe(true);
+    expect(tid(w, 'egress-drawer').exists()).toBe(false); // closed by default
+    await tid(w, 'egress-open').trigger('click');
+    const drawer = tid(w, 'egress-drawer');
+    expect(drawer.exists()).toBe(true);
+    // It documents BOTH features' egress.
+    expect(tid(w, 'egress-enrichment').exists()).toBe(true);
+    expect(tid(w, 'egress-chat').exists()).toBe(true);
+  });
+
   it('when ON + no key: prompts to add one', async () => {
     stub({ provider: null, model: null, configured: false, enabled: true, envLocked: false });
     const w = await mountView();

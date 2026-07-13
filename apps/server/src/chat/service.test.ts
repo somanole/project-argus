@@ -114,6 +114,26 @@ describe('runChat', () => {
     expect(out.at(-1)!.type).toBe('done');
   });
 
+  it('is off when smart features are disabled — honest message, zero LLM calls', async () => {
+    const db = seedDb(true); // a provider IS configured, but the master switch is off
+    let modelCalled = false;
+    const out: ChatEvent[] = [];
+    const deps = {
+      db,
+      encryptionKey: KEY,
+      enabled: false,
+      clientFactory: () => {
+        modelCalled = true;
+        return stubClient([{ text: 'answer' }]);
+      },
+    };
+    for await (const ev of runChat(deps, { message: "what's failing?" })) out.push(ev);
+    expect(modelCalled).toBe(false); // never touched the provider
+    expect(out[0]!.type === 'text' && out[0]!.text).toMatch(/smart features are off/i);
+    expect(out[0]!.type === 'text' && out[0]!.text).toContain('Settings');
+    expect(out.at(-1)!.type).toBe('done');
+  });
+
   /**
    * DECISION #30. A custom endpoint whose model ignores `tools` would answer governance
    * questions from nothing — the exact silent-wrongness rule 5 forbids. When the

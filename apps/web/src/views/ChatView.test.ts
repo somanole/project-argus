@@ -1,15 +1,22 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
+import type { LlmConfig } from '@argus/shared';
 import ChatView from './ChatView.vue';
 import { useChatStore, type ChatMessage } from '../stores/chat';
+import { useSettingsStore } from '../stores/settings';
 
 /**
  * S7 chat UI-presence (standing rule 11): the view, composer, tool chips, and
  * clickable workflow references render with their stable data-testids. We drive the
  * store directly (no network) so the presence checks are fast and deterministic.
  */
-const stubs = { WorkflowDetailDrawer: true };
+const stubs = { WorkflowDetailDrawer: true, RouterLink: true };
+
+/** A ready-to-tweak safe LLM config (the shape Settings serves to the client). */
+function llmConfig(over: Partial<LlmConfig> = {}): LlmConfig {
+  return { provider: 'openai', model: 'gpt-5-mini', baseUrl: null, capabilities: null, configured: true, enabled: true, envLocked: false, ...over };
+}
 
 describe('ChatView', () => {
   beforeEach(() => setActivePinia(createPinia()));
@@ -107,6 +114,32 @@ describe('ChatView', () => {
     store.messages.push({ id: 'a2', role: 'assistant', text: '', tools: [], refs: [], streaming: true, error: null });
     await w.vm.$nextTick();
     expect(w.find('[data-testid="chat-streaming"]').exists()).toBe(true);
+  });
+
+  it('shows a disabled panel and hides the composer when smart features are off', async () => {
+    const w = mount(ChatView, { global: { stubs } });
+    useSettingsStore().config = llmConfig({ enabled: false });
+    await w.vm.$nextTick();
+    expect(w.find('[data-testid="chat-disabled"]').exists()).toBe(true);
+    expect(w.find('[data-testid="chat-open-settings"]').exists()).toBe(true);
+    expect(w.find('[data-testid="chat-disabled"]').text()).toContain('Chat is off');
+    // No dead input while it's off.
+    expect(w.find('[data-testid="chat-input"]').exists()).toBe(false);
+  });
+
+  it('distinguishes the "no provider configured" reason from "off"', async () => {
+    const w = mount(ChatView, { global: { stubs } });
+    useSettingsStore().config = llmConfig({ enabled: true, configured: false, provider: null });
+    await w.vm.$nextTick();
+    expect(w.find('[data-testid="chat-disabled"]').text()).toContain('needs an AI provider');
+  });
+
+  it('shows the composer when smart features are on and the provider supports chat', async () => {
+    const w = mount(ChatView, { global: { stubs } });
+    useSettingsStore().config = llmConfig({ enabled: true, configured: true });
+    await w.vm.$nextTick();
+    expect(w.find('[data-testid="chat-disabled"]').exists()).toBe(false);
+    expect(w.find('[data-testid="chat-input"]').exists()).toBe(true);
   });
 
   it('places the Referenced row above the answer text (under the tool chips)', async () => {
