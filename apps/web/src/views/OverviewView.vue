@@ -37,6 +37,13 @@ const scoreBand = (n: number | null): string => (n == null ? '—' : n >= 80 ? '
 const pct = (n: number | null): string => (n == null ? '0%' : `${n}%`);
 const weightPct = (p: ScorePillar): string => `${Math.round(p.weight * 100)}%`;
 
+// The pillar weights used to sit on each bar; now they live in the score's ⓘ instead.
+// Built from the live pillars so the tip can never drift from the actual weighting.
+const scoreTip = computed(() => {
+  const weights = (score.value?.pillars ?? []).map((p) => `${p.label} ${weightPct(p)}`).join(', ');
+  return `A deterministic, explainable weighted average of five pillars, weighted by their impact on accountability${weights ? ` — ${weights}` : ''}. Each pillar shows what drove it; hover its ⓘ for why.`;
+});
+
 /**
  * The headline VALUE behind a pillar's score, surfaced inline so it's readable without
  * opening the ⓘ (which keeps the full sentence). Built from the pillar's structured
@@ -188,7 +195,7 @@ onUnmounted(() => { if (clock) clearInterval(clock); });
             <div class="score-cap">
               <span class="score-band" :class="`band-${scoreTone(score?.score ?? null)}`">{{ scoreBand(score?.score ?? null) }}</span>
               <span class="score-label">Governance score</span>
-              <InfoTip text="A deterministic, explainable weighted average of five pillars. Each pillar shows what drove it; hover its ⓘ for why." />
+              <InfoTip :text="scoreTip" />
             </div>
           </div>
         </div>
@@ -197,7 +204,6 @@ onUnmounted(() => { if (clock) clearInterval(clock); });
             <div class="pillar-top">
               <span class="pillar-label">{{ p.label }}</span>
               <InfoTip :text="p.reason" :label="`Why ${p.label} scored this`" />
-              <span class="pillar-weight muted small">{{ weightPct(p) }}</span>
               <span class="pillar-score" :class="`t-${scoreTone(p.scored ? p.score : null)}`">
                 {{ p.scored ? p.score : 'couldn’t score' }}
               </span>
@@ -277,8 +283,7 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 .pillar { display: flex; flex-direction: column; gap: var(--spacing--5xs); }
 .pillar-top { display: flex; align-items: center; gap: var(--spacing--2xs); }
 .pillar-label { font-weight: var(--font-weight--medium); font-size: var(--font-size--sm); }
-.pillar-weight { margin-left: auto; }
-.pillar-score { font-variant-numeric: tabular-nums; font-weight: var(--font-weight--bold); font-size: var(--font-size--sm); min-width: 3rem; text-align: right; }
+.pillar-score { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: var(--font-weight--bold); font-size: var(--font-size--sm); min-width: 3rem; text-align: right; }
 .bar { height: 0.5rem; border-radius: var(--radius--full); background: var(--border-color); overflow: hidden; }
 .bar-fill { height: 100%; border-radius: var(--radius--full); transition: width var(--duration--slow, 0.3s) var(--easing--ease-out, ease); }
 .pillar-value { margin: var(--spacing--5xs) 0 0; font-variant-numeric: tabular-nums; }
