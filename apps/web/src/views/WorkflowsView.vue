@@ -323,58 +323,60 @@ onUnmounted(() => {
       <p v-else class="muted">No workflows match these filters.</p>
     </div>
 
-    <div v-else class="table-wrap">
-      <table class="wf">
-        <thead>
-          <tr>
-            <th class="c-name">Name</th>
-            <th class="c-inst">Instance</th>
-            <th class="c-sys">Systems</th>
-            <th class="c-trig">Triggers</th>
-            <th class="c-health">Health</th>
-            <th class="c-owner">Owner</th>
-            <th class="c-state">Status</th>
-            <th class="c-upd">Updated</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="w in workflows"
-            :key="w.instanceId + '/' + w.id"
-            class="row"
-            tabindex="0"
-            @click="selected = w"
-            @keydown.enter="selected = w"
-          >
-            <td class="c-name">
-              <span class="name-cell">
-                <span class="name">{{ w.name }}</span>
-                <FactBadge v-if="w.mcpExposed" label="MCP" tone="mcp" title="Published to n8n's MCP server" />
-                <FactBadge v-if="w.brokenRefCount > 0" :label="`${w.brokenRefCount} broken`" tone="danger" title="Broken workflow reference" />
-                <FactBadge v-if="w.understood === false" label="?" tone="warn" title="Some nodes couldn't be analysed" />
-                <EnrichmentBadges :enrichment="w.enrichment" />
-              </span>
-            </td>
-            <td class="c-inst" data-label="Instance">
-              <span class="instance"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span>
-            </td>
-            <td class="c-sys" data-label="Systems">
-              <span v-if="w.systems.length === 0" class="muted">—</span>
-              <span v-else class="badges"><FactBadge v-for="s in w.systems" :key="s" :label="s" tone="system" /></span>
-            </td>
-            <td class="c-trig" data-label="Triggers">
-              <span v-if="w.triggers.length === 0" class="muted">—</span>
-              <span v-else class="badges">
-                <FactBadge v-for="t in w.triggers" :key="t" :label="triggerLabels[t] ?? t" tone="trigger" :title="t" />
-              </span>
-            </td>
-            <td class="c-health" data-label="Health"><WorkflowHealthBadge :health="w.health" /></td>
-            <td class="c-owner" data-label="Owner"><OwnerBadge :owner="w.owner" /></td>
-            <td class="c-state" data-label="Status"><StateBadge :active="w.active" :is-archived="w.isArchived" /></td>
-            <td class="c-upd muted" data-label="Updated">{{ relativeTime(w.updatedAt, now) }}</td>
-          </tr>
-        </tbody>
-      </table>
+    <div v-else class="table-scope">
+      <div class="table-wrap">
+        <table class="wf">
+          <thead>
+            <tr>
+              <th class="c-name">Name</th>
+              <th class="c-inst">Instance</th>
+              <th class="c-sys">Systems</th>
+              <th class="c-trig">Triggers</th>
+              <th class="c-health">Health</th>
+              <th class="c-owner">Owner</th>
+              <th class="c-state">Status</th>
+              <th class="c-upd">Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="w in workflows"
+              :key="w.instanceId + '/' + w.id"
+              class="row"
+              tabindex="0"
+              @click="selected = w"
+              @keydown.enter="selected = w"
+            >
+              <td class="c-name">
+                <span class="name-cell">
+                  <span class="name">{{ w.name }}</span>
+                  <FactBadge v-if="w.mcpExposed" label="MCP" tone="mcp" title="Published to n8n's MCP server" />
+                  <FactBadge v-if="w.brokenRefCount > 0" :label="`${w.brokenRefCount} broken`" tone="danger" title="Broken workflow reference" />
+                  <FactBadge v-if="w.understood === false" label="?" tone="warn" title="Some nodes couldn't be analysed" />
+                  <EnrichmentBadges :enrichment="w.enrichment" />
+                </span>
+              </td>
+              <td class="c-inst" data-label="Instance">
+                <span class="instance"><span class="dot" :style="{ background: instanceColor(w.instanceId) }" />{{ w.instanceLabel }}</span>
+              </td>
+              <td class="c-sys" data-label="Systems">
+                <span v-if="w.systems.length === 0" class="muted">—</span>
+                <span v-else class="badges"><FactBadge v-for="s in w.systems" :key="s" :label="s" tone="system" /></span>
+              </td>
+              <td class="c-trig" data-label="Triggers">
+                <span v-if="w.triggers.length === 0" class="muted">—</span>
+                <span v-else class="badges">
+                  <FactBadge v-for="t in w.triggers" :key="t" :label="triggerLabels[t] ?? t" tone="trigger" :title="t" />
+                </span>
+              </td>
+              <td class="c-health" data-label="Health"><WorkflowHealthBadge :health="w.health" /></td>
+              <td class="c-owner" data-label="Owner"><OwnerBadge :owner="w.owner" /></td>
+              <td class="c-state" data-label="Status"><StateBadge :active="w.active" :is-archived="w.isArchived" /></td>
+              <td class="c-upd muted" data-label="Updated">{{ relativeTime(w.updatedAt, now) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <ListPager :page="page" :page-size="pageSize" :total="total" label="Catalog pages" @go="store.goToPage($event)" />
@@ -427,6 +429,9 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 .seg .count { opacity: 0.7; font-variant-numeric: tabular-nums; }
 .seg .dot { width: 0.5rem; height: 0.5rem; border-radius: var(--radius--full); flex: none; }
 .seg--sm button { font-size: var(--font-size--3xs); padding: var(--spacing--5xs) var(--spacing--2xs); }
+/* In the filters panel the Status control stretches to the panel width (flex-column
+   parent), so its segments share that width evenly instead of leaving a dead gap. */
+.facet-sec > .seg--sm button { flex: 1 1 0; justify-content: center; }
 
 /* Filters button + popover panel. */
 .filters-anchor { position: relative; }
@@ -493,6 +498,11 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 .token-x:hover { opacity: 1; color: var(--color--danger); }
 .clear-tokens { font-size: var(--font-size--2xs); }
 
+/* The table scales to fit its own available width; when even the compressed table can no
+   longer fit, the container query below reflows it to cards. Scoping the query to this
+   wrapper (not the viewport) makes it correct regardless of whether the sidebar is
+   expanded or collapsed. */
+.table-scope { container-type: inline-size; }
 .table-wrap { border: 1px solid var(--border-color--subtle); border-radius: var(--radius--lg); overflow-x: auto; }
 .wf { width: 100%; border-collapse: collapse; font-size: var(--font-size--sm); }
 .wf thead th {
@@ -507,10 +517,12 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 .row { cursor: pointer; }
 .row:hover td, .row:focus-visible td { background: var(--background--hover, var(--background--subtle)); }
 .row:focus-visible { outline: 2px solid var(--focus--border-color, var(--color--primary)); outline-offset: -2px; }
-/* Give the name room so the name reads on its own line and the stacked labels sit under
-   it — if the table can't fit, `.table-wrap` scrolls horizontally within its own panel
-   (rule 10), never crushing the name column to a few characters. */
-.c-name { font-weight: var(--font-weight--medium); min-width: 13rem; }
+/* Name gets enough room to read on its own line with its stacked labels beneath — but
+   modest, so the table compresses to the viewport instead of scrolling. Once it can no
+   longer fit (below the card breakpoint) the whole row reflows to a card (rule 10). */
+.c-name { font-weight: var(--font-weight--medium); min-width: 9rem; }
+/* Owner text wraps rather than forcing the column (and the table) wider. */
+.c-owner :deep(.badge) { white-space: normal; }
 /* Name on its own line, all labels wrap onto the line beneath it — consistently for every
    row (the name takes the full cell width, so badges never sit inline with a short name). */
 .name-cell { display: flex; align-items: center; gap: var(--spacing--4xs); flex-wrap: wrap; }
@@ -524,9 +536,8 @@ h1 { margin: 0; font-size: var(--font-size--xl); font-weight: var(--font-weight-
 .err { color: var(--color--danger); }
 a { color: var(--color--primary, var(--background--brand)); }
 
-/* Mobile (≤720px): the Filters panel becomes a bottom sheet (never overflowing the
-   viewport), and the catalog table reflows to stacked cards — no horizontal page
-   scroll, no clipped field (rule 10). */
+/* Phone widths (≤720px): the Filters panel becomes a bottom sheet (never overflowing the
+   viewport) and search goes full-width. */
 @media (max-width: 720px) {
   .search { flex-basis: 100%; max-width: none; }
   .filters-panel {
@@ -534,7 +545,13 @@ a { color: var(--color--primary, var(--background--brand)); }
     border-radius: var(--radius--lg) var(--radius--lg) 0 0;
   }
   .panel-scroll { max-height: 60vh; }
+}
 
+/* Catalog reflow: once the compressed table can no longer fit its container (~890px min),
+   each row becomes a stacked card — no horizontal scroll, no clipped field (rule 10).
+   Keyed to the table's own width (container query), so it's correct whether the sidebar
+   is expanded or collapsed, not to a guessed viewport breakpoint. */
+@container (max-width: 920px) {
   .table-wrap { border: 0; overflow: visible; }
   .wf, .wf tbody, .wf tr, .wf td { display: block; width: 100%; }
   .wf thead { display: none; }

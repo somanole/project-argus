@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from './stores/auth';
 
@@ -14,6 +14,16 @@ const collapsed = ref(false);
 const drawerOpen = ref(false);
 // Any navigation closes the mobile drawer.
 watch(() => route.fullPath, () => { drawerOpen.value = false; });
+
+// Responsive rail: below this width the expanded sidebar squeezes wide content (notably
+// the Estate table) enough to force its card reflow. Collapsing to the icon rail first
+// hands that content ~11rem, so it stays a table on smaller laptops before ever reflowing
+// to cards. The manual Collapse button still overrides within a band.
+const railQuery = window.matchMedia('(max-width: 77rem)');
+collapsed.value = railQuery.matches;
+const applyRail = (e: MediaQueryListEvent): void => { collapsed.value = e.matches; };
+railQuery.addEventListener('change', applyRail);
+onUnmounted(() => railQuery.removeEventListener('change', applyRail));
 
 const initial = computed(() => (auth.actor?.name ?? auth.actor?.email ?? '?').trim().charAt(0).toUpperCase());
 
