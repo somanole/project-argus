@@ -11,13 +11,15 @@ const props = defineProps<{
   selectedId: string | null;
   impactedIds: Set<string>;
   archivedHidden: boolean;
-  mcpHighlight: boolean;
-  reachIds: Set<string>;
+  // MCP-exposure reach highlight (optional): dormant unless a caller opts in.
+  mcpHighlight?: boolean;
+  reachIds?: Set<string>;
   // Lens emphasis (optional): when set, these nodes stay lit and the rest dim — e.g.
   // the Health lens lights up failing/degraded nodes. Empty/undefined = no emphasis.
   emphasisIds?: Set<string>;
 }>();
-const emit = defineEmits<{ (e: 'select', node: GraphNode): void }>();
+// `select` → a node was clicked; `deselect` → the blank canvas (pane) was clicked.
+const emit = defineEmits<{ (e: 'select', node: GraphNode): void; (e: 'deselect'): void }>();
 
 /** Health status → a semantic token background for the node dot / accent. */
 function healthToken(health: string | null): string {
@@ -51,13 +53,13 @@ const visibleEdges = computed<GraphEdge[]>(() =>
 const positioned = computed(() => layoutGraph(visibleNodes.value, visibleEdges.value));
 
 const hasHighlight = computed(
-  () => props.impactedIds.size > 0 || (props.mcpHighlight && props.reachIds.size > 0) || (props.emphasisIds?.size ?? 0) > 0,
+  () => props.impactedIds.size > 0 || (props.mcpHighlight && (props.reachIds?.size ?? 0) > 0) || (props.emphasisIds?.size ?? 0) > 0,
 );
 
 const flowNodes = computed(() =>
   positioned.value.map((n) => {
     const impacted = props.impactedIds.has(n.id);
-    const reach = props.mcpHighlight && props.reachIds.has(n.id);
+    const reach = (props.mcpHighlight && props.reachIds?.has(n.id)) ?? false;
     const emphasized = props.emphasisIds?.has(n.id) ?? false;
     const selected = n.id === props.selectedId;
     const dimmed = hasHighlight.value && !impacted && !reach && !emphasized && !selected;
@@ -152,6 +154,7 @@ function onFit(): void { fitAll(); }
       :max-zoom="2"
       :nodes-draggable="false"
       @node-click="onNodeClick"
+      @pane-click="emit('deselect')"
       @pane-ready="onPaneReady"
     >
       <template #node-argus="{ data }">

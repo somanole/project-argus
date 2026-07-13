@@ -48,11 +48,11 @@ describe('Graph view chrome — UI-presence (rule 11)', () => {
     expect(tid(w, 'graph-scope-neighborhood').exists()).toBe(false);
   });
 
-  it('renders the archived + MCP-exposure toggles and the legend', async () => {
+  it('renders the archived toggle and the legend (the MCP-exposure toggle was removed)', async () => {
     const w = mountView();
     await flushPromises();
     expect(tid(w, 'graph-archived-toggle').exists()).toBe(true);
-    expect(tid(w, 'graph-mcp-toggle').exists()).toBe(true);
+    expect(tid(w, 'graph-mcp-toggle').exists()).toBe(false);
     expect(tid(w, 'graph-legend').text().toLowerCase()).toContain('possible');
     expect(tid(w, 'graph-legend').text().toLowerCase()).toContain('cross-instance');
   });
@@ -76,6 +76,21 @@ describe('Graph view chrome — UI-presence (rule 11)', () => {
     expect(tid(w, 'graph-impact-panel').exists()).toBe(true);
     expect(tid(w, 'graph-impact-total').text()).toBe('5');
     expect(tid(w, 'graph-impact-statement').text()).toContain('If this fails');
+  });
+
+  it('the panel has an Unselect control that clears the selection', async () => {
+    const w = mountView();
+    await flushPromises();
+    const store = useGraphStore();
+    store.selectedNode = {
+      id: 'wf:a:slack', kind: 'workflow', instanceId: 'a', instanceLabel: 'prod', label: 'Send Slack Alert',
+      resourceId: 'slack', workflowId: 'slack', health: 'idle', active: true, archived: false, isAgent: false, brokenRef: false, mcpExposed: false,
+    };
+    await nextTick();
+    const clear = tid(w, 'graph-panel-clear');
+    expect(clear.exists()).toBe(true);
+    await clear.trigger('click');
+    expect(store.selectedNode).toBeNull();
   });
 
   it('the selected workflow and each blast-radius workflow are clickable into the detail drawer', async () => {

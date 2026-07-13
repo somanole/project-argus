@@ -271,16 +271,16 @@ try {
   add('Activity UI ships (audit timeline + filters + pagination + CSV export)', aMissing.length === 0,
     aMissing.length === 0 ? `${activityUi.length} activity UI elements present` : `MISSING: ${aMissing.join(', ')}`);
 
-  // S5: graph chrome — the fleet graph canvas, scope switcher, archived + MCP toggles,
-  // the confidence/cross-instance legend, and the blast-radius impact panel with its
-  // EXPLICIT total. Each has a component test (GraphView.test.ts); presence counterpart.
+  // S5: graph chrome — the fleet graph canvas, scope switcher, archived toggle, the
+  // confidence/cross-instance legend, and the blast-radius impact panel with its EXPLICIT
+  // total + an Unselect control. Each has a component test (GraphView.test.ts); presence counterpart.
   const graphUi = [
-    'graph-view', 'graph-canvas', 'graph-scope-switcher', 'graph-archived-toggle', 'graph-mcp-toggle',
+    'graph-view', 'graph-canvas', 'graph-scope-switcher', 'graph-archived-toggle',
     'graph-legend', 'graph-impact-panel', 'graph-impact-statement', 'graph-impact-total', 'graph-zoom-controls',
-    'graph-affected-list', 'graph-panel-open-detail',
+    'graph-affected-list', 'graph-panel-open-detail', 'graph-panel-clear',
   ];
   const gMissing = missing(graphUi);
-  add('Graph UI ships (canvas, scope switcher, archived/MCP toggles, legend, zoom controls, blast-radius panel + drawer links)', gMissing.length === 0,
+  add('Graph UI ships (canvas, scope switcher, archived toggle, legend, zoom controls, blast-radius panel + drawer links + unselect)', gMissing.length === 0,
     gMissing.length === 0 ? `${graphUi.length} graph UI elements present` : `MISSING: ${gMissing.join(', ')}`);
 
   // S6: governance-overview chrome — the score + five-pillar breakdown, every headline

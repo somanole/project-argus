@@ -23,7 +23,6 @@ const props = withDefaults(defineProps<{ embedded?: boolean; lens?: 'explore' | 
 const graph = useGraphStore();
 
 const archivedHidden = ref(true);
-const mcpHighlight = ref(false);
 
 // Lens emphasis: the Health lens lights up failing/degraded nodes ("blast radius of what's
 // broken") and dims the rest; other lenses show the full map. (Ownership emphasis would
@@ -72,7 +71,6 @@ async function pickScope(scope: GraphScope): Promise<void> {
 
 function onSelect(node: GraphNode): void {
   graph.selectNode(node);
-  if (mcpHighlight.value && node.kind === 'workflow' && node.mcpExposed) graph.loadMcpReach(node);
 }
 
 // Clicking the selected workflow or any workflow in its blast radius opens the shared
@@ -100,16 +98,6 @@ const impactedIds = computed(() => {
   }
   return s;
 });
-const reachIds = computed(() => {
-  const s = new Set<string>();
-  const r = graph.mcpReach;
-  if (mcpHighlight.value && r) {
-    s.add(`wf:${r.instanceId}:${r.workflowId}`);
-    for (const w of r.reachableWorkflows) s.add(`wf:${w.instanceId}:${w.workflowId}`);
-  }
-  return s;
-});
-
 const sel = computed(() => graph.selectedNode);
 </script>
 
@@ -153,10 +141,6 @@ const sel = computed(() => graph.selectedNode);
         <input v-model="archivedHidden" type="checkbox">
         Hide archived
       </label>
-      <label class="toggle" data-testid="graph-mcp-toggle">
-        <input v-model="mcpHighlight" type="checkbox">
-        Highlight MCP exposure
-      </label>
     </div>
 
     <div class="legend" data-testid="graph-legend">
@@ -187,26 +171,28 @@ const sel = computed(() => graph.selectedNode);
           :selected-id="sel?.id ?? null"
           :impacted-ids="impactedIds"
           :archived-hidden="archivedHidden"
-          :mcp-highlight="mcpHighlight"
-          :reach-ids="reachIds"
           :emphasis-ids="emphasisIds"
           @select="onSelect"
+          @deselect="graph.clearSelection()"
         />
       </div>
 
       <aside class="panel" data-testid="graph-impact-panel">
         <template v-if="sel">
-          <button
-            v-if="sel.kind === 'workflow'"
-            type="button"
-            class="p-title p-title--link"
-            data-testid="graph-panel-open-detail"
-            title="Open workflow details"
-            @click="openWorkflowDetail(sel.instanceId, sel.workflowId)"
-          >
-            {{ sel.label }}<span class="ext" aria-hidden="true"> ↗</span>
-          </button>
-          <h2 v-else class="p-title">{{ sel.label }}</h2>
+          <div class="p-head">
+            <button
+              v-if="sel.kind === 'workflow'"
+              type="button"
+              class="p-title p-title--link"
+              data-testid="graph-panel-open-detail"
+              title="Open workflow details"
+              @click="openWorkflowDetail(sel.instanceId, sel.workflowId)"
+            >
+              {{ sel.label }}<span class="ext" aria-hidden="true"> ↗</span>
+            </button>
+            <h2 v-else class="p-title">{{ sel.label }}</h2>
+            <button type="button" class="p-clear" data-testid="graph-panel-clear" title="Clear selection" @click="graph.clearSelection()">Unselect</button>
+          </div>
           <p class="p-sub muted">
             {{ sel.kind === 'workflow' ? 'workflow' : sel.kind === 'credential' ? 'credential' : 'data table' }} · {{ sel.instanceLabel }}
           </p>
@@ -232,14 +218,6 @@ const sel = computed(() => graph.selectedNode);
             </ul>
           </div>
           <p v-else-if="sel.kind === 'datatable'" class="muted small">A shared data table — select a workflow or credential to see a blast radius.</p>
-
-          <div v-if="mcpHighlight && graph.mcpReach" class="reach">
-            <h3>MCP exposure reach</h3>
-            <p class="small" :class="graph.mcpReach.reachesSensitive ? 'reach--danger' : 'muted'">
-              {{ graph.mcpReach.reachesSensitive ? 'Reaches sensitive systems.' : 'No sensitive systems reached.' }}
-            </p>
-            <p class="small muted">Systems: {{ graph.mcpReach.reachableSystems.join(', ') || '—' }}</p>
-          </div>
         </template>
         <p v-else class="muted small">Click a node to see what it depends on — and what breaks if it fails.</p>
       </aside>
@@ -292,7 +270,16 @@ const sel = computed(() => graph.selectedNode);
   flex: 0 0 300px; overflow-y: auto; background: var(--background--surface);
   border: 1px solid var(--border-color--subtle); border-radius: var(--radius--md); padding: var(--spacing--sm);
 }
-.p-title { font-size: var(--font-size--sm); font-weight: var(--font-weight--bold); margin: 0; word-break: break-word; }
+/* Header row: the flow name + an Unselect control to clear the selection. */
+.p-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--spacing--2xs); }
+.p-title { font-size: var(--font-size--sm); font-weight: var(--font-weight--bold); margin: 0; word-break: break-word; min-width: 0; }
+.p-clear {
+  appearance: none; flex: none; cursor: pointer; font: inherit; font-size: var(--font-size--3xs); font-weight: var(--font-weight--medium);
+  color: var(--color--text--shade-1); background: var(--background--surface);
+  border: 1px solid var(--border-color); border-radius: var(--radius--md);
+  padding: var(--spacing--5xs) var(--spacing--2xs); white-space: nowrap;
+}
+.p-clear:hover { border-color: var(--border-color--strong); background: var(--background--subtle); }
 /* The selected workflow name doubles as a link into its detail drawer. */
 .p-title--link {
   appearance: none; border: 0; background: none; padding: 0; text-align: left;
@@ -316,9 +303,6 @@ const sel = computed(() => graph.selectedNode);
 }
 .affected-name { font-weight: var(--font-weight--medium); word-break: break-word; color: var(--background--brand); }
 .affected-item:hover .affected-name { text-decoration: underline; }
-.reach { margin-top: var(--spacing--sm); border-top: 1px solid var(--border-color--subtle); padding-top: var(--spacing--2xs); }
-.reach h3 { font-size: var(--font-size--2xs); margin: 0 0 var(--spacing--4xs); }
-.reach--danger { color: var(--color--danger); font-weight: var(--font-weight--medium); }
 
 @media (max-width: 900px) {
   .graph-view, .graph-view.embedded { height: auto; }
