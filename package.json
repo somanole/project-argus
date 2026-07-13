@@ -26,6 +26,8 @@
     "n8n:up": "node scripts/n8n-up.mjs",
     "seed": "node scripts/seed.mjs",
     "seed:unlock": "node scripts/seed-unlock.mjs",
+    "demo:serve": "node --env-file=.env apps/server/dist/index.js",
+    "demo:deploy": "pnpm build && launchctl kickstart -k gui/$(id -u)/com.argus.demo && echo '✔ deployed to https://stelos-mac-mini.tail290124.ts.net:8443 — reviewers reload the page'",
     "gen:manifest": "node scripts/gen-manifest.mjs",
     "corpus:fetch": "node scripts/fetch-corpus.mjs",
     "corpus:check": "node scripts/corpus-check.mjs",

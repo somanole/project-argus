@@ -1,4 +1,7 @@
 import express, { type Express } from 'express';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join, resolve } from 'node:path';
 import type Database from 'better-sqlite3';
 import { healthResponseSchema, type HealthResponse } from '@argus/shared';
 import { probeDb } from './db/index.js';
@@ -64,6 +67,27 @@ export function createApp(deps: AppDeps): Express {
   // Chat history lives here, per process — in-memory, not persisted (Finding 1).
   const chatSessions = createChatSessionStore();
   app.use('/api/chat', guard, chatRouter(db, config.encryptionKey, config.chatEgressEmails, chatSessions, config.enrichmentEnabled));
+
+  // Optional single-origin serving: also serve the built web UI so the whole app
+  // is ONE port to expose (e.g. behind a Tailscale Funnel for a public demo). Off
+  // by default — in dev the Vite server serves the web and proxies /api here, and
+  // tests never set this. Turn on with ARGUS_SERVE_WEB=true after `pnpm build`.
+  if ((process.env.ARGUS_SERVE_WEB ?? '').toLowerCase() === 'true') {
+    const webDist = process.env.ARGUS_WEB_DIST
+      ? resolve(process.env.ARGUS_WEB_DIST)
+      // apps/server/{src,dist}/app.* → ../../web/dist in both tsx and built layouts.
+      : resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'web', 'dist');
+    const indexHtml = join(webDist, 'index.html');
+    if (existsSync(indexHtml)) {
+      app.use(express.static(webDist));
+      // SPA history-mode fallback: any non-/api GET returns index.html so deep
+      // links (/estate, /health, …) resolve to the client router, not a 404.
+      app.get(/^(?!\/api\/).+/, (_req, res) => res.sendFile(indexHtml));
+      console.log(`[argus] serving web UI from ${webDist} (single-origin mode)`);
+    } else {
+      console.warn(`[argus] ARGUS_SERVE_WEB=true but no build at ${indexHtml} — run 'pnpm build' first. Serving API only.`);
+    }
+  }
 
   return app;
 }
