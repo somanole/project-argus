@@ -157,7 +157,14 @@ with the reason.
 ## AI features (optional)
 
 Enrichment (summaries, categories, criticality) and chat are the only features that use an
-LLM. Everything else is deterministic. Choose a provider in **Settings**:
+LLM. Everything else is deterministic.
+
+In chat, every number and name comes from a read-only tool call, shown above the answer —
+the model phrases the result, it never computes it. Workflow references are clickable.
+
+![Chat answering which critical workflows have no confirmed owner, showing the tool call it used and the workflows it references](docs/images/chat.png)
+
+Choose a provider in **Settings**:
 
 | Provider | You supply | Model |
 |---|---|---|
