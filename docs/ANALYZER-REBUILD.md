@@ -3,7 +3,7 @@
 The Argus analyzer recognizes n8n node/credential types from a **vendored manifest**
 (`apps/server/src/analyzer/manifest.data.ts`) generated at build time from the n8n
 **source tree**, pinned to a specific n8n version (currently **2.29.0** — see
-[`CLAUDE.md`](../CLAUDE.md) → version pins). Runtime never touches the n8n source; it reads
+the version pins in `scripts/gen-manifest.mjs`). Runtime never touches the n8n source; it reads
 the vendored manifest only.
 
 When you **upgrade** a connected n8n instance past the pinned version, the manifest can go
@@ -23,13 +23,13 @@ confirmed that neither the running n8n **version** nor its **node-type catalog**
 (`/types/nodes.json`) is reachable with an API key — both require a session cookie. So Argus
 cannot refresh the manifest from a live instance at runtime, and a deployed image has no n8n
 source tree to regenerate from. Regeneration is therefore a **build/ops** action (see
-[Decision #32](DECISIONS.md)).
+a deliberate build/ops step).
 
 ## Steps
 
 1. **Update the n8n source pin.** Point the sibling `../n8n` checkout (Argus's contract oracle
    and manifest source) at the n8n version your instances now run, and update the version pins
-   in [`CLAUDE.md`](../CLAUDE.md) and `scripts/gen-manifest.mjs` (`N8N_VERSION`). Build n8n if
+   in `scripts/gen-manifest.mjs` (`N8N_VERSION`). Build n8n if
    its `packages/*/dist` type artifacts aren't present.
 2. **Regenerate the manifest.** From the repo root:
    ```bash

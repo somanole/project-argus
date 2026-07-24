@@ -1,0 +1,17 @@
+// Argus global stylesheet.
+//
+// All original work. The only third-party assets here are the two OFL-licensed
+// font families in ./fonts/ (see THIRD-PARTY-NOTICES.md).
+//
+// Import order matters:
+//   1. tokens — every CSS custom property + the light/dark application blocks
+//   2. reset  — cross-browser element reset
+//   3. base   — base element styling built on the tokens
+//   4. fonts  — @font-face declarations
+//
+// Everything downstream builds UI on var(--…) tokens only (standing rule 10).
+
+@use './tokens.scss';
+@use './reset.scss';
+@use './base.scss';
+@use './fonts.scss';

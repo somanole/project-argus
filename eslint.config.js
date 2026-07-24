@@ -14,7 +14,7 @@ export default tseslint.config(
       // Managed local n8n instances (their own data + bundled JS) are not ours to lint.
       '.n8n-instances/**',
       // Vendored n8n styles are not ours to lint.
-      'apps/web/src/styles/n8n-tokens/**',
+      'apps/web/src/styles/theme/fonts/**',
     ],
   },
   js.configs.recommended,

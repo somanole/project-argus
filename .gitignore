@@ -37,3 +37,18 @@ prompts-raw.jsonl
 
 # Managed local n8n instances (prod + staging data folders + logs)
 .n8n-instances/
+
+# Internal planning notes and the build journal — kept locally, not published.
+# (The standing rules in CLAUDE.md, the reusable skills and the per-subsystem
+# specs under .agents/ ARE published; they document how this project is built.)
+PROMPTS.md
+EXPERIMENT.md
+DEMOS.md
+docs/PLAN.md
+docs/DECISIONS.md
+docs/DEV-STRATEGY.md
+docs/M0-KICKOFF.md
+docs/STRATEGY-KICKOFF.md
+
+# Local Claude Code runtime config (machine-specific; skills live in .agents/).
+.claude/

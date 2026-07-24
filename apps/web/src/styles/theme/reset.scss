@@ -1,0 +1,158 @@
+// Argus element reset — original work, no vendored third-party stylesheet.
+//
+// A small modern reset: normalise the box model, strip default margins and list
+// styling (components draw their own bullets), make form controls and media
+// behave, and keep everything colour-agnostic so the theme tokens decide the
+// palette. Only `a` carries a colour, matching the accent the UI expects.
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html {
+	-webkit-text-size-adjust: 100%;
+	tab-size: 4;
+}
+
+body,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+figure,
+blockquote,
+dl,
+dd,
+ol,
+ul,
+fieldset,
+pre {
+	margin: 0;
+}
+
+// Headings inherit their size/weight; every component sets its own.
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	font-size: inherit;
+	font-weight: inherit;
+	line-height: inherit;
+}
+
+ol,
+ul {
+	padding: 0;
+	list-style: none;
+}
+
+fieldset {
+	padding: 0;
+	border: 0;
+}
+
+// Media behaves like a block and never overflows its container.
+img,
+svg,
+video,
+canvas,
+audio,
+iframe,
+embed,
+object {
+	display: block;
+	max-width: 100%;
+}
+
+img,
+video {
+	height: auto;
+}
+
+// Form controls inherit typography instead of the UA's.
+input,
+button,
+textarea,
+select,
+optgroup {
+	font: inherit;
+	color: inherit;
+	letter-spacing: inherit;
+	margin: 0;
+}
+
+button,
+[role='button'],
+summary {
+	cursor: pointer;
+}
+
+button {
+	background: none;
+	border: 0;
+	padding: 0;
+	text-align: inherit;
+}
+
+textarea {
+	resize: vertical;
+}
+
+// Avoid orphaned words breaking layout on long identifiers.
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	overflow-wrap: break-word;
+}
+
+a {
+	color: var(--color--primary);
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+table {
+	border-collapse: collapse;
+	border-spacing: 0;
+}
+
+hr {
+	height: 0;
+	color: inherit;
+	border-top-width: 1px;
+}
+
+// Keyboard focus stays visible everywhere; pointer focus does not draw a ring.
+:focus-visible {
+	outline: 2px solid var(--focus--border-color);
+	outline-offset: 2px;
+}
+
+[hidden] {
+	display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}

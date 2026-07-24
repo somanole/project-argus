@@ -1,0 +1,33 @@
+// Web font declarations.
+//
+// The font binaries in ./fonts/ are third-party and keep their own licence:
+//   Inter       © The Inter Project Authors — SIL Open Font License 1.1
+//   Commit Mono © Eigil Nikolajsen         — SIL Open Font License 1.1
+// Both are freely redistributable provided their notices travel with them; see
+// THIRD-PARTY-NOTICES.md at the repo root. Swap these two families out and the
+// rest of the theme is unaffected — only --font-family/--font-family--monospace
+// in tokens.scss reference them.
+
+@font-face {
+	font-family: InterVariable;
+	font-style: normal;
+	font-weight: 100 900;
+	font-display: swap;
+	src: url('./fonts/InterVariable.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: InterVariable;
+	font-style: italic;
+	font-weight: 100 900;
+	font-display: swap;
+	src: url('./fonts/InterVariable-Italic.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: CommitMono;
+	font-style: normal;
+	font-weight: 100 900;
+	font-display: swap;
+	src: url('./fonts/CommitMonoVariable.woff2') format('woff2');
+}

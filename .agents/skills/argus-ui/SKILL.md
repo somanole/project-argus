@@ -1,6 +1,6 @@
 ---
 name: argus-ui
-description: Build Argus UI that looks genuinely like n8n. Use whenever adding or changing anything in apps/web — a view, component, form, table, badge, or style. Enforces the vendored-token + both-themes + both-viewports (responsive) contract (standing rule 10) and the app's reusable patterns.
+description: Build Argus UI consistently. Use whenever adding or changing anything in apps/web — a view, component, form, table, badge, or style. Enforces the design-token + both-themes + both-viewports (responsive) contract (standing rule 10) and the app's reusable patterns.
 ---
 
 # argus-ui — how Argus's web UI is built
@@ -11,12 +11,12 @@ rules (CLAUDE.md rule 10), not preferences.
 
 ## The four non-negotiables
 
-1. **Vendored tokens only.** Every color, space, radius, font-size, weight, and
-   shadow is a `var(--…)` from the vendored n8n tokens. **Never** a hard-coded
+1. **Design tokens only.** Every color, space, radius, font-size, weight, and
+   shadow is a `var(--…)` from the Argus design tokens. **Never** a hard-coded
    hex, px color, or font name. Tokens live in
-   `apps/web/src/styles/n8n-tokens/` (see its `VENDORED.md`). `pnpm verify` greps
-   the built CSS for stray hex and fails on any.
-2. **Both themes, always.** Theming is n8n's mechanism: `body[data-theme='dark']`
+   `apps/web/src/styles/theme/tokens.scss` (original work — nothing vendored).
+   `pnpm verify` greps the built CSS for stray hex and fails on any.
+2. **Both themes, always.** Theming is `body[data-theme='dark']`
    + `prefers-color-scheme`. Because the semantic tokens (`--background--surface`,
    `--color--text--shade-1`, `--border-color`, the `--*--success/warning/danger`
    families) carry light AND dark values, **if you only use tokens you get dark
@@ -60,8 +60,8 @@ rules (CLAUDE.md rule 10), not preferences.
 - **The shell adapts.** Multi-column shells (list + detail drawer, filters + grid)
   become single-column / off-canvas on narrow widths; the detail drawer goes
   full-width. Filters collapse behind a control rather than overflowing the bar.
-- **Breakpoints:** use n8n's vendored breakpoint tokens/media mixins where present
-  (check `n8n-tokens/`); otherwise a small local set is fine — keep them few.
+- **Breakpoints:** a small local set is fine — keep them few and consistent
+  across views.
 - **Touch targets** stay comfortably tappable (don't shrink controls below the
   primitive sizes on mobile).
 

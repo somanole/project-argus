@@ -1,0 +1,23 @@
+// Base element styling, expressed entirely in theme tokens (standing rule 10 —
+// never a hard-coded colour, space, radius or font).
+//
+// Both --background--surface and --color--text--shade-1 carry light AND dark
+// values, so the page flips with the theme automatically and is never flattened
+// to a single mode.
+
+html {
+	// Let the UA theme form controls and scrollbars to match the active theme.
+	// tokens.scss also sets color-scheme per theme; this is the document-root default.
+	color-scheme: light dark;
+}
+
+body {
+	min-height: 100vh;
+	background-color: var(--background--surface);
+	color: var(--color--text--shade-1);
+	font-family: var(--font-family);
+	font-size: var(--font-size--md);
+	line-height: var(--line-height--md);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}

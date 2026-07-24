@@ -1,6 +1,6 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
-import './styles/n8n-tokens/index.scss';
+import './styles/theme/index.scss';
 import './styles/app.scss';
 import App from './App.vue';
 import { router } from './router';

@@ -5,7 +5,7 @@ export type ThemePreference = 'system' | 'light' | 'dark';
 
 /**
  * Controls the active theme by setting `data-theme` on <body>, which is exactly
- * the mechanism n8n's vendored tokens use (see styles/n8n-tokens/VENDORED.md):
+ * the mechanism the Argus theme tokens use (see styles/theme/tokens.scss):
  *   - 'system' → remove the attribute; the OS `prefers-color-scheme` decides
  *   - 'light' / 'dark' → force that theme
  * Argus never flattens to a single theme (standing rule 10).

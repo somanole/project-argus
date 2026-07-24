@@ -149,7 +149,7 @@ try {
   const walkVue = (dir) => {
     const out = [];
     for (const e of readdirSync(dir, { withFileTypes: true })) {
-      if (e.isDirectory()) { if (e.name !== 'n8n-tokens') out.push(...walkVue(join(dir, e.name))); }
+      if (e.isDirectory()) { if (e.name !== 'theme') out.push(...walkVue(join(dir, e.name))); }
       else if (e.name.endsWith('.vue')) out.push(join(dir, e.name));
     }
     return out;

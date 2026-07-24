@@ -8,12 +8,14 @@ accountable, what's the blast radius"). I (Claude) obey the rules below in
 plain-English reports, and specs. My job is to make that safe.
 
 **Read these, don't duplicate them:**
-- [`docs/PLAN.md`](docs/PLAN.md) — the approved master spec (what we're building and why).
-- [`docs/DEV-STRATEGY.md`](docs/DEV-STRATEGY.md) — how the owner and I work together.
-- [`.agents/specs/`](.agents/specs/) — per-subsystem plain-English specs (the owner's review surface). Written just-in-time at each milestone; `TEMPLATE.md` is the shape. None yet — M1 is the first.
+- [`.agents/specs/`](.agents/specs/) — per-subsystem plain-English specs (the owner's review surface), one per subsystem. Written just-in-time before building; `TEMPLATE.md` is the shape.
 - [`.agents/skills/`](.agents/skills/) — reusable build skills (e.g. `argus-ui`, `spec-driven-development`). **Author/edit skills here, under `.agents/skills/<name>/SKILL.md` — this is the canonical source.** Each is symlinked into `.claude/skills/<name>` so Claude Code auto-discovers it; never author a real skill file in `.claude/skills/`. New skill → add it under `.agents/skills/` and `ln -sfn ../../.agents/skills/<name> .claude/skills/<name>`.
 - [`contracts/`](contracts/) — captured real n8n request/response shapes (see rule 1).
-- [`PROMPTS.md`](PROMPTS.md) — the self-maintaining build journal (see rule 8).
+
+The master plan, the owner/Claude working agreement, and the build journal
+(`PROMPTS.md`, see rule 8) are working notes kept **outside** the public repo. In a
+local checkout they sit alongside these files; nothing in the rules below depends on
+reading them.
 
 ---
 
@@ -60,9 +62,11 @@ never silently wrong (rule 5, Principle 7). The
 this become a permanent rule?"* If yes, I add it to this file myself.
 
 **8. Journal every session; roll up at gates.** At the end of every session,
-append an entry to `PROMPTS.md` using its template. At each milestone gate, append
-a retro rollup. The owner never writes these. (A `Stop` hook enforces existence; a
-`UserPromptSubmit` hook captures raw prompts to `prompts-raw.jsonl`.)
+append an entry to the local build journal (`PROMPTS.md`) using its template — what
+was asked for, what changed, what was verified, and the prompt lesson. At each
+milestone gate, append a retro rollup. The owner never writes these. (A `Stop` hook
+enforces existence; a `UserPromptSubmit` hook captures raw prompts to
+`prompts-raw.jsonl`.) The journal is a working note, kept out of the public repo.
 
 **9. Specs stay in sync, just-in-time.** Keep a plain-English spec per subsystem in
 `.agents/specs/`, in sync with the code. At the **start** of each milestone,
@@ -72,18 +76,18 @@ same session**; every acceptance criterion becomes a check in the verify report.
 The spec is the review surface, not the code. Never ask the owner to prompt "per
 the spec" — I write it from their intent. Specs are just-in-time (none for M0).
 
-**10. UI on vendored n8n tokens; both themes and both viewports, always.** All UI is
-built on n8n's vendored design tokens via `var(--…)` — **never** hard-code colors,
-spacing, or fonts. Preserve light/dark mode (n8n's tokens theme via `body[data-theme]`
-+ `prefers-color-scheme`; a handful use `light-dark()`); never collapse to a single
+**10. UI on the Argus design tokens; both themes and both viewports, always.** All UI is
+built on Argus's own design tokens via `var(--…)` — **never** hard-code colors,
+spacing, or fonts. Preserve light/dark mode (tokens theme via `body[data-theme]`
++ `prefers-color-scheme`); never collapse to a single
 theme. **Responsiveness is designed in from the start, never retrofitted:** desktop is
 the primary target, but **every element must render correctly and remain usable from a
 375px mobile width up through desktop — no horizontal overflow, no cut-off content.**
 Wide content (tables, catalog rows) reflows or scrolls within its container; it never
 clips. **Every UI element must render correctly in both themes and at both widths** —
 checked at 375px + desktop in `pnpm verify`, mechanics in the `argus-ui` skill. Tokens
-live in [`apps/web/src/styles/n8n-tokens/`](apps/web/src/styles/n8n-tokens/) — see its
-`VENDORED.md` for provenance and re-sync.
+live in [`apps/web/src/styles/theme/`](apps/web/src/styles/theme/) — original work, no
+vendored stylesheets; change the palette there and the whole product follows.
 
 **11. Don't drop UI I can't see go missing; presence is a verify check.** The owner
 never reads diffs, so a silently removed or restructured UI element reaches no one
@@ -200,5 +204,6 @@ probe/seeder — this is the future `pnpm seed:unlock`.)
 ## n8n version pins (drift = loud failure)
 
 - n8n instance / source: **2.29.0**
-- `@n8n/design-system` tokens: **2.28.0** (vendored — see `apps/web/src/styles/n8n-tokens/VENDORED.md`)
+- Design tokens: Argus's own (`apps/web/src/styles/theme/`) — nothing vendored, so no
+  upstream drift to track. Only the OFL fonts are third-party.
 - Re-check contracts on every n8n upgrade and weekly (`pnpm probe:n8n`).
