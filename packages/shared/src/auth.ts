@@ -23,5 +23,20 @@ export type SessionActor = z.infer<typeof sessionActorSchema>;
 export const meResponseSchema = z.object({
   authenticated: z.boolean(),
   actor: sessionActorSchema.nullable(),
+  /**
+   * Public-demo mode (ARGUS_DEMO_MODE). The server already refuses every mutating
+   * request; this tells the UI so it can render write controls **visible but
+   * disabled** rather than letting them fail with a 403 on click. Defaults false so
+   * an older server response still parses.
+   */
+  demoMode: z.boolean().default(false),
+  /**
+   * The credential to pre-fill on the login form of a public demo, so a visitor can
+   * sign in without being handed a password out of band. Server-supplied and only
+   * ever non-null when demo mode is on AND the operator explicitly set
+   * `ARGUS_DEMO_PASSWORD` — publishing a login is a deliberate act, never a
+   * side effect of enabling demo mode. Never hardcoded in the web app.
+   */
+  demoPassword: z.string().nullable().default(null),
 });
 export type MeResponse = z.infer<typeof meResponseSchema>;

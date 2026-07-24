@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import type { AuditTimelineEntry } from '@argus/shared';
+import { isDemoMode } from '../config.js';
 
 /**
  * SELECT-only access to the sacred, append-only `audit_log` — the read side of the
@@ -53,6 +54,27 @@ function toEntry(r: AuditRow): AuditTimelineEntry {
   };
 }
 
+/**
+ * Public-demo redaction (see `isDemoMode`). Applied to every audit READ so the
+ * timeline, the CSV export and the overview changelog are all covered by one rule —
+ * the DB row keeps the real actor, only what leaves the server is masked.
+ */
+export const DEMO_ACTOR_NAME = 'Demo visitor';
+export const DEMO_ACTOR_EMAIL = 'hidden in demo mode';
+
+function redactActor(e: AuditTimelineEntry): AuditTimelineEntry {
+  return { ...e, actorName: DEMO_ACTOR_NAME, actorEmail: DEMO_ACTOR_EMAIL };
+}
+
+/**
+ * In demo mode the actor filter is dropped: matching on a name/email substring would
+ * confirm whether a given person has used the demo, which is the very thing the
+ * redaction hides.
+ */
+function effectiveFilters(filters: AuditFilters): AuditFilters {
+  return isDemoMode() ? { ...filters, actor: undefined } : filters;
+}
+
 /** Escape the LIKE metacharacters in a user substring so it matches literally (used with ESCAPE '\'). */
 function likeContains(term: string): string {
   return `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
@@ -90,19 +112,20 @@ function buildWhere(filters: AuditFilters): { clause: string; params: unknown[] 
 
 /** The filtered timeline page, newest first (LIMIT/OFFSET). */
 export function listAudit(db: Database.Database, filters: AuditFilters = {}): AuditTimelineEntry[] {
-  const { clause, params } = buildWhere(filters);
+  const { clause, params } = buildWhere(effectiveFilters(filters));
   const limit = Math.min(Math.max(filters.limit ?? 500, 1), 5000);
   const offset = Math.max(filters.offset ?? 0, 0);
   const sql = `SELECT id, ts, actor_name, actor_email, action, entity_type, entity_id, detail_json
                  FROM audit_log${clause}
                 ORDER BY id DESC LIMIT ${limit} OFFSET ${offset}`;
   const rows = db.prepare(sql).all(...params) as AuditRow[];
-  return rows.map(toEntry);
+  const entries = rows.map(toEntry);
+  return isDemoMode() ? entries.map(redactActor) : entries;
 }
 
 /** Total rows matching the filters (ignores limit/offset) — the pagination denominator. */
 export function countAudit(db: Database.Database, filters: AuditFilters = {}): number {
-  const { clause, params } = buildWhere(filters);
+  const { clause, params } = buildWhere(effectiveFilters(filters));
   const row = db.prepare(`SELECT COUNT(*) AS n FROM audit_log${clause}`).get(...params) as { n: number };
   return row.n;
 }

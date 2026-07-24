@@ -191,6 +191,22 @@ Exactly what is sent is documented in [`docs/DATA-FLOW.md`](docs/DATA-FLOW.md) a
 - **Identity is asserted.** The name and email you enter at login are stamped on your
   session and every audit entry, and displayed as *asserted* — they are not verified
   against an identity provider.
+- **Sharing an instance?** Set `ARGUS_DEMO_MODE=true`. It does two things, both enforced
+  on the server so the API cannot leak or be driven around them:
+  - **Read-only.** Every mutating request is refused, so a visitor cannot delete a
+    connection, reassign owners, rewrite the LLM settings, or trigger a re-enrichment
+    run that spends your API credits. Signing in, browsing and chat still work.
+  - **Actor identities masked.** The audit trail records whoever signed in, so on a
+    shared instance one visitor's name and email would otherwise be visible to the
+    next. They are masked in the timeline, its CSV export and the overview changelog,
+    and filtering by actor is disabled. The log itself still records the real actor.
+
+  Chat remains available because its tools only read — but each message spends LLM
+  credits. Set `ENRICHMENT_ENABLED=false` to switch all LLM features off.
+
+  For a demo anyone should be able to open, also set `ARGUS_DEMO_PASSWORD`; it is
+  pre-filled on the login form. It is a separate variable on purpose — turning on demo
+  mode must never publish an instance's real `ARGUS_ADMIN_PASSWORD` as a side effect.
 
 ---
 
@@ -210,6 +226,8 @@ Exactly what is sent is documented in [`docs/DATA-FLOW.md`](docs/DATA-FLOW.md) a
 | `ARGUS_ENRICHMENT_CONCURRENCY` | `3` | Concurrent enrichment calls. |
 | `ARGUS_ENRICHMENT_SPEND_CAP_TOKENS` | `5000000` | Per-run token budget (`0` = unlimited). |
 | `ARGUS_CHAT_EGRESS_EMAILS` | `false` | Allow chat tool results to include owner emails. Off by default. |
+| `ARGUS_DEMO_MODE` | `false` | For a shared/public demo. Makes the instance **read-only** (every mutating request is refused) and masks actor names/emails in the audit timeline, its CSV export and the overview changelog. The database still records the real actor. |
+| `ARGUS_DEMO_PASSWORD` | unset | Only read when `ARGUS_DEMO_MODE=true`. Pre-fills this password on the login form so visitors can sign in to a public demo. Deliberately separate from `ARGUS_ADMIN_PASSWORD`, which is never published. |
 
 Unset secrets fall back to insecure development defaults and log a warning — never
 silently.

@@ -3,6 +3,7 @@ import type Database from 'better-sqlite3';
 import { loginRequestSchema, meResponseSchema, type MeResponse } from '@argus/shared';
 import { appendAudit } from '../db/audit.js';
 import { SESSION_COOKIE, createSessionToken, readSessionToken, readCookie, safeEqual } from './session.js';
+import { isDemoMode, demoLoginPassword } from '../config.js';
 
 /**
  * Auth surface: log in with the admin password + an asserted identity, log out,
@@ -33,7 +34,7 @@ export function authRouter(config: { adminPassword: string; sessionSecret: strin
     const actor = { name, email };
     res.cookie(SESSION_COOKIE, createSessionToken(actor, config.sessionSecret), COOKIE_OPTS);
     appendAudit(db, actor, { action: 'auth.login', entityType: 'session', entityId: null });
-    const body: MeResponse = { authenticated: true, actor };
+    const body: MeResponse = { authenticated: true, actor, demoMode: isDemoMode(), demoPassword: demoLoginPassword() };
     res.json(meResponseSchema.parse(body));
   });
 
@@ -44,13 +45,15 @@ export function authRouter(config: { adminPassword: string; sessionSecret: strin
     const actor = token ? readSessionToken(token, config.sessionSecret) : null;
     if (actor) appendAudit(db, actor, { action: 'auth.logout', entityType: 'session', entityId: null });
     res.clearCookie(SESSION_COOKIE, { path: '/' });
-    res.json(meResponseSchema.parse({ authenticated: false, actor: null }));
+    res.json(meResponseSchema.parse({ authenticated: false, actor: null, demoMode: isDemoMode(), demoPassword: demoLoginPassword() }));
   });
 
   router.get('/me', (req, res) => {
     const token = readCookie(req.headers.cookie, SESSION_COOKIE);
     const actor = token ? readSessionToken(token, config.sessionSecret) : null;
-    const body: MeResponse = actor ? { authenticated: true, actor } : { authenticated: false, actor: null };
+    const body: MeResponse = actor
+      ? { authenticated: true, actor, demoMode: isDemoMode(), demoPassword: demoLoginPassword() }
+      : { authenticated: false, actor: null, demoMode: isDemoMode(), demoPassword: demoLoginPassword() };
     res.json(meResponseSchema.parse(body));
   });
 

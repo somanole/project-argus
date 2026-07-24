@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useConnectionsStore } from '../stores/connections';
+import { useAuthStore } from '../stores/auth';
 import { ApiError } from '../lib/api';
 import HealthBadge from '../components/HealthBadge.vue';
 import AnalyzerDriftNotice from '../components/AnalyzerDriftNotice.vue';
@@ -8,6 +9,9 @@ import { instanceColor } from '../lib/instanceColor';
 import { relativeTime } from '../lib/time';
 
 const connections = useConnectionsStore();
+// Public demo: the server refuses writes, so show these controls disabled rather
+// than letting a visitor click into a 403.
+const auth = useAuthStore();
 
 const form = reactive({ label: '', baseUrl: '', apiKey: '', webhookHost: '' });
 const submitting = ref(false);
@@ -67,27 +71,31 @@ onUnmounted(() => {
       <!-- Register -->
       <form class="card panel" @submit.prevent="register">
         <h2>Register an instance</h2>
+        <p v-if="auth.demoMode" class="notice notice--warn" data-testid="demo-readonly-notice">
+          <span class="dot dot--warn" />
+          <span>Read-only demo — registering and removing instances are disabled here.</span>
+        </p>
         <div class="field">
           <label for="label">Label</label>
-          <input id="label" v-model="form.label" class="input" placeholder="prod" required>
+          <input id="label" v-model="form.label" :disabled="auth.demoMode" class="input" placeholder="prod" required>
         </div>
         <div class="field">
           <label for="url">Base URL</label>
-          <input id="url" v-model="form.baseUrl" class="input" placeholder="http://localhost:5678" required>
+          <input id="url" v-model="form.baseUrl" :disabled="auth.demoMode" class="input" placeholder="http://localhost:5678" required>
         </div>
         <div class="field">
           <label for="key">API key</label>
-          <input id="key" v-model="form.apiKey" class="input" type="password" placeholder="n8n public API key" required>
+          <input id="key" v-model="form.apiKey" :disabled="auth.demoMode" class="input" type="password" placeholder="n8n public API key" required>
           <span class="hint">A read-only n8n API key (Settings → n8n API). Stored encrypted; never shown again.</span>
         </div>
         <div class="field">
           <label for="hook">Public webhook host <span class="opt">(optional)</span></label>
-          <input id="hook" v-model="form.webhookHost" class="input" placeholder="https://hooks.example.com">
+          <input id="hook" v-model="form.webhookHost" :disabled="auth.demoMode" class="input" placeholder="https://hooks.example.com">
         </div>
 
         <p v-if="formError" class="err" role="alert">{{ formError }}</p>
 
-        <button class="btn btn--primary btn--block" type="submit" :disabled="submitting">
+        <button class="btn btn--primary btn--block" type="submit" :disabled="submitting || auth.demoMode" data-testid="register-submit">
           {{ submitting ? 'Validating & connecting…' : 'Register connection' }}
         </button>
       </form>
@@ -116,7 +124,7 @@ onUnmounted(() => {
               <div><dt>Workflows</dt><dd>{{ c.health.workflowCount }}</dd></div>
               <div><dt>Last synced</dt><dd>{{ relativeTime(c.health.lastSyncedAt) }}</dd></div>
             </dl>
-            <button class="btn btn--danger btn--sm" :disabled="removingId === c.id" @click="remove(c.id, c.label)">
+            <button class="btn btn--danger btn--sm" :disabled="removingId === c.id || auth.demoMode" data-testid="remove-connection" @click="remove(c.id, c.label)">
               {{ removingId === c.id ? 'Removing…' : 'Remove' }}
             </button>
           </div>

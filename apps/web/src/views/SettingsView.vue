@@ -7,11 +7,15 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useSettingsStore } from '../stores/settings';
 import { useThemeStore, type ThemePreference } from '../stores/theme';
+import { useAuthStore } from '../stores/auth';
 import { relativeTime } from '../lib/time';
 import { checkBaseUrl, type LlmProvider } from '@argus/shared';
 import SmartFeaturesEgressDrawer from '../components/SmartFeaturesEgressDrawer.vue';
 
 const store = useSettingsStore();
+// Public demo: the server refuses writes, so every control below renders visible
+// but disabled instead of failing with a 403 when clicked.
+const auth = useAuthStore();
 const { config, progress, state, error } = storeToRefs(store);
 
 // The "what's sent to the provider" informed-consent drawer.
@@ -205,6 +209,10 @@ async function save(): Promise<void> {
         <div class="switch-label">
           <h2 data-testid="smart-features-heading">Smart features</h2>
           <p class="muted">Two features use the AI provider below: <strong>enrichment</strong> (each workflow gets a summary, category, and criticality) and <strong>chat</strong> (ask about the estate in plain English). This one switch powers both. When off, Argus runs fully deterministic and nothing is sent.</p>
+          <p v-if="auth.demoMode" class="notice notice--warn" data-testid="demo-readonly-notice">
+            <span class="dot dot--warn" />
+            <span>Read-only demo — these controls are shown but disabled. Run your own instance to change them.</span>
+          </p>
           <button type="button" class="egress-link" data-testid="egress-open" @click="egressOpen = true">
             Learn what's sent to the provider →
           </button>
@@ -215,7 +223,7 @@ async function save(): Promise<void> {
           class="switch"
           :class="{ 'switch--on': enabled, 'switch--locked': envLocked }"
           :aria-checked="enabled"
-          :disabled="envLocked || busy"
+          :disabled="envLocked || busy || auth.demoMode"
           data-testid="enrichment-toggle"
           @click="toggle"
         >
@@ -250,6 +258,7 @@ async function save(): Promise<void> {
               :class="{ 'prov--selected': provider === p.value }"
               :aria-checked="provider === p.value"
               :data-testid="`provider-card-${p.value}`"
+              :disabled="auth.demoMode"
               @click="provider = p.value"
             >
               <span class="prov-radio" aria-hidden="true" />
@@ -278,6 +287,7 @@ async function save(): Promise<void> {
               autocomplete="off"
               spellcheck="false"
               placeholder="http://127.0.0.1:11434/v1"
+              :disabled="auth.demoMode"
               data-testid="llm-base-url-input"
             >
             <p v-if="urlError" class="err" role="alert" data-testid="llm-base-url-error">{{ urlError }}</p>
@@ -300,6 +310,7 @@ async function save(): Promise<void> {
               autocomplete="off"
               spellcheck="false"
               placeholder="llama3.1:8b"
+              :disabled="auth.demoMode"
               data-testid="llm-model-input"
             >
             <p class="hint muted">Exactly as the endpoint names it. Argus pins no default here — the model is yours to choose.</p>
@@ -315,6 +326,7 @@ async function save(): Promise<void> {
             type="password"
             autocomplete="off"
             :placeholder="isCustom ? 'Leave blank if the endpoint needs no key' : configured && config?.provider === provider ? 'A key is stored — paste a new one to replace it' : 'Paste the provider API key'"
+            :disabled="auth.demoMode"
             data-testid="llm-key-input"
           >
           <p class="hint muted">
@@ -323,7 +335,7 @@ async function save(): Promise<void> {
         </div>
 
         <div class="actions">
-          <button class="btn btn--primary" :disabled="!canSave" data-testid="llm-save" @click="save">
+          <button class="btn btn--primary" :disabled="!canSave || auth.demoMode" data-testid="llm-save" @click="save">
             {{ saveLabel }}
           </button>
           <span v-if="saved" class="ok muted" data-testid="llm-saved">Saved — enrichment started.</span>
@@ -364,7 +376,7 @@ async function save(): Promise<void> {
               <span v-if="progress && progress.pending + progress.stale > 0" class="muted"> · {{ progress.pending + progress.stale }} to do</span>
               <span v-else-if="progress && progress.total > 0" class="muted"> · {{ progress.analyzed }}/{{ progress.total }} enriched</span>
             </div>
-            <button class="btn btn--secondary btn--sm" :disabled="enriching" data-testid="enrich-now" @click="runNow">
+            <button class="btn btn--secondary btn--sm" :disabled="enriching || auth.demoMode" data-testid="enrich-now" @click="runNow">
               {{ enriching ? 'Enriching…' : 'Enrich now' }}
             </button>
           </div>

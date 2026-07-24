@@ -74,7 +74,15 @@ describe('Argus API', () => {
   it('logs in with the admin password + asserted identity', async () => {
     const res = await request(app).post('/api/auth/login').send({ password: 'pw', name: 'Sam Rivers', email: 'sam@acme.example' });
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ authenticated: true, actor: { name: 'Sam Rivers', email: 'sam@acme.example' } });
+    // Deep-equal stays strict: the session payload also carries the demo flags. A
+    // normal deployment must report demoMode false (the UI uses it to disable write
+    // controls) and must NEVER publish a login to pre-fill.
+    expect(res.body).toEqual({
+      authenticated: true,
+      actor: { name: 'Sam Rivers', email: 'sam@acme.example' },
+      demoMode: false,
+      demoPassword: null,
+    });
     expect(res.headers['set-cookie']?.[0]).toMatch(/argus_session=/);
   });
 

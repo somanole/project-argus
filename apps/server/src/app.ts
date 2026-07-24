@@ -15,6 +15,7 @@ import { graphRouter } from './routes/graph.js';
 import { governanceRouter } from './routes/governance.js';
 import { chatRouter } from './routes/chat.js';
 import { createChatSessionStore } from './chat/session.js';
+import { demoReadOnly } from './demo-readonly.js';
 import type { SyncEngine } from './sync/engine.js';
 import type { EnrichmentWorker } from './enrichment/index.js';
 
@@ -24,7 +25,15 @@ export interface AppDeps {
   db: Database.Database;
   engine: SyncEngine;
   worker: EnrichmentWorker;
-  config: { adminPassword: string; sessionSecret: string; encryptionKey: string; enrichmentEnabled: boolean; chatEgressEmails: boolean };
+  config: {
+    adminPassword: string;
+    sessionSecret: string;
+    encryptionKey: string;
+    enrichmentEnabled: boolean;
+    chatEgressEmails: boolean;
+    /** Public demo: read-only + audit actors redacted. Optional so tests can omit it. */
+    demoMode?: boolean;
+  };
 }
 
 /**
@@ -55,6 +64,13 @@ export function createApp(deps: AppDeps): Express {
 
   // Public: login / logout / me. (db so login/logout write to the sacred audit_log.)
   app.use('/api/auth', authRouter(config, db));
+
+  // Public demo: refuse every mutating request before it reaches a router, so a
+  // stranger with a session can browse everything but change nothing.
+  if (config.demoMode) {
+    console.log('[argus] ARGUS_DEMO_MODE=true — read-only; audit actor identities redacted');
+    app.use('/api', demoReadOnly());
+  }
 
   // Everything else is behind the session guard.
   const guard = requireAuth(config.sessionSecret);

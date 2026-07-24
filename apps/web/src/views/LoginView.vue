@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { ApiError } from '../lib/api';
@@ -8,7 +8,14 @@ const auth = useAuthStore();
 const router = useRouter();
 const route = useRoute();
 
-const password = ref('');
+// On a public demo the server supplies the login to pre-fill, so a visitor can get in
+// without being handed a password separately. It is never hardcoded here — this file
+// ships in a public repo — and is null on any non-demo deployment.
+const password = ref(auth.demoPassword ?? '');
+watch(
+  () => auth.demoPassword,
+  (pw) => { if (pw && !password.value) password.value = pw; },
+);
 const name = ref('');
 const email = ref('');
 const submitting = ref(false);
@@ -50,6 +57,7 @@ async function submit(): Promise<void> {
       <div class="field">
         <label for="pw">Admin password</label>
         <input id="pw" v-model="password" class="input" type="password" autocomplete="current-password" required>
+        <span v-if="auth.demoPassword" class="hint" data-testid="demo-login-hint">Demo password pre-filled — just add a name and email and sign in.</span>
       </div>
       <div class="field">
         <label for="nm">Your name</label>
