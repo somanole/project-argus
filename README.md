@@ -10,6 +10,8 @@ Argus is **read-only** against your instances. It never creates, edits, activate
 deletes a workflow. The only thing it writes is its own governance layer — owner
 assignments, corrections, and an append-only audit trail — in its own database.
 
+![The governance overview: the whole estate scored on ownership, reliability, accountability, hygiene and exposure](docs/images/overview.png)
+
 ---
 
 ## What it does
@@ -30,6 +32,26 @@ assignments, corrections, and an append-only audit trail — in its own database
 — are computed, auditable, and work with no AI configured at all. The LLM only adds
 interpretation, clearly labelled. When something can't be parsed, Argus says **"couldn't
 analyse"** rather than guessing.
+
+---
+
+## What it looks like
+
+**One estate, however many instances.** Every workflow across every connected instance in
+a single list — filterable by instance, system, trigger, health and owner.
+
+![The catalog: 205 workflows across two instances, with systems, triggers, health and owner per row](docs/images/catalog.png)
+
+**Blast radius.** Select anything and see exactly what breaks if it fails — including
+**cross-instance** dependencies, like a staging workflow calling into prod.
+
+![The dependency graph with a workflow selected, showing the five workflows that break if it fails](docs/images/blast-radius.png)
+
+**Failures n8n reports as successes.** A run marked *success* where a node errored and the
+error was swallowed. Here the failure rate reads 0% over four green runs, while the node
+`Push to Warehouse` had been failing with `ECONNREFUSED` the whole time.
+
+![A workflow detail showing 0% failure rate and four successful runs, flagged as silently failing](docs/images/silent-failure.png)
 
 ---
 
