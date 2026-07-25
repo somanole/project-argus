@@ -11,11 +11,12 @@ plain-English reports, and specs. My job is to make that safe.
 - [`.agents/specs/`](.agents/specs/) — per-subsystem plain-English specs (the owner's review surface), one per subsystem. Written just-in-time before building; `TEMPLATE.md` is the shape.
 - [`.agents/skills/`](.agents/skills/) — reusable build skills (e.g. `argus-ui`, `spec-driven-development`). **Author/edit skills here, under `.agents/skills/<name>/SKILL.md` — this is the canonical source.** Each is symlinked into `.claude/skills/<name>` so Claude Code auto-discovers it; never author a real skill file in `.claude/skills/`. New skill → add it under `.agents/skills/` and `ln -sfn ../../.agents/skills/<name> .claude/skills/<name>`.
 - [`contracts/`](contracts/) — captured real n8n request/response shapes (see rule 1).
+- `docs/DECISIONS.md` — the numbered design-decision log (`DECISION #NN`, cited from code and specs). A local working note (see below), but the canonical record of *why* a thing was decided — read it before re-opening a settled decision. (Plain reference, not a link: the file is local-only, so a Markdown link would 404 on the public repo.)
 
-The master plan, the owner/Claude working agreement, and the build journal
-(`PROMPTS.md`, see rule 8) are working notes kept **outside** the public repo. In a
-local checkout they sit alongside these files; nothing in the rules below depends on
-reading them.
+The master plan, the owner/Claude working agreement, the design-decision log
+(`docs/DECISIONS.md`), and the build journal (`PROMPTS.md`, see rule 8) are working
+notes kept **outside** the public repo. In a local checkout they sit alongside these
+files; nothing in the rules below depends on reading them.
 
 ---
 
